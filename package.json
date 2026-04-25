@@ -1,0 +1,28 @@
+{
+  "name": "slack-bot",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "format:eslint": "eslint --fix .",
+    "format:prettier": "prettier --write .",
+    "format": "conc -m 1 pnpm:format:eslint pnpm:format:prettier",
+    "test": "conc pnpm:test:type pnpm:test:unit",
+    "test:type": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "20.5.0",
+    "@eslint/eslintrc": "3.3.5",
+    "@fohte/eslint-config": "0.3.1",
+    "@tsconfig/node-lts": "24.0.0",
+    "@tsconfig/strictest": "2.0.8",
+    "@types/node": "24.12.0",
+    "concurrently": "9.2.1",
+    "eslint": "10.1.0",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.2"
+  }
+}
