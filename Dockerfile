@@ -5,11 +5,12 @@ FROM node:24-bookworm-slim AS base
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+COPY package.json ./
 RUN corepack enable && corepack prepare --activate
 
 # Install all dependencies (including dev) and run typecheck
 FROM base AS builder
-COPY package.json pnpm-lock.yaml ./
+COPY pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile
 COPY tsconfig.json ./
@@ -18,7 +19,7 @@ RUN pnpm exec tsc --noEmit
 
 # Production deps only
 FROM base AS prod-deps
-COPY package.json pnpm-lock.yaml ./
+COPY pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod
 
