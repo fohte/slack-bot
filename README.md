@@ -111,7 +111,7 @@ The bot emits structured JSON logs to stdout via pino. A redact filter scrubs kn
 
 ## Deployment
 
-The container image is published to `ghcr.io/fohte/slack-bot` by GitHub Actions on pushes to `main` and on `v*` tags. Deployment to VKE is managed by helmfile in the `fohte/infra` repository and is out of scope for this repo.
+The container image is published to `ghcr.io/fohte/slack-bot` by GitHub Actions on every push to `main`, tagged with the short commit SHA and `latest`. Deployment to VKE is managed by helmfile in the `fohte/infra` repository and is out of scope for this repo.
 
 - Cloudflare Tunnel routes the Slack Request URL paths (`/api/slack/*`) under Service Auth Bypass so Slack can reach them directly.
 - All other paths sit behind regular Cloudflare Access policies.
