@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "type": "module",
   "scripts": {
+    "start": "tsx src/main.ts",
     "lint": "eslint .",
     "format:eslint": "eslint --fix .",
     "format:prettier": "prettier --write .",
@@ -30,6 +31,7 @@
     "@hono/node-server": "2.0.0",
     "@slack/web-api": "7.15.1",
     "hono": "4.12.15",
-    "pino": "10.3.1"
+    "pino": "10.3.1",
+    "tsx": "4.21.0"
   }
 }
