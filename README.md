@@ -145,11 +145,3 @@ Examples: `crawl:start:42`, `blog:retry`, `crawl:modal`.
 ## Logging
 
 The bot emits structured JSON logs to stdout via pino. A redact filter scrubs known secret keys (bot token, signing secret, `authorization`, `*_token`, `*_secret`) so plugins do not have to think about it when logging context. Log level is configured via `LOG_LEVEL`.
-
-## Deployment
-
-The container image is published to `ghcr.io/fohte/slack-bot` by GitHub Actions on every push to `main`, tagged with the short commit SHA and `latest`. Deployment to VKE is managed by helmfile in the `fohte/infra` repository and is out of scope for this repo.
-
-- Cloudflare Tunnel routes the Slack Request URL paths (`/api/slack/*`) under Service Auth Bypass so Slack can reach them directly.
-- All other paths sit behind regular Cloudflare Access policies.
-- The bot runs as a single replica; the in-memory scheduler and `response_url` state are intentionally not replicated.
