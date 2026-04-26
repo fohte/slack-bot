@@ -175,7 +175,7 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
     expect(json.text).toMatch(/not registered/i)
   })
 
-  it('returns ephemeral error when plugin handler throws', async () => {
+  it('returns ephemeral error when plugin handler throws before ack', async () => {
     const ping: Plugin = {
       name: 'ping',
       commands: [{ command: '/ping', description: 'Ping' }],
@@ -198,6 +198,31 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
     const json = (await res.json()) as { response_type: string; text: string }
     expect(json.response_type).toBe('ephemeral')
     expect(json.text).toMatch(/error occurred/i)
+  })
+
+  it('returns the ack body even when the handler throws after ack', async () => {
+    const ping: Plugin = {
+      name: 'ping',
+      commands: [{ command: '/ping', description: 'Ping' }],
+      onCommand: async (ctx) => {
+        ctx.ack({ text: 'ackd' })
+        throw new Error('post-ack failure')
+      },
+    }
+    const { server } = buildServer([ping])
+    const body = new URLSearchParams({
+      command: '/ping',
+      response_url: 'https://hooks.slack.com/actions/x',
+    }).toString()
+    const res = await post(
+      server.app,
+      '/api/slack/commands',
+      body,
+      'application/x-www-form-urlencoded',
+    )
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { text: string }
+    expect(json.text).toBe('ackd')
   })
 
   it('routes block_actions by action_id prefix', async () => {
@@ -340,15 +365,17 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
     expect(ready.status).toBe(503)
   })
 
-  it('supports ack -> followUp flow with sleep in between', async () => {
+  it('returns the HTTP ack response as soon as ctx.ack() is called, before the handler resolves', async () => {
     let resolveSleep: (() => void) | undefined
     const sleep = new Promise<void>((r) => {
       resolveSleep = r
     })
+    const handlerCompleted = vi.fn()
     const handler = vi.fn<NonNullable<Plugin['onCommand']>>(async (ctx) => {
       ctx.ack({ text: 'starting' })
       await sleep
       await ctx.followUp({ text: 'finished', replace_original: true })
+      handlerCompleted()
     })
     const plugin: Plugin = {
       name: 'long',
@@ -360,19 +387,23 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
       command: '/long',
       response_url: 'https://hooks.slack.com/actions/x',
     }).toString()
-    const responsePromise = post(
+    const res = await post(
       server.app,
       '/api/slack/commands',
       body,
       'application/x-www-form-urlencoded',
     )
-    // Allow handler to start and reach its ack point
-    await Promise.resolve()
-    resolveSleep?.()
-    const res = await responsePromise
+    // The HTTP response must come back before the handler finishes its work.
     expect(res.status).toBe(200)
     const json = (await res.json()) as { text: string }
     expect(json.text).toBe('starting')
+    expect(handlerCompleted).not.toHaveBeenCalled()
+
+    // Now release the handler and confirm the follow-up runs in the background.
+    resolveSleep?.()
+    await vi.waitFor(() => {
+      expect(handlerCompleted).toHaveBeenCalledTimes(1)
+    })
     expect(slackClient.postToResponseUrl).toHaveBeenCalledWith(
       'https://hooks.slack.com/actions/x',
       expect.objectContaining({ text: 'finished' }),

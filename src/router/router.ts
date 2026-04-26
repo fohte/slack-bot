@@ -77,19 +77,20 @@ export const createInteractionRouter = (
         ),
       }
     }
-    const { ctx, ack } = createInteractionContext({
+    const plugin = args.plugin
+    const { ctx, ackPromise } = createInteractionContext({
       source: args.source,
       slackClient: options.slackClient,
       responseUrl: args.responseUrl,
       initialRef: args.initialRef,
     })
-    const handlerCall = args.invoke(args.plugin, ctx)
+    const handlerCall = args.invoke(plugin, ctx)
     if (handlerCall === undefined) {
       options.logger.error(
         {
           event: 'plugin_handler_missing',
           endpoint: args.endpoint,
-          plugin: args.plugin.name,
+          plugin: plugin.name,
           target: args.pluginAction,
         },
         'plugin does not implement the required handler',
@@ -99,39 +100,44 @@ export const createInteractionRouter = (
         body: ephemeralError('Sorry, that interaction is not handled.'),
       }
     }
-    try {
-      await handlerCall
-    } catch (err) {
-      options.logger.error(
-        {
-          event: 'plugin_handler_error',
-          endpoint: args.endpoint,
-          plugin: args.plugin.name,
-          target: args.pluginAction,
-          duration_ms: now() - startedAt,
-          error: serializeError(err),
-        },
-        'plugin handler threw',
-      )
-      return {
-        status: 200,
-        body: ephemeralError(
+
+    // Track handler completion in the background. Slack imposes a 3-second
+    // ack deadline, so the HTTP response must come back as soon as ctx.ack()
+    // is called or the handler returns, whichever happens first.
+    const completion = handlerCall
+      .then(() => {
+        options.logger.info(
+          {
+            event: 'interaction_handled',
+            endpoint: args.endpoint,
+            plugin: plugin.name,
+            target: args.pluginAction,
+            duration_ms: now() - startedAt,
+            status: 'success',
+          },
+          'interaction handled',
+        )
+        return undefined
+      })
+      .catch((err: unknown) => {
+        options.logger.error(
+          {
+            event: 'plugin_handler_error',
+            endpoint: args.endpoint,
+            plugin: plugin.name,
+            target: args.pluginAction,
+            duration_ms: now() - startedAt,
+            error: serializeError(err),
+          },
+          'plugin handler threw',
+        )
+        return ephemeralError(
           'Sorry, an error occurred while handling the request.',
-        ),
-      }
-    }
-    options.logger.info(
-      {
-        event: 'interaction_handled',
-        endpoint: args.endpoint,
-        plugin: args.plugin.name,
-        target: args.pluginAction,
-        duration_ms: now() - startedAt,
-        status: 'success',
-      },
-      'interaction handled',
-    )
-    return { status: 200, body: ack.payload }
+        )
+      })
+
+    const ackBody = await Promise.race([ackPromise, completion])
+    return { status: 200, body: ackBody }
   }
 
   return {

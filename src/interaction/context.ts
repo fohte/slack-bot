@@ -64,6 +64,7 @@ export interface AckCapture {
 export interface InteractionContextResult {
   readonly ctx: InteractionContext
   readonly ack: AckCapture
+  readonly ackPromise: Promise<AckPayload | undefined>
 }
 
 export const createInteractionContext = (
@@ -71,6 +72,13 @@ export const createInteractionContext = (
 ): InteractionContextResult => {
   const ackState: AckCapture = { called: false, payload: undefined }
   let cachedOriginal: MessageUpdater | undefined
+
+  let resolveAck: (payload: AckPayload | undefined) => void = () => {
+    /* assigned below */
+  }
+  const ackPromise = new Promise<AckPayload | undefined>((resolve) => {
+    resolveAck = resolve
+  })
 
   const applyDefaultEphemeral = <T extends { response_type?: string }>(
     payload: T,
@@ -91,6 +99,7 @@ export const createInteractionContext = (
       ackState.called = true
       ackState.payload =
         payload === undefined ? undefined : applyDefaultEphemeral(payload)
+      resolveAck(ackState.payload)
     },
     async followUp(payload) {
       if (options.responseUrl === undefined) {
@@ -116,5 +125,5 @@ export const createInteractionContext = (
     },
   }
 
-  return { ctx, ack: ackState }
+  return { ctx, ack: ackState, ackPromise }
 }
