@@ -9,7 +9,6 @@ import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
-  SlackEventPayload,
   SlashCommandBody,
   ViewClosedPayload,
   ViewSubmissionPayload,
@@ -22,7 +21,6 @@ export type InteractionSource =
   | { kind: 'view_closed'; payload: ViewClosedPayload }
   | { kind: 'shortcut'; payload: ShortcutPayload }
   | { kind: 'message_action'; payload: MessageActionPayload }
-  | { kind: 'event'; payload: SlackEventPayload }
 
 export interface AckPayload {
   text?: string

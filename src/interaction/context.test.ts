@@ -88,8 +88,9 @@ describe('InteractionContext', () => {
     const client = buildMockClient()
     const { ctx } = createInteractionContext({
       source: {
-        kind: 'event',
-        payload: { type: 'event_callback' },
+        kind: 'slash_command',
+        command: '/ping',
+        body: { command: '/ping' },
       },
       slackClient: client,
       responseUrl: undefined,

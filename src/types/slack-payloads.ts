@@ -88,9 +88,3 @@ export type SlackInteractivityPayload =
   | ViewClosedPayload
   | ShortcutPayload
   | MessageActionPayload
-
-export interface SlackEventPayload {
-  readonly type: string
-  readonly event?: { readonly type?: string }
-  readonly [key: string]: unknown
-}

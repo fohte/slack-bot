@@ -3,7 +3,6 @@ import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
-  SlackEventPayload,
   SlashCommandBody,
   ViewClosedPayload,
   ViewSubmissionPayload,
@@ -37,5 +36,4 @@ export interface Plugin {
     ctx: InteractionContext,
     payload: MessageActionPayload,
   ): Promise<void>
-  onEvent?(ctx: InteractionContext, payload: SlackEventPayload): Promise<void>
 }

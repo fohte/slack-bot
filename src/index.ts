@@ -81,7 +81,6 @@ export type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
-  SlackEventPayload,
   SlackInteractivityPayload,
   SlashCommandBody,
   ViewClosedPayload,

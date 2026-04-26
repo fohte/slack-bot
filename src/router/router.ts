@@ -13,7 +13,6 @@ import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
-  SlackEventPayload,
   SlackInteractivityPayload,
   SlashCommandBody,
   ViewClosedPayload,
@@ -28,7 +27,6 @@ export type RouterResult =
 export interface InteractionRouter {
   routeCommand(body: SlashCommandBody): Promise<RouterResult>
   routeInteractivity(payload: SlackInteractivityPayload): Promise<RouterResult>
-  routeEvent(payload: SlackEventPayload): Promise<RouterResult>
 }
 
 export interface RouterOptions {
@@ -44,7 +42,7 @@ const ephemeralError = (message: string): AckPayload => ({
 })
 
 interface DispatchArgs {
-  readonly endpoint: 'commands' | 'interactivity' | 'events'
+  readonly endpoint: 'commands' | 'interactivity'
   readonly plugin: Plugin | undefined
   readonly pluginAction: string
   readonly responseUrl: string | undefined
@@ -163,24 +161,6 @@ export const createInteractionRouter = (
         default:
           return { status: 400 }
       }
-    },
-    async routeEvent(payload) {
-      const eventType =
-        typeof payload.event?.type === 'string'
-          ? payload.event.type
-          : payload.type
-      const plugin = options.registry.lookupByActionOrCallbackId(eventType)
-      if (plugin === undefined) {
-        return { status: 200 }
-      }
-      return dispatch({
-        endpoint: 'events',
-        plugin,
-        pluginAction: eventType,
-        responseUrl: undefined,
-        source: { kind: 'event', payload },
-        invoke: (p, ctx) => p.onEvent?.(ctx, payload),
-      })
     },
   }
 

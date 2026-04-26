@@ -280,6 +280,34 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
     expect(json.challenge).toBe('abcdef')
   })
 
+  it('returns 200 for non-url_verification events without dispatching', async () => {
+    const { server } = buildServer([])
+    const body = JSON.stringify({
+      type: 'event_callback',
+      event: { type: 'app_mention' },
+    })
+    const res = await post(
+      server.app,
+      '/api/slack/events',
+      body,
+      'application/json',
+    )
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
+  })
+
+  it('returns 200 for events with non-string type field', async () => {
+    const { server } = buildServer([])
+    const body = JSON.stringify({ type: 42, event: { type: 'app_mention' } })
+    const res = await post(
+      server.app,
+      '/api/slack/events',
+      body,
+      'application/json',
+    )
+    expect(res.status).toBe(200)
+  })
+
   it('serves health probes', async () => {
     const { server } = buildServer([])
     const live = await Promise.resolve(

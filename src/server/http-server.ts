@@ -8,7 +8,6 @@ import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
-  SlackEventPayload,
   SlackInteractivityPayload,
   SlashCommandBody,
   ViewClosedPayload,
@@ -112,7 +111,7 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
     return respond(c, await options.router.routeInteractivity(payload))
   })
 
-  app.post('/api/slack/events', async (c) => {
+  app.post('/api/slack/events', (c) => {
     const rawBody = c.get('rawBody')
     let raw: unknown
     try {
@@ -129,11 +128,8 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
     ) {
       return c.json({ challenge: raw['challenge'] })
     }
-    const payload: SlackEventPayload = {
-      type: typeof raw['type'] === 'string' ? raw['type'] : 'unknown',
-      ...raw,
-    }
-    return respond(c, await options.router.routeEvent(payload))
+    // Acknowledge with 200 so Slack keeps the event subscription healthy.
+    return c.body(null, 200)
   })
 
   return { app, health }
