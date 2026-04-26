@@ -20,15 +20,15 @@ describe('loadConfig', () => {
   })
 
   it('throws ConfigLoadError when SLACK_SIGNING_SECRET is missing', () => {
-    expect(() =>
-      loadConfig({ env: { SLACK_BOT_TOKEN: 'xoxb-test' } }),
-    ).toThrow(ConfigLoadError)
+    expect(() => loadConfig({ env: { SLACK_BOT_TOKEN: 'xoxb-test' } })).toThrow(
+      ConfigLoadError,
+    )
   })
 
   it('throws ConfigLoadError when SLACK_BOT_TOKEN is missing', () => {
-    expect(() =>
-      loadConfig({ env: { SLACK_SIGNING_SECRET: 'sig' } }),
-    ).toThrow(ConfigLoadError)
+    expect(() => loadConfig({ env: { SLACK_SIGNING_SECRET: 'sig' } })).toThrow(
+      ConfigLoadError,
+    )
   })
 
   it('parses overrides for numeric env vars', () => {
@@ -48,9 +48,9 @@ describe('loadConfig', () => {
   })
 
   it('rejects invalid PORT', () => {
-    expect(() =>
-      loadConfig({ env: { ...baseEnv, PORT: 'abc' } }),
-    ).toThrow(ConfigLoadError)
+    expect(() => loadConfig({ env: { ...baseEnv, PORT: 'abc' } })).toThrow(
+      ConfigLoadError,
+    )
   })
 
   it('rejects invalid LOG_LEVEL', () => {

@@ -1,4 +1,4 @@
-import { type Context,Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 
 import type { Logger } from '@/logger/logger'
 import type { InteractionRouter, RouterResult } from '@/router/router'

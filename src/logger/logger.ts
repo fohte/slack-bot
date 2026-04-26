@@ -41,7 +41,10 @@ export interface LoggerOptions {
 }
 
 export const createLogger = (options: LoggerOptions): Logger => {
-  const redactPaths = [...REDACT_PATHS, ...(options.additionalRedactPaths ?? [])]
+  const redactPaths = [
+    ...REDACT_PATHS,
+    ...(options.additionalRedactPaths ?? []),
+  ]
   const pinoOptions: pino.LoggerOptions = {
     level: options.level,
     base: options.base ?? null,

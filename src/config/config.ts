@@ -63,7 +63,9 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
 const requireEnv = (env: NodeJS.ProcessEnv, key: string): string => {
   const value = env[key]
   if (value === undefined || value === '') {
-    throw new ConfigLoadError(`Required environment variable '${key}' is not set`)
+    throw new ConfigLoadError(
+      `Required environment variable '${key}' is not set`,
+    )
   }
   return value
 }

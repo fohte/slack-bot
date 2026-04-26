@@ -27,9 +27,7 @@ export type RouterResult =
 
 export interface InteractionRouter {
   routeCommand(body: SlashCommandBody): Promise<RouterResult>
-  routeInteractivity(
-    payload: SlackInteractivityPayload,
-  ): Promise<RouterResult>
+  routeInteractivity(payload: SlackInteractivityPayload): Promise<RouterResult>
   routeEvent(payload: SlackEventPayload): Promise<RouterResult>
 }
 
@@ -221,9 +219,7 @@ export const createInteractionRouter = (
     })
   }
 
-  function routeViewClosed(
-    payload: ViewClosedPayload,
-  ): Promise<RouterResult> {
+  function routeViewClosed(payload: ViewClosedPayload): Promise<RouterResult> {
     const plugin = options.registry.lookupByActionOrCallbackId(
       payload.view.callback_id,
     )

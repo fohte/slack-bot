@@ -1,7 +1,4 @@
-import type {
-  ResponseUrlPayload,
-  SlackWebClient,
-} from '@/slack/web-client'
+import type { ResponseUrlPayload, SlackWebClient } from '@/slack/web-client'
 import { ResponseUrlExhaustedError } from '@/types/errors'
 
 const RESPONSE_URL_TTL_MS = 30 * 60 * 1000

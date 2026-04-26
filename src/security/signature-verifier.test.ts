@@ -36,9 +36,9 @@ describe('SignatureVerifier', () => {
   it('rejects when signed with a different secret', () => {
     const ts = String(FIXED_NOW)
     const body = 'token=abc'
-    expect(
-      verifier.verify(body, sign(ts, body, 'different-secret'), ts),
-    ).toBe(false)
+    expect(verifier.verify(body, sign(ts, body, 'different-secret'), ts)).toBe(
+      false,
+    )
   })
 
   it('rejects when timestamp is outside the 5-minute window', () => {

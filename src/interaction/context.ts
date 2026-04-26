@@ -4,10 +4,7 @@ import {
   type MessageUpdater,
   type SlackMessageRef,
 } from '@/interaction/message-updater'
-import type {
-  ResponseUrlPayload,
-  SlackWebClient,
-} from '@/slack/web-client'
+import type { ResponseUrlPayload, SlackWebClient } from '@/slack/web-client'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -94,7 +91,8 @@ export const createInteractionContext = (
     ack(payload) {
       if (ackState.called) return
       ackState.called = true
-      ackState.payload = payload === undefined ? undefined : applyDefaultEphemeral(payload)
+      ackState.payload =
+        payload === undefined ? undefined : applyDefaultEphemeral(payload)
     },
     async followUp(payload) {
       if (options.responseUrl === undefined) {
