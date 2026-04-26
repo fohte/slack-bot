@@ -18,4 +18,16 @@ export default config(
       ],
     },
   },
+  {
+    files: ['**/*.test.ts', 'tests/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-type-assertion': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+    },
+  },
 )
