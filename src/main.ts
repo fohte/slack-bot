@@ -3,7 +3,8 @@ import { serve } from '@hono/node-server'
 import { createCloudflareAccessHttpClientFactory } from '@/cf-access/http-client'
 import { loadConfig } from '@/config/config'
 import { createLogger } from '@/logger/logger'
-import type { Plugin } from '@/plugin/plugin'
+import type { PluginDeps, PluginInput } from '@/plugin/deps'
+import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
 import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
@@ -12,7 +13,7 @@ import { createHttpServer } from '@/server/http-server'
 import { createSlackWebClient } from '@/slack/web-client'
 
 export interface BootstrapOptions {
-  readonly plugins?: readonly Plugin[]
+  readonly plugins?: readonly PluginInput[]
 }
 
 export const bootstrap = (options: BootstrapOptions = {}): void => {
@@ -28,8 +29,23 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     botToken: config.slackBotToken,
     maxRetries: config.maxWebApiRetries,
   })
+  const scheduler = createScheduler({
+    maxConcurrentTasks: config.maxConcurrentTasks,
+    logger,
+  })
+  const cfAccess = createCloudflareAccessHttpClientFactory({ config })
+
+  const deps: PluginDeps = {
+    config,
+    logger,
+    slackClient,
+    scheduler,
+    cfAccess,
+  }
+
   const registry = createPluginRegistry()
-  for (const plugin of options.plugins ?? []) {
+  for (const input of options.plugins ?? []) {
+    const plugin = resolvePlugin(input, deps)
     registry.register(plugin)
     logger.info(
       {
@@ -40,13 +56,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
       'plugin registered',
     )
   }
-  const scheduler = createScheduler({
-    maxConcurrentTasks: config.maxConcurrentTasks,
-    logger,
-  })
-  void scheduler
-  const cfAccess = createCloudflareAccessHttpClientFactory({ config })
-  void cfAccess
+
   const router = createInteractionRouter({
     registry,
     slackClient,

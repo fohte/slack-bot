@@ -25,6 +25,8 @@ export {
 } from '@/interaction/message-updater'
 export type { LogFields, Logger, LoggerOptions } from '@/logger/logger'
 export { createLogger, noopLogger } from '@/logger/logger'
+export type { PluginDeps, PluginFactory, PluginInput } from '@/plugin/deps'
+export { resolvePlugin } from '@/plugin/deps'
 export type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
 export type { PluginRegistry } from '@/plugin/registry'
 export { createPluginRegistry } from '@/plugin/registry'
