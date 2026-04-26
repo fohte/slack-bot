@@ -87,6 +87,43 @@ const pingPlugin: Plugin = {
 bootstrap({ plugins: [pingPlugin] })
 ```
 
+When a plugin needs core services (the in-memory scheduler, the Cloudflare Access fetch helper, the Slack Web API client, the logger, or the resolved config), pass a factory function instead. `bootstrap` invokes the factory with a `PluginDeps` object at startup.
+
+```typescript
+import { bootstrap, type PluginFactory } from 'slack-bot'
+
+const crawlPlugin: PluginFactory = ({ scheduler, cfAccess, logger }) => {
+  const http = cfAccess.forPlugin('crawl')
+  return {
+    name: 'crawl',
+    commands: [{ command: '/crawl-run', description: 'Start a crawl.' }],
+    async onCommand(ctx, body) {
+      ctx.ack({ text: 'starting...' })
+      scheduler.schedule({
+        name: `crawl:${body.text}`,
+        intervalMs: 5000,
+        maxDurationMs: 30 * 60 * 1000,
+        async tick() {
+          const res = await http.request(
+            `https://crawlers.fohte.net/api/runs/${body.text}`,
+          )
+          const status = (await res.json()) as { done: boolean }
+          await ctx
+            .originalUpdater()
+            .patch({ text: `status: ${String(status.done)}` })
+          return { done: status.done }
+        },
+        async onError(err) {
+          logger.error({ event: 'crawl_tick_error', err: String(err) })
+        },
+      })
+    },
+  }
+}
+
+bootstrap({ plugins: [crawlPlugin] })
+```
+
 Rules:
 
 - Plugin `name` must match `/^[a-z][a-z0-9-]{0,31}$/`.
