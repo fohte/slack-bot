@@ -8,7 +8,7 @@ export default defineConfig({
   outDir: 'dist',
   clean: true,
   splitting: false,
-  sourcemap: true,
+  sourcemap: false,
   // Bundle first-party code; keep node_modules external so production deps are
   // installed via pnpm and not duplicated into the image.
   bundle: true,

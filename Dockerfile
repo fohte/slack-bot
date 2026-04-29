@@ -15,8 +15,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile
 COPY tsconfig.json tsup.config.ts ./
 COPY src ./src
-RUN pnpm exec tsc --noEmit
-RUN pnpm run build
+RUN pnpm exec tsc --noEmit && pnpm run build
 
 # Production deps only
 FROM base AS prod-deps
