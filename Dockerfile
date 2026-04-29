@@ -8,14 +8,14 @@ ENV PATH=$PNPM_HOME:$PATH
 COPY package.json ./
 RUN corepack enable && corepack prepare --activate
 
-# Install all dependencies (including dev) and run typecheck
+# Install all dependencies (including dev), typecheck, and build dist/
 FROM base AS builder
 COPY pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile
-COPY tsconfig.json ./
+COPY tsconfig.json tsup.config.ts ./
 COPY src ./src
-RUN pnpm exec tsc --noEmit
+RUN pnpm exec tsc --noEmit && pnpm run build
 
 # Production deps only
 FROM base AS prod-deps
@@ -33,8 +33,8 @@ ENV PORT=8080
 USER node
 
 COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
-COPY --chown=node:node package.json tsconfig.json ./
-COPY --chown=node:node src ./src
+COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node package.json ./
 
 EXPOSE 8080
 
@@ -42,6 +42,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 8080) + '/health/live').then(r => { if (r.status !== 200) process.exit(1) }).catch(() => process.exit(1))"
 
-CMD ["node", "--import", "tsx", "src/main.ts"]
+CMD ["node", "dist/main.js"]
 
 LABEL org.opencontainers.image.source=https://github.com/fohte/slack-bot
