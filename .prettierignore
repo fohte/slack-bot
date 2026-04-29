@@ -3,3 +3,6 @@ CHANGELOG.md
 
 # Lock files
 pnpm-lock.yaml
+
+# Build output
+dist
