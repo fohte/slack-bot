@@ -5,7 +5,7 @@ FROM node:24-bookworm-slim AS base
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-COPY package.json ./
+COPY package.json pnpm-workspace.yaml ./
 RUN corepack enable && corepack prepare --activate
 
 # Install all dependencies (including dev), typecheck, and build dist/
