@@ -7,6 +7,7 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 COPY package.json ./
 RUN corepack enable && corepack prepare --activate
+COPY pnpm-workspace.yaml ./
 
 # Install all dependencies (including dev), typecheck, and build dist/
 FROM base AS builder
