@@ -1,6 +1,7 @@
 import type { BlogPrSummary } from '@fohte/blog-publisher-contract'
 
 import type { InteractionContext } from '@/interaction/context'
+import { escapeMrkdwn } from '@/plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '@/plugins/blog/service-client'
 import type { SlashCommandBody } from '@/types/slack-payloads'
 
@@ -58,7 +59,7 @@ const buildBlocks = (prs: readonly BlogPrSummary[]): unknown[] => {
         text: shown
           .map(
             (pr) =>
-              `• <${pr.url}|#${String(pr.number)}> ${pr.title} (branch: \`${pr.branch}\`)`,
+              `• <${pr.url}|#${String(pr.number)}> ${escapeMrkdwn(pr.title)} (branch: \`${pr.branch}\`)`,
           )
           .join('\n'),
       },

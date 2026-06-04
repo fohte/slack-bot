@@ -28,6 +28,10 @@ export const encodeDocIds = (docIds: readonly string[]): string => {
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+// https://docs.slack.dev/messaging/formatting-message-text#escaping
+export const escapeMrkdwn = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
 export const decodeDocIds = (value: string): string[] => {
   const json: unknown = JSON.parse(value)
   if (!isRecord(json)) {
@@ -165,8 +169,10 @@ const formatItems = (plan: Plan): string =>
           ? ` (+${String(item.diffStat.added)} / -${String(item.diffStat.removed)})`
           : ''
       const skip =
-        item.skipReason !== undefined ? ` — skip: ${item.skipReason}` : ''
-      return `${icon} *${item.title}* — \`${item.publishedFilename}\`${stat}${skip}`
+        item.skipReason !== undefined
+          ? ` — skip: ${escapeMrkdwn(item.skipReason)}`
+          : ''
+      return `${icon} *${escapeMrkdwn(item.title)}* — \`${item.publishedFilename}\`${stat}${skip}`
     })
     .join('\n')
 

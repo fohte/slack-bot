@@ -59,10 +59,10 @@ const extractSelectedDocIds = (payload: BlockActionsPayload): string[] => {
   if (!isRecord(values)) return []
   for (const blockValues of Object.values(values)) {
     if (!isRecord(blockValues)) continue
-    for (const action of Object.values(blockValues)) {
-      const v = extractSelectedValues(action)
-      if (v !== undefined) return v
-    }
+    const action = blockValues['blog:select-options']
+    if (action === undefined) continue
+    const v = extractSelectedValues(action)
+    if (v !== undefined) return v
   }
   return []
 }

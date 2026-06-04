@@ -76,7 +76,6 @@ export const handleApplyButton = async (
         branch: result.branch,
       })
       await updater.patch({ text: rendered.text, blocks: rendered.blocks })
-      // CiWatcher polling hook; not implemented yet.
       if (input.onSuccess !== undefined) {
         await input.onSuccess({
           ctx,
