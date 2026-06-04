@@ -31,6 +31,21 @@ export type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
 export type { PluginRegistry } from '@/plugin/registry'
 export { createPluginRegistry } from '@/plugin/registry'
 export type {
+  BlogPluginConfig,
+  BlogServiceClient,
+  BlogServiceClientOptions,
+} from '@/plugins/blog'
+export {
+  BLOG_COMMANDS,
+  BLOG_PLUGIN_NAME,
+  ButtonValueOverflow,
+  createBlogPlugin,
+  createBlogServiceClient,
+  loadBlogPluginConfig,
+  ServiceError,
+  ServiceUnavailable,
+} from '@/plugins/blog'
+export type {
   InteractionRouter,
   RouterOptions,
   RouterResult,

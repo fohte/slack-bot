@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fohte/blog-publisher-contract':
+        specifier: 0.1.0
+        version: 0.1.0
       '@hono/node-server':
         specifier: 2.0.3
         version: 2.0.3(hono@4.12.22)
@@ -20,6 +23,9 @@ importers:
       pino:
         specifier: 10.3.1
         version: 10.3.1
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@commitlint/cli':
         specifier: 21.0.1
@@ -349,6 +355,9 @@ packages:
   '@eslint/plugin-kit@0.7.1':
     resolution: {integrity: sha512-rZAP3aVgB9ds9KOeUSL+zZ21hPmo8dh6fnIFwRQj5EAZl9gzR7wxYbYXYysAM8CTqGmUGyp2S4kUdV17MnGuWQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+
+  '@fohte/blog-publisher-contract@0.1.0':
+    resolution: {integrity: sha512-TnyklTFBcsWxaBDKAiXLBzblm92NLIFSerUHmFbstxBMoI/MQTTA7HTt7NpEHoZYOqtrjwcLjF0Qt8AIG02KQw==}
 
   '@fohte/eslint-config@0.3.1':
     resolution: {integrity: sha512-AmsxEXoRGuzEOD0ilXN2R/vWYlxuxjypYGVRkHtE8X4EluIBRqBPEqY8umhWOIq5Yak93DEqW60Ep8Jrngi7rg==}
@@ -2115,6 +2124,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@babel/code-frame@7.29.0':
@@ -2373,6 +2385,10 @@ snapshots:
     dependencies:
       '@eslint/core': 1.2.1
       levn: 0.4.1
+
+  '@fohte/blog-publisher-contract@0.1.0':
+    dependencies:
+      zod: 4.4.3
 
   '@fohte/eslint-config@0.3.1(@typescript-eslint/eslint-plugin@8.59.0(@typescript-eslint/parser@8.59.0(eslint@10.4.0(jiti@2.6.1))(typescript@6.0.3))(eslint@10.4.0(jiti@2.6.1))(typescript@6.0.3))(@typescript-eslint/parser@8.59.0(eslint@10.4.0(jiti@2.6.1))(typescript@6.0.3))(eslint-config-prettier@10.1.8(eslint@10.4.0(jiti@2.6.1)))(eslint-plugin-import-x@4.16.2(@typescript-eslint/utils@8.59.0(eslint@10.4.0(jiti@2.6.1))(typescript@6.0.3))(eslint@10.4.0(jiti@2.6.1)))(eslint-plugin-simple-import-sort@12.1.1(eslint@10.4.0(jiti@2.6.1)))(eslint@10.4.0(jiti@2.6.1))(typescript@6.0.3)':
     dependencies:
@@ -3959,3 +3975,5 @@ snapshots:
       yargs-parser: 22.0.0
 
   yocto-queue@0.1.0: {}
+
+  zod@4.4.3: {}
