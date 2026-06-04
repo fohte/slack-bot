@@ -38,10 +38,13 @@ export const renderCiSuccessBlocks = (options: {
   prUrl: string
   previewUrl: string | undefined
 }): RenderedMessage => {
-  const previewLine =
+  const prUrl = escapeMrkdwn(options.prUrl)
+  const previewUrl =
     options.previewUrl !== undefined
-      ? `\nPreview: <${options.previewUrl}|${options.previewUrl}>`
-      : ''
+      ? escapeMrkdwn(options.previewUrl)
+      : undefined
+  const previewLine =
+    previewUrl !== undefined ? `\nPreview: <${previewUrl}|${previewUrl}>` : ''
   const text = `:white_check_mark: PR #${String(options.prNumber)} CI 成功`
   return {
     text,
@@ -50,7 +53,7 @@ export const renderCiSuccessBlocks = (options: {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `:white_check_mark: PR #${String(options.prNumber)} の CI が成功しました\n<${options.prUrl}|${options.prUrl}>${previewLine}`,
+          text: `:white_check_mark: PR #${String(options.prNumber)} の CI が成功しました\n<${prUrl}|${prUrl}>${previewLine}`,
         },
       },
     ],
@@ -62,6 +65,7 @@ export const renderCiFailureBlocks = (options: {
   prUrl: string
   failedChecks: readonly string[]
 }): RenderedMessage => {
+  const prUrl = escapeMrkdwn(options.prUrl)
   const checks =
     options.failedChecks.length > 0
       ? options.failedChecks.map((c) => `\`${escapeMrkdwn(c)}\``).join(', ')
@@ -74,7 +78,7 @@ export const renderCiFailureBlocks = (options: {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `:x: PR #${String(options.prNumber)} の CI が失敗しました\n<${options.prUrl}|${options.prUrl}>\nFailed checks: ${checks}`,
+          text: `:x: PR #${String(options.prNumber)} の CI が失敗しました\n<${prUrl}|${prUrl}>\nFailed checks: ${checks}`,
         },
       },
     ],
@@ -85,6 +89,7 @@ export const renderCiTimeoutBlocks = (options: {
   prNumber: number
   prUrl: string
 }): RenderedMessage => {
+  const prUrl = escapeMrkdwn(options.prUrl)
   const text = `:hourglass: PR #${String(options.prNumber)} CI 監視タイムアウト`
   return {
     text,
@@ -93,7 +98,7 @@ export const renderCiTimeoutBlocks = (options: {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `:hourglass: PR #${String(options.prNumber)} の CI 監視が 15 分でタイムアウトしました\n<${options.prUrl}|${options.prUrl}>\n\`/blog-status\` で最新状況を確認してください。`,
+          text: `:hourglass: PR #${String(options.prNumber)} の CI 監視が 15 分でタイムアウトしました\n<${prUrl}|${prUrl}>\n\`/blog-status\` で最新状況を確認してください。`,
         },
       },
     ],
