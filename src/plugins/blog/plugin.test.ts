@@ -126,4 +126,40 @@ describe('createBlogPlugin', () => {
     })
     expect(listNotes).toHaveBeenCalled()
   })
+
+  it('starts CiWatcher when Apply succeeds and a scheduler is provided', async () => {
+    const startWatching = vi.fn()
+    const plugin = createBlogPlugin({
+      config: {
+        serviceUrl: 'https://svc',
+        serviceToken: 't',
+        allowedSlackUserIds: [],
+      },
+      client: stubClient(),
+      ciWatcher: { startWatching },
+    })
+    const slack = stubSlackClient()
+    const action = {
+      action_id: 'blog:apply',
+      value: JSON.stringify({ docIds: ['note:a'] }),
+    }
+    const payload = {
+      type: 'block_actions' as const,
+      actions: [action],
+      response_url: 'https://hooks.example/x',
+      user: { id: 'U_ANY' },
+    }
+    const result = createInteractionContext({
+      source: { kind: 'block_actions', payload },
+      slackClient: slack,
+      responseUrl: 'https://hooks.example/x',
+    })
+    await plugin.onBlockAction?.(result.ctx, payload)
+    expect(startWatching).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prNumber: 1,
+        prUrl: 'https://example.com',
+      }),
+    )
+  })
 })

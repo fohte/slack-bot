@@ -1,3 +1,13 @@
+export type {
+  CiWatcher,
+  CiWatcherOptions,
+  CiWatchInput,
+} from '@/plugins/blog/ci-watcher'
+export {
+  CI_WATCH_INTERVAL_MS,
+  CI_WATCH_MAX_DURATION_MS,
+  createCiWatcher,
+} from '@/plugins/blog/ci-watcher'
 export type { BlogPluginConfig } from '@/plugins/blog/config'
 export { loadBlogPluginConfig } from '@/plugins/blog/config'
 export {

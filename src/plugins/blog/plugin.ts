@@ -2,6 +2,8 @@ import type { InteractionContext } from '@/interaction/context'
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
+import type { CiWatcher } from '@/plugins/blog/ci-watcher'
+import { createCiWatcher } from '@/plugins/blog/ci-watcher'
 import type { BlogPluginConfig } from '@/plugins/blog/config'
 import { translateException } from '@/plugins/blog/error-translator'
 import { handleApplyButton } from '@/plugins/blog/handlers/apply-button'
@@ -12,6 +14,7 @@ import { handleSelectSubmit } from '@/plugins/blog/handlers/select-submit'
 import { handleStatusCommand } from '@/plugins/blog/handlers/status-command'
 import type { BlogServiceClient } from '@/plugins/blog/service-client'
 import { createBlogServiceClient } from '@/plugins/blog/service-client'
+import type { InMemoryScheduler } from '@/scheduler/scheduler'
 
 export const BLOG_PLUGIN_NAME = 'blog'
 
@@ -32,6 +35,8 @@ export interface BlogPluginOptions {
   readonly config: BlogPluginConfig
   readonly client?: BlogServiceClient | undefined
   readonly logger?: Logger | undefined
+  readonly scheduler?: InMemoryScheduler | undefined
+  readonly ciWatcher?: CiWatcher | undefined
 }
 
 export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
@@ -42,6 +47,11 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
       bearerToken: options.config.serviceToken,
     })
   const logger = options.logger ?? noopLogger
+  const ciWatcher =
+    options.ciWatcher ??
+    (options.scheduler !== undefined
+      ? createCiWatcher({ scheduler: options.scheduler, client, logger })
+      : undefined)
   const allowedUsers = new Set(options.config.allowedSlackUserIds)
 
   const isAllowed = (userId: string | undefined): boolean => {
@@ -101,7 +111,23 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
             await handleSelectSubmit({ ctx, payload, action, client })
             return
           case 'blog:apply':
-            await handleApplyButton({ ctx, payload, action, client })
+            await handleApplyButton({
+              ctx,
+              payload,
+              action,
+              client,
+              ...(ciWatcher !== undefined
+                ? {
+                    onSuccess: (success) => {
+                      ciWatcher.startWatching({
+                        prNumber: success.prNumber,
+                        prUrl: success.prUrl,
+                        updater: success.ctx.originalUpdater(),
+                      })
+                    },
+                  }
+                : {}),
+            })
             return
           case 'blog:cancel':
             await handleCancelButton({ ctx, payload, action })
