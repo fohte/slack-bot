@@ -38,11 +38,12 @@ describe('BlogServiceClient', () => {
   })
 
   it('converts HTTP 4xx to ServiceError with code/message', async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(
-        JSON.stringify({ error: { code: 'Bad', message: 'oh no' } }),
-        { status: 400 },
-      ),
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ error: { code: 'Bad', message: 'oh no' } }),
+          { status: 400 },
+        ),
     ) as unknown as typeof fetch
     const client = createBlogServiceClient({
       baseUrl: 'https://svc',

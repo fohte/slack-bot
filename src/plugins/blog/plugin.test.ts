@@ -70,9 +70,7 @@ describe('createBlogPlugin', () => {
     expect(registry.lookupCommand('/blog-post')?.name).toBe('blog')
     expect(registry.lookupCommand('/blog-status')?.name).toBe('blog')
     expect(registry.lookupCommand('/blog-cancel')?.name).toBe('blog')
-    expect(registry.lookupByActionOrCallbackId('blog:apply')?.name).toBe(
-      'blog',
-    )
+    expect(registry.lookupByActionOrCallbackId('blog:apply')?.name).toBe('blog')
   })
 
   it('rejects users not in allowedSlackUserIds', async () => {

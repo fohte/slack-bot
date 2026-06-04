@@ -42,9 +42,7 @@ describe('ErrorTranslator', () => {
   })
 
   it('translateException ServiceUnavailable', () => {
-    expect(translateException(new ServiceUnavailable('x'))).toContain(
-      'Service',
-    )
+    expect(translateException(new ServiceUnavailable('x'))).toContain('Service')
   })
 
   it('translateException ServiceError 401', () => {

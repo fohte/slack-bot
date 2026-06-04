@@ -97,9 +97,7 @@ export const handleApplyButton = async (
       const text = `:x: ${translateApplyFailure(result)}`
       await updater.patch({
         text,
-        blocks: [
-          { type: 'section', text: { type: 'mrkdwn', text } },
-        ],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
       })
       return
     }

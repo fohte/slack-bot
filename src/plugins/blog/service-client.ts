@@ -150,7 +150,11 @@ interface ParsedError {
 
 const parseErrorBody = (text: string): ParsedError => {
   if (text.length === 0) {
-    return { code: 'UnknownError', message: 'Empty error body', issues: undefined }
+    return {
+      code: 'UnknownError',
+      message: 'Empty error body',
+      issues: undefined,
+    }
   }
   try {
     const json: unknown = JSON.parse(text)

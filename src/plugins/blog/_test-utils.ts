@@ -9,7 +9,9 @@ import type {
 export interface TestSlack {
   readonly client: SlackWebClient
   readonly postToResponseUrl: ReturnType<
-    typeof vi.fn<(url: string, payload: ResponseUrlPayload) => Promise<ResponseUrlResult>>
+    typeof vi.fn<
+      (url: string, payload: ResponseUrlPayload) => Promise<ResponseUrlResult>
+    >
   >
 }
 

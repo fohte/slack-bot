@@ -192,9 +192,7 @@ export const renderAppliedBlocks = (
   if (options.branch !== undefined) {
     blocks.push({
       type: 'context',
-      elements: [
-        { type: 'mrkdwn', text: `branch: \`${options.branch}\`` },
-      ],
+      elements: [{ type: 'mrkdwn', text: `branch: \`${options.branch}\`` }],
     })
   }
   return { text, blocks }
