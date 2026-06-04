@@ -1,5 +1,5 @@
 import type { InteractionContext } from '@/interaction/context'
-import { renderPlanBlocks } from '@/plugins/blog/plan-presenter'
+import { isRecord, renderPlanBlocks } from '@/plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '@/plugins/blog/service-client'
 import type {
   BlockActionPayloadAction,
@@ -33,9 +33,6 @@ export const handleSelectSubmit = async (
     blocks: rendered.blocks,
   })
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const extractSelectedValues = (action: unknown): string[] | undefined => {
   if (!isRecord(action)) return undefined

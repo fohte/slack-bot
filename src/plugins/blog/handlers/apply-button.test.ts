@@ -107,6 +107,34 @@ describe('ApplyButtonHandler', () => {
     expect(JSON.stringify(lastBody(slack.postToResponseUrl))).toContain('画像')
   })
 
+  it('patches the original message with an error when apply throws', async () => {
+    const slack = makeSlack()
+    const apply = vi.fn(async () => {
+      throw new Error('boom')
+    })
+    const client = { apply } as unknown as BlogServiceClient
+    const action: BlockActionPayloadAction = {
+      action_id: 'blog:apply',
+      value: encodeDocIds(['note:a']),
+    }
+    const payload: BlockActionsPayload = {
+      type: 'block_actions',
+      actions: [action],
+      response_url: 'https://hooks.example/x',
+    }
+    const result = createInteractionContext({
+      source: { kind: 'block_actions', payload },
+      slackClient: slack.client,
+      responseUrl: 'https://hooks.example/x',
+    })
+    await expect(
+      handleApplyButton({ ctx: result.ctx, payload, action, client }),
+    ).rejects.toThrow('boom')
+    const last = JSON.stringify(lastBody(slack.postToResponseUrl))
+    expect(last).not.toContain('Apply 中')
+    expect(last).toContain('予期しないエラー')
+  })
+
   it('rejects malformed button value', async () => {
     const slack = makeSlack()
     const apply = vi.fn()

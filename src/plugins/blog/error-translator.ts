@@ -6,6 +6,9 @@ import {
   ServiceUnavailable,
 } from '@/plugins/blog/errors'
 
+const BUTTON_VALUE_OVERFLOW_MESSAGE =
+  '選択数が多すぎます。25 件以下に絞ってください'
+
 const ISSUE_MESSAGES: Record<string, string> = {
   FrontmatterInvalid: 'title または date が不正です (YAML frontmatter を確認)',
   SlugRequired: '非 ASCII タイトルには frontmatter の slug を追加してください',
@@ -14,9 +17,20 @@ const ISSUE_MESSAGES: Record<string, string> = {
   PublishedFileMissing:
     'publishedFilename で指定されたファイルが fohte.net に存在しません',
   ImageNotFound: '参照画像が vault に見つかりません',
-  ButtonValueOverflow: '選択数が多すぎます。25 件以下に絞ってください',
+  ButtonValueOverflow: BUTTON_VALUE_OVERFLOW_MESSAGE,
   MissingDescription: 'description が未設定です',
   NoChanges: '既存と同一の内容のためスキップしました',
+}
+
+const APPLY_FAILURE_MESSAGES: Record<string, string> = {
+  ImageUploadFailed:
+    '画像 upload に失敗しました。少し待ってから再実行してください。',
+  GitHubApiError:
+    'GitHub API でエラーが発生しました。設定または rate limit を確認してください。',
+  GitHubBranchConflict:
+    'GitHub ブランチが競合しました。既存 PR を確認してください。',
+  NoteDecryptFailed:
+    'ノートの復号に失敗しました。Service の Secret 設定を確認してください。',
 }
 
 export const translateIssue = (issue: PlanIssue): string => {
@@ -37,17 +51,7 @@ export const translateIssues = (issues: readonly PlanIssue[]): string[] =>
 export const translateApplyFailure = (
   result: Extract<ApplyResult, { kind: 'failed' }>,
 ): string => {
-  const codeMessages: Record<string, string> = {
-    ImageUploadFailed:
-      '画像 upload に失敗しました。少し待ってから再実行してください。',
-    GitHubApiError:
-      'GitHub API でエラーが発生しました。設定または rate limit を確認してください。',
-    GitHubBranchConflict:
-      'GitHub ブランチが競合しました。既存 PR を確認してください。',
-    NoteDecryptFailed:
-      'ノートの復号に失敗しました。Service の Secret 設定を確認してください。',
-  }
-  const base = codeMessages[result.code]
+  const base = APPLY_FAILURE_MESSAGES[result.code]
   if (base === undefined) {
     return `Apply に失敗しました (${result.code}): ${result.message}`
   }
@@ -80,7 +84,7 @@ export const translateException = (err: unknown): string => {
     return translateServiceError(err)
   }
   if (err instanceof ButtonValueOverflow) {
-    return ISSUE_MESSAGES['ButtonValueOverflow'] ?? '選択数が多すぎます。'
+    return BUTTON_VALUE_OVERFLOW_MESSAGE
   }
   if (err instanceof Error) {
     return `予期しないエラーが発生しました: ${err.message}`

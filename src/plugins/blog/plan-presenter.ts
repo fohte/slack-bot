@@ -25,7 +25,7 @@ export const encodeDocIds = (docIds: readonly string[]): string => {
   return value
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 export const decodeDocIds = (value: string): string[] => {

@@ -1,3 +1,6 @@
+import type { InteractionContext } from '@/interaction/context'
+import type { Logger } from '@/logger/logger'
+import { noopLogger } from '@/logger/logger'
 import type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
 import type { BlogPluginConfig } from '@/plugins/blog/config'
 import { translateException } from '@/plugins/blog/error-translator'
@@ -28,6 +31,7 @@ export const BLOG_COMMANDS: readonly SlackAppManifestCommand[] = [
 export interface BlogPluginOptions {
   readonly config: BlogPluginConfig
   readonly client?: BlogServiceClient | undefined
+  readonly logger?: Logger | undefined
 }
 
 export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
@@ -37,6 +41,7 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
       baseUrl: options.config.serviceUrl,
       bearerToken: options.config.serviceToken,
     })
+  const logger = options.logger ?? noopLogger
   const allowedUsers = new Set(options.config.allowedSlackUserIds)
 
   const isAllowed = (userId: string | undefined): boolean => {
@@ -74,7 +79,7 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
             })
         }
       } catch (err) {
-        await reportError(ctx, err)
+        await reportError(ctx, err, logger)
       }
     },
     async onBlockAction(ctx, payload) {
@@ -105,21 +110,23 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
             ctx.ack()
         }
       } catch (err) {
-        await reportError(ctx, err)
+        await reportError(ctx, err, logger)
       }
     },
   }
 }
 
 const reportError = async (
-  ctx: import('@/interaction/context').InteractionContext,
+  ctx: InteractionContext,
   err: unknown,
+  logger: Logger,
 ): Promise<void> => {
+  logger.error({ err }, 'blog plugin handler failed')
   ctx.ack()
   const text = translateException(err)
   try {
     await ctx.followUp({ response_type: 'ephemeral', text })
-  } catch {
-    // ignore secondary failure
+  } catch (followUpErr) {
+    logger.error({ err: followUpErr }, 'blog plugin followUp failed')
   }
 }

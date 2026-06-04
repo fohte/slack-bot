@@ -1,5 +1,9 @@
 import type { InteractionContext } from '@/interaction/context'
-import { translateApplyFailure } from '@/plugins/blog/error-translator'
+import type { MessageUpdater } from '@/interaction/message-updater'
+import {
+  translateApplyFailure,
+  translateException,
+} from '@/plugins/blog/error-translator'
 import {
   decodeDocIds,
   renderAlreadyAppliedBlocks,
@@ -57,7 +61,13 @@ export const handleApplyButton = async (
   const applying = renderApplyingBlocks()
   await updater.patch({ text: applying.text, blocks: applying.blocks })
 
-  const result = await client.apply(docIds)
+  let result
+  try {
+    result = await client.apply(docIds)
+  } catch (err) {
+    await patchError(updater, err)
+    throw err
+  }
   switch (result.kind) {
     case 'success': {
       const rendered = renderAppliedBlocks({
@@ -66,7 +76,7 @@ export const handleApplyButton = async (
         branch: result.branch,
       })
       await updater.patch({ text: rendered.text, blocks: rendered.blocks })
-      // TODO(task 8): start CiWatcher polling here.
+      // CiWatcher polling hook; not implemented yet.
       if (input.onSuccess !== undefined) {
         await input.onSuccess({
           ctx,
@@ -101,5 +111,20 @@ export const handleApplyButton = async (
       })
       return
     }
+  }
+}
+
+const patchError = async (
+  updater: MessageUpdater,
+  err: unknown,
+): Promise<void> => {
+  const text = `:x: ${translateException(err)}`
+  try {
+    await updater.patch({
+      text,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+    })
+  } catch {
+    // ignore secondary patch failure; primary error still propagates
   }
 }

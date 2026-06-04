@@ -4,6 +4,8 @@ import type { InteractionContext } from '@/interaction/context'
 import type { BlogServiceClient } from '@/plugins/blog/service-client'
 import type { SlashCommandBody } from '@/types/slack-payloads'
 
+const MAX_PRS_PER_BLOCK = 20
+
 export interface HandleStatusCommandInput {
   readonly ctx: InteractionContext
   readonly body: SlashCommandBody
@@ -40,7 +42,8 @@ const buildBlocks = (prs: readonly BlogPrSummary[]): unknown[] => {
       },
     ]
   }
-  return [
+  const shown = prs.slice(0, MAX_PRS_PER_BLOCK)
+  const blocks: unknown[] = [
     {
       type: 'section',
       text: {
@@ -52,7 +55,7 @@ const buildBlocks = (prs: readonly BlogPrSummary[]): unknown[] => {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: prs
+        text: shown
           .map(
             (pr) =>
               `• <${pr.url}|#${String(pr.number)}> ${pr.title} (branch: \`${pr.branch}\`)`,
@@ -61,4 +64,16 @@ const buildBlocks = (prs: readonly BlogPrSummary[]): unknown[] => {
       },
     },
   ]
+  if (prs.length > MAX_PRS_PER_BLOCK) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `他 ${String(prs.length - MAX_PRS_PER_BLOCK)} 件は省略しました。GitHub で確認してください。`,
+        },
+      ],
+    })
+  }
+  return blocks
 }
