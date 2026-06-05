@@ -41,6 +41,11 @@ const makeClientFromStatuses = (
   return { client, getCiStatus }
 }
 
+const sectionBlock = (text: string): unknown => ({
+  type: 'section',
+  text: { type: 'mrkdwn', text },
+})
+
 describe('CiWatcher', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -77,11 +82,44 @@ describe('CiWatcher', () => {
     await flush()
     expect(getCiStatus).toHaveBeenCalledTimes(2)
     expect(patch).toHaveBeenCalledTimes(1)
-    const body = JSON.stringify(patch.mock.calls[0]?.[0])
-    expect(body).toContain('pull/42')
-    expect(body).toContain('成功')
-    expect(body).toContain('preview.example/x')
+    expect(patch).toHaveBeenNthCalledWith(1, {
+      text: ':white_check_mark: PR #42 CI 成功',
+      blocks: [
+        sectionBlock(
+          ':white_check_mark: PR #42 の CI が成功しました\n' +
+            '<https://github.com/x/y/pull/42|https://github.com/x/y/pull/42>\n' +
+            'Preview: <https://preview.example/x|https://preview.example/x>',
+        ),
+      ],
+    })
     expect(scheduler.listActive()).toHaveLength(0)
+  })
+
+  it('omits the preview line when previewUrl is missing on success', async () => {
+    const { updater, patch } = makeUpdater()
+    const { client } = makeClientFromStatuses([
+      { state: 'success', failedChecks: [] },
+    ])
+    const scheduler = createScheduler({ maxConcurrentTasks: 8 })
+    const watcher = createCiWatcher({ scheduler, client })
+
+    watcher.startWatching({
+      prNumber: 3,
+      prUrl: 'https://github.com/x/y/pull/3',
+      updater,
+    })
+
+    await vi.advanceTimersByTimeAsync(CI_WATCH_INTERVAL_MS)
+    await flush()
+    expect(patch).toHaveBeenNthCalledWith(1, {
+      text: ':white_check_mark: PR #3 CI 成功',
+      blocks: [
+        sectionBlock(
+          ':white_check_mark: PR #3 の CI が成功しました\n' +
+            '<https://github.com/x/y/pull/3|https://github.com/x/y/pull/3>',
+        ),
+      ],
+    })
   })
 
   it('patches a failure message with failed checks on failure', async () => {
@@ -103,12 +141,45 @@ describe('CiWatcher', () => {
 
     await vi.advanceTimersByTimeAsync(CI_WATCH_INTERVAL_MS)
     await flush()
-    expect(patch).toHaveBeenCalledTimes(1)
-    const body = JSON.stringify(patch.mock.calls[0]?.[0])
-    expect(body).toContain('失敗')
-    expect(body).toContain('build')
-    expect(body).toContain('lint')
+    expect(patch).toHaveBeenNthCalledWith(1, {
+      text: ':x: PR #7 CI 失敗',
+      blocks: [
+        sectionBlock(
+          ':x: PR #7 の CI が失敗しました\n' +
+            '<https://github.com/x/y/pull/7|https://github.com/x/y/pull/7>\n' +
+            'Failed checks: `build`, `lint`',
+        ),
+      ],
+    })
     expect(scheduler.listActive()).toHaveLength(0)
+  })
+
+  it('renders "(詳細なし)" when failedChecks is empty on failure', async () => {
+    const { updater, patch } = makeUpdater()
+    const { client } = makeClientFromStatuses([
+      { state: 'failure', failedChecks: [] },
+    ])
+    const scheduler = createScheduler({ maxConcurrentTasks: 8 })
+    const watcher = createCiWatcher({ scheduler, client })
+
+    watcher.startWatching({
+      prNumber: 8,
+      prUrl: 'https://github.com/x/y/pull/8',
+      updater,
+    })
+
+    await vi.advanceTimersByTimeAsync(CI_WATCH_INTERVAL_MS)
+    await flush()
+    expect(patch).toHaveBeenNthCalledWith(1, {
+      text: ':x: PR #8 CI 失敗',
+      blocks: [
+        sectionBlock(
+          ':x: PR #8 の CI が失敗しました\n' +
+            '<https://github.com/x/y/pull/8|https://github.com/x/y/pull/8>\n' +
+            'Failed checks: (詳細なし)',
+        ),
+      ],
+    })
   })
 
   it('patches a timeout message when 15 minutes elapse with no completion', async () => {
@@ -141,11 +212,49 @@ describe('CiWatcher', () => {
     nowVal = CI_WATCH_MAX_DURATION_MS + 1
     await vi.advanceTimersByTimeAsync(CI_WATCH_INTERVAL_MS)
     await flush()
-    expect(patch).toHaveBeenCalledTimes(1)
-    const body = JSON.stringify(patch.mock.calls[0]?.[0])
-    expect(body).toContain('タイムアウト')
-    expect(body).toContain('pull/99')
+    expect(patch).toHaveBeenNthCalledWith(1, {
+      text: ':hourglass: PR #99 CI 監視タイムアウト',
+      blocks: [
+        sectionBlock(
+          ':hourglass: PR #99 の CI 監視が 15 分でタイムアウトしました\n' +
+            '<https://github.com/x/y/pull/99|https://github.com/x/y/pull/99>\n' +
+            '`/blog-status` で最新状況を確認してください。',
+        ),
+      ],
+    })
     expect(scheduler.listActive()).toHaveLength(0)
+  })
+
+  it('escapes mrkdwn-special characters in URLs', async () => {
+    const { updater, patch } = makeUpdater()
+    const { client } = makeClientFromStatuses([
+      {
+        state: 'success',
+        failedChecks: [],
+        previewUrl: 'https://p.example/?a=1&b=<2>',
+      },
+    ])
+    const scheduler = createScheduler({ maxConcurrentTasks: 8 })
+    const watcher = createCiWatcher({ scheduler, client })
+
+    watcher.startWatching({
+      prNumber: 5,
+      prUrl: 'https://github.com/x/y/pull/5?c=<x>&d=1',
+      updater,
+    })
+
+    await vi.advanceTimersByTimeAsync(CI_WATCH_INTERVAL_MS)
+    await flush()
+    expect(patch).toHaveBeenNthCalledWith(1, {
+      text: ':white_check_mark: PR #5 CI 成功',
+      blocks: [
+        sectionBlock(
+          ':white_check_mark: PR #5 の CI が成功しました\n' +
+            '<https://github.com/x/y/pull/5?c=&lt;x&gt;&amp;d=1|https://github.com/x/y/pull/5?c=&lt;x&gt;&amp;d=1>\n' +
+            'Preview: <https://p.example/?a=1&amp;b=&lt;2&gt;|https://p.example/?a=1&amp;b=&lt;2&gt;>',
+        ),
+      ],
+    })
   })
 
   it('continues polling when getCiStatus throws (onError logs only)', async () => {
