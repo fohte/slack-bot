@@ -131,10 +131,21 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
       return c.json({ challenge: raw['challenge'] })
     }
     const envelope = toEventCallback(raw)
-    if (envelope !== undefined) {
-      // Fire-and-forget so the 200 ack returns within Slack's 3-second
-      // window. Per-plugin errors are logged inside routeEvent.
-      void options.router.routeEvent(envelope)
+    if (envelope === undefined) {
+      options.logger.warn(
+        { event: 'event_envelope_invalid', type: raw['type'] },
+        'received event payload that could not be normalized',
+      )
+    } else {
+      void options.router.routeEvent(envelope).catch((err: unknown) => {
+        options.logger.error(
+          {
+            event: 'route_event_unhandled',
+            error: err instanceof Error ? err.message : String(err),
+          },
+          'routeEvent threw outside per-plugin handler',
+        )
+      })
     }
     // Acknowledge with 200 so Slack keeps the event subscription healthy.
     return c.body(null, 200)

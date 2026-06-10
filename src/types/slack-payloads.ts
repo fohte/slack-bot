@@ -95,7 +95,7 @@ export interface SlackEventBase {
 }
 
 export interface SlackUnknownEvent extends SlackEventBase {
-  readonly type: Exclude<string, 'message' | 'app_mention'>
+  readonly type: string
 }
 
 export interface SlackMessageEvent extends SlackEventBase {

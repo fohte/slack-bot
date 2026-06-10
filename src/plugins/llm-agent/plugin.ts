@@ -25,23 +25,28 @@ export const createLlmAgentPlugin = (
     commands: LLM_AGENT_COMMANDS,
     eventSubscriptions: LLM_AGENT_EVENT_SUBSCRIPTIONS,
     onEvent(ctx, event) {
-      // Guard against self-message loops once this plugin starts posting replies.
       if (
         event.type === 'message' &&
         (event.subtype === 'bot_message' || event.bot_id !== undefined)
       ) {
         return Promise.resolve()
       }
+      const fields =
+        event.type === 'message' || event.type === 'app_mention'
+          ? {
+              channel: event.channel,
+              user: event.user,
+              ts: event.ts,
+              thread_ts: event.thread_ts,
+            }
+          : {}
       logger.info(
         {
           event: 'llm_agent_event_received',
           event_type: event.type,
           event_id: ctx.envelope.event_id,
           team_id: ctx.envelope.team_id,
-          channel: event['channel'],
-          user: event['user'],
-          ts: event['ts'],
-          thread_ts: event['thread_ts'],
+          ...fields,
         },
         'llm-agent received event',
       )
