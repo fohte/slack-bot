@@ -1,6 +1,9 @@
 allowBuilds:
   # required by vitest's transformer
+  cpu-features: false
   esbuild: true
+  protobufjs: false
+  ssh2: false
   # required by @fohte/eslint-config -> eslint-plugin-import-x for "@/*" resolution
   unrs-resolver: true
 
