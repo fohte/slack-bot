@@ -67,7 +67,7 @@ DATABASE_URL=... pnpm migrate:create some-name      # scaffolds a new .ts migrat
 
 In CI / production the same `pnpm migrate:up` is invoked against the target database before the bot starts. Migrations should be reversible (`up` / `down`) and idempotent enough to re-apply after a rollback.
 
-The migration schema is covered by an integration test that spins up an ephemeral Postgres via Testcontainers. It is opt-in (requires a reachable Docker daemon) and is skipped by `pnpm test`. Run it explicitly with `pnpm test:db`.
+The migration schema is covered by an integration test that spins up an ephemeral Postgres via Testcontainers. The suite is gated by `RUN_DB_TESTS=1` (and a reachable Docker daemon), so `pnpm test` collects but skips it. Run it explicitly with `pnpm test:db`.
 
 ## Adding a plugin
 

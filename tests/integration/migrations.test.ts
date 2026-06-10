@@ -13,27 +13,31 @@ const repoRoot = path.resolve(
 )
 const migrationsDir = path.join(repoRoot, 'migrations')
 
-// Requires a reachable Docker daemon. Opt in by setting RUN_DB_TESTS=1.
 describe.skipIf(process.env['RUN_DB_TESTS'] !== '1')('migrations', () => {
-  let container: Awaited<ReturnType<PostgreSqlContainer['start']>>
+  let container: Awaited<ReturnType<PostgreSqlContainer['start']>> | undefined
   let databaseUrl: string
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer('postgres:16-alpine').start()
     databaseUrl = container.getConnectionUri()
 
-    await runner({
+    const runnerOptions = {
       databaseUrl,
       dir: migrationsDir,
-      direction: 'up',
       migrationsTable: 'pgmigrations',
       verbose: false,
       log: () => {},
-    })
+    } as const
+
+    // Round-trip up → down → up so `down` is exercised on every run; the final
+    // `up` leaves the schema in the asserted state.
+    await runner({ ...runnerOptions, direction: 'up' })
+    await runner({ ...runnerOptions, direction: 'down', count: Infinity })
+    await runner({ ...runnerOptions, direction: 'up' })
   }, 120_000)
 
   afterAll(async () => {
-    await container.stop()
+    await container?.stop()
   })
 
   it('creates the expected schema', async () => {
@@ -71,18 +75,9 @@ describe.skipIf(process.env['RUN_DB_TESTS'] !== '1')('migrations', () => {
          ORDER BY tablename, indexname`,
       )
 
-      const normalizeDefault = (value: string | null): string | null => {
-        if (value === null) return null
-        // Postgres echoes column defaults with explicit type casts (e.g. `'now()'::text`).
-        return value.replace(/::[\w ]+(\[\])?/g, '')
-      }
-
       const snapshot = {
         tables: tables.rows.map((r) => r.table_name),
-        columns: columns.rows.map((r) => ({
-          ...r,
-          column_default: normalizeDefault(r.column_default),
-        })),
+        columns: columns.rows,
         indexes: indexes.rows.map((r) => ({
           table_name: r.table_name,
           index_name: r.index_name,
