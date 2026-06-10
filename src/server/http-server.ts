@@ -8,6 +8,8 @@ import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
+  SlackEvent,
+  SlackEventCallback,
   SlackInteractivityPayload,
   SlashCommandBody,
   ViewClosedPayload,
@@ -128,6 +130,12 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
     ) {
       return c.json({ challenge: raw['challenge'] })
     }
+    const envelope = toEventCallback(raw)
+    if (envelope !== undefined) {
+      // Fire-and-forget so the 200 ack returns within Slack's 3-second
+      // window. Per-plugin errors are logged inside routeEvent.
+      void options.router.routeEvent(envelope)
+    }
     // Acknowledge with 200 so Slack keeps the event subscription healthy.
     return c.body(null, 200)
   })
@@ -238,4 +246,20 @@ const toMessageAction = (
   const callbackId = value['callback_id']
   if (typeof callbackId !== 'string') return undefined
   return { ...value, type: 'message_action', callback_id: callbackId }
+}
+
+const toEventCallback = (
+  value: Record<string, unknown>,
+): SlackEventCallback | undefined => {
+  if (value['type'] !== 'event_callback') return undefined
+  const event = value['event']
+  if (!isRecord(event)) return undefined
+  const eventType = event['type']
+  if (typeof eventType !== 'string') return undefined
+  const normalizedEvent: SlackEvent = { ...event, type: eventType }
+  return {
+    ...value,
+    type: 'event_callback',
+    event: normalizedEvent,
+  }
 }

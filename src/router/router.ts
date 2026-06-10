@@ -4,6 +4,7 @@ import {
   type InteractionContext,
   type InteractionSource,
 } from '@/interaction/context'
+import type { EventContext } from '@/interaction/event-context'
 import type { SlackMessageRef } from '@/interaction/message-updater'
 import type { Logger } from '@/logger/logger'
 import type { Plugin } from '@/plugin/plugin'
@@ -13,6 +14,7 @@ import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
+  SlackEventCallback,
   SlackInteractivityPayload,
   SlashCommandBody,
   ViewClosedPayload,
@@ -27,6 +29,7 @@ export type RouterResult =
 export interface InteractionRouter {
   routeCommand(body: SlashCommandBody): Promise<RouterResult>
   routeInteractivity(payload: SlackInteractivityPayload): Promise<RouterResult>
+  routeEvent(envelope: SlackEventCallback): Promise<void>
 }
 
 export interface RouterOptions {
@@ -167,6 +170,53 @@ export const createInteractionRouter = (
         default:
           return { status: 400 }
       }
+    },
+    async routeEvent(envelope) {
+      const eventType = envelope.event.type
+      const ctx: EventContext = {
+        envelope,
+        slackClient: options.slackClient,
+        logger: options.logger,
+      }
+      const dispatches: Array<Promise<void>> = []
+      for (const plugin of options.registry.listPlugins()) {
+        if (plugin.onEvent === undefined) continue
+        const subscriptions = plugin.eventSubscriptions
+        if (subscriptions !== undefined && !subscriptions.includes(eventType)) {
+          continue
+        }
+        const startedAt = now()
+        const handlerCall = plugin.onEvent(ctx, envelope.event)
+        const tracked = handlerCall
+          .then(() => {
+            options.logger.info(
+              {
+                event: 'event_handled',
+                plugin: plugin.name,
+                event_type: eventType,
+                event_id: envelope.event_id,
+                duration_ms: now() - startedAt,
+                status: 'success',
+              },
+              'event handled',
+            )
+          })
+          .catch((err: unknown) => {
+            options.logger.error(
+              {
+                event: 'plugin_event_handler_error',
+                plugin: plugin.name,
+                event_type: eventType,
+                event_id: envelope.event_id,
+                duration_ms: now() - startedAt,
+                error: serializeError(err),
+              },
+              'plugin event handler threw',
+            )
+          })
+        dispatches.push(tracked)
+      }
+      await Promise.all(dispatches)
     },
   }
 

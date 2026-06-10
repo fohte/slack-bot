@@ -1,8 +1,10 @@
 import type { InteractionContext } from '@/interaction/context'
+import type { EventContext } from '@/interaction/event-context'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
+  SlackEvent,
   SlashCommandBody,
   ViewClosedPayload,
   ViewSubmissionPayload,
@@ -36,4 +38,6 @@ export interface Plugin {
     ctx: InteractionContext,
     payload: MessageActionPayload,
   ): Promise<void>
+  readonly eventSubscriptions?: readonly string[]
+  onEvent?(ctx: EventContext, event: SlackEvent): Promise<void>
 }
