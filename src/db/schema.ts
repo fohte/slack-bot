@@ -23,6 +23,7 @@ export const threadSessionMap = pgTable(
   },
   (table) => [
     primaryKey({
+      name: 'thread_session_map_pk',
       columns: [table.slackTeamId, table.slackChannelId, table.threadRootTs],
     }),
     uniqueIndex('thread_session_map_session_idx').on(table.opencodeSessionId),

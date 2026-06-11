@@ -15,7 +15,7 @@ CREATE TABLE "thread_session_map" (
 	"opencode_session_id" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "thread_session_map_slack_team_id_slack_channel_id_thread_root_ts_pk" PRIMARY KEY("slack_team_id","slack_channel_id","thread_root_ts")
+	CONSTRAINT "thread_session_map_pk" PRIMARY KEY("slack_team_id","slack_channel_id","thread_root_ts")
 );
 --> statement-breakpoint
 CREATE INDEX "event_log_received_idx" ON "event_log" USING btree ("received_at");--> statement-breakpoint

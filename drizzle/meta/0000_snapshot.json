@@ -1,5 +1,5 @@
 {
-  "id": "d5825413-30dd-423d-97fd-47cf796dc598",
+  "id": "c9139695-d8e0-4f33-b53f-34f5ccd180b5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -138,8 +138,8 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "thread_session_map_slack_team_id_slack_channel_id_thread_root_ts_pk": {
-          "name": "thread_session_map_slack_team_id_slack_channel_id_thread_root_ts_pk",
+        "thread_session_map_pk": {
+          "name": "thread_session_map_pk",
           "columns": ["slack_team_id", "slack_channel_id", "thread_root_ts"]
         }
       },

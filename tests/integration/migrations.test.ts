@@ -172,16 +172,15 @@ describe.skipIf(process.env['RUN_DB_TESTS'] !== '1')('migrations', () => {
           },
           {
             table_name: 'thread_session_map',
-            index_name: 'thread_session_map_session_idx',
+            index_name: 'thread_session_map_pk',
             index_def:
-              'CREATE UNIQUE INDEX thread_session_map_session_idx ON public.thread_session_map USING btree (opencode_session_id)',
+              'CREATE UNIQUE INDEX thread_session_map_pk ON public.thread_session_map USING btree (slack_team_id, slack_channel_id, thread_root_ts)',
           },
           {
             table_name: 'thread_session_map',
-            index_name:
-              'thread_session_map_slack_team_id_slack_channel_id_thread_root_t',
+            index_name: 'thread_session_map_session_idx',
             index_def:
-              'CREATE UNIQUE INDEX thread_session_map_slack_team_id_slack_channel_id_thread_root_t ON public.thread_session_map USING btree (slack_team_id, slack_channel_id, thread_root_ts)',
+              'CREATE UNIQUE INDEX thread_session_map_session_idx ON public.thread_session_map USING btree (opencode_session_id)',
           },
         ],
       })
