@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Base image with corepack-enabled pnpm
-FROM node:24-bookworm-slim AS base
+FROM node:24.16.0-bookworm-slim AS base
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -25,7 +25,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod
 
 # Final runtime image
-FROM node:24-bookworm-slim AS runtime
+FROM node:24.16.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
