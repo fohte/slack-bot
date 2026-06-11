@@ -175,8 +175,6 @@ export const createInteractionRouter = (
       const eventType = envelope.event.type
       const ctx: EventContext = {
         envelope,
-        slackClient: options.slackClient,
-        logger: options.logger,
       }
       const dispatches: Array<Promise<void>> = []
       for (const plugin of options.registry.listPlugins()) {
