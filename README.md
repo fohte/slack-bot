@@ -26,7 +26,7 @@ slack-bot is an HTTP-only Request URL receiver for Slack: it does not use Socket
 | `MAX_CONCURRENT_TASKS`                        | No       | `32`    | Maximum number of concurrent in-memory scheduler tasks. Registration beyond this limit fails.                  |
 | `MAX_WEB_API_RETRIES`                         | No       | `3`     | Maximum retry count for Slack Web API calls that hit HTTP 429.                                                 |
 | `LOG_LEVEL`                                   | No       | `info`  | One of `debug`, `info`, `warn`, `error`.                                                                       |
-| `DATABASE_URL`                                | No       | -       | Postgres connection string consumed by `pnpm migrate`. Required only for plugins that own a logical DB.        |
+| `DATABASE_URL`                                | No       | -       | Postgres connection string consumed by `pnpm db:migrate`. Required only for plugins that own a logical DB.     |
 | `CF_ACCESS_<PLUGIN_NAME_UPPER>_CLIENT_ID`     | No       | -       | Cloudflare Access Service Token client ID for the named plugin. Hyphens in the plugin name become underscores. |
 | `CF_ACCESS_<PLUGIN_NAME_UPPER>_CLIENT_SECRET` | No       | -       | Cloudflare Access Service Token client secret for the named plugin. Same naming rule as above.                 |
 

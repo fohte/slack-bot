@@ -35,6 +35,7 @@ USER node
 
 COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node drizzle ./drizzle
 COPY --chown=node:node package.json ./
 
 EXPOSE 8080

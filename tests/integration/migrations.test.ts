@@ -1,18 +1,8 @@
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import { PostgreSqlContainer } from '@testcontainers/postgresql'
-import { drizzle } from 'drizzle-orm/postgres-js'
-import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-const repoRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-)
-const migrationsFolder = path.join(repoRoot, 'drizzle')
+import { runMigrations } from '@/db/migrator'
 
 describe.skipIf(process.env['RUN_DB_TESTS'] !== '1')('migrations', () => {
   let container: Awaited<ReturnType<PostgreSqlContainer['start']>> | undefined
@@ -21,13 +11,7 @@ describe.skipIf(process.env['RUN_DB_TESTS'] !== '1')('migrations', () => {
   beforeAll(async () => {
     container = await new PostgreSqlContainer('postgres:16-alpine').start()
     databaseUrl = container.getConnectionUri()
-
-    const client = postgres(databaseUrl, { max: 1 })
-    try {
-      await migrate(drizzle(client), { migrationsFolder })
-    } finally {
-      await client.end()
-    }
+    await runMigrations(databaseUrl)
   }, 120_000)
 
   afterAll(async () => {
