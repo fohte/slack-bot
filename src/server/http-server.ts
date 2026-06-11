@@ -8,6 +8,8 @@ import type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
+  SlackEvent,
+  SlackEventCallback,
   SlackInteractivityPayload,
   SlashCommandBody,
   ViewClosedPayload,
@@ -128,6 +130,23 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
     ) {
       return c.json({ challenge: raw['challenge'] })
     }
+    const envelope = toEventCallback(raw)
+    if (envelope === undefined) {
+      options.logger.warn(
+        { event: 'event_envelope_invalid', type: raw['type'] },
+        'received event payload that could not be normalized',
+      )
+    } else {
+      void options.router.routeEvent(envelope).catch((err: unknown) => {
+        options.logger.error(
+          {
+            event: 'route_event_unhandled',
+            error: err instanceof Error ? err.message : String(err),
+          },
+          'routeEvent threw outside per-plugin handler',
+        )
+      })
+    }
     // Acknowledge with 200 so Slack keeps the event subscription healthy.
     return c.body(null, 200)
   })
@@ -238,4 +257,20 @@ const toMessageAction = (
   const callbackId = value['callback_id']
   if (typeof callbackId !== 'string') return undefined
   return { ...value, type: 'message_action', callback_id: callbackId }
+}
+
+const toEventCallback = (
+  value: Record<string, unknown>,
+): SlackEventCallback | undefined => {
+  if (value['type'] !== 'event_callback') return undefined
+  const event = value['event']
+  if (!isRecord(event)) return undefined
+  const eventType = event['type']
+  if (typeof eventType !== 'string') return undefined
+  const normalizedEvent: SlackEvent = { ...event, type: eventType }
+  return {
+    ...value,
+    type: 'event_callback',
+    event: normalizedEvent,
+  }
 }

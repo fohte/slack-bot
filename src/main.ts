@@ -6,6 +6,7 @@ import { createLogger } from '@/logger/logger'
 import type { PluginDeps, PluginInput } from '@/plugin/deps'
 import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
+import { createLlmAgentPlugin } from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
 import { createSignatureVerifier } from '@/security/signature-verifier'
@@ -75,5 +76,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
 
 const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
-  bootstrap()
+  bootstrap({
+    plugins: [({ logger }) => createLlmAgentPlugin({ logger })],
+  })
 }
