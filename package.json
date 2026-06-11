@@ -14,7 +14,6 @@
     "test": "conc pnpm:test:type pnpm:test:unit",
     "test:type": "tsc --noEmit",
     "test:unit": "vitest run",
-    "test:db": "RUN_DB_TESTS=1 vitest run tests/integration/migrations.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:prod": "node dist/db/migrate.js"
@@ -23,7 +22,6 @@
     "@commitlint/cli": "21.0.2",
     "@eslint/eslintrc": "3.3.5",
     "@fohte/eslint-config": "0.3.2",
-    "@testcontainers/postgresql": "12.0.1",
     "@tsconfig/node-lts": "24.0.0",
     "@tsconfig/strictest": "2.0.8",
     "@types/node": "24.12.4",

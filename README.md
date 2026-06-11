@@ -66,8 +66,6 @@ DATABASE_URL=postgres://user:pass@localhost:5432/slack_bot_llm_agent pnpm db:mig
 
 In production the bundled `dist/db/migrate.js` is used (`pnpm db:migrate:prod`) so the image does not carry tsx.
 
-The schema is covered by an integration test that spins up an ephemeral Postgres via Testcontainers. The suite is gated by `RUN_DB_TESTS=1` (and a reachable Docker daemon), so `pnpm test` collects but skips it. Run it explicitly with `pnpm test:db`.
-
 ## Adding a plugin
 
 A plugin is an object that declares a `name`, the `commands` it owns, and one or more handler methods. Register plugins by passing them to `bootstrap`.

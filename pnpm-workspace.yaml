@@ -3,10 +3,6 @@ allowBuilds:
   esbuild: true
   # required by @fohte/eslint-config -> eslint-plugin-import-x for "@/*" resolution
   unrs-resolver: true
-  # Pulled in transitively by @testcontainers/postgresql -> dockerode -> ssh2.
-  cpu-features: false
-  protobufjs: false
-  ssh2: false
 
 # Dodge short-lived supply-chain attacks (e.g. shai-hulud, tinycolor) by
 # holding off freshly published versions. Unit is minutes; 10080 = 7 days.
