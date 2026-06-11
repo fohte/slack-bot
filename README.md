@@ -57,17 +57,16 @@ The slash command list can also be generated as a Slack App manifest fragment vi
 
 ## Database migrations
 
-Plugin-owned schemas live under `migrations/` and are managed by [`node-pg-migrate`](https://github.com/salsita/node-pg-migrate). The migrator reads `DATABASE_URL` and applies any pending files in timestamp order.
+Plugin-owned schemas are defined with [Drizzle ORM](https://orm.drizzle.team/) in `src/db/schema.ts`. SQL migrations are generated under `drizzle/` and applied by `src/db/migrate.ts`. The runtime reads `DATABASE_URL`.
 
 ```bash
-DATABASE_URL=postgres://user:pass@localhost:5432/slack_bot_llm_agent pnpm migrate:up
-DATABASE_URL=... pnpm migrate:down
-DATABASE_URL=... pnpm migrate:create some-name      # scaffolds a new .ts migration
+pnpm db:generate                                                       # regenerate drizzle/<n>_*.sql after editing schema.ts
+DATABASE_URL=postgres://user:pass@localhost:5432/slack_bot_llm_agent pnpm db:migrate
 ```
 
-In CI / production the same `pnpm migrate:up` is invoked against the target database before the bot starts. Migrations should be reversible (`up` / `down`) and idempotent enough to re-apply after a rollback.
+In production the bundled `dist/db/migrate.js` is used (`pnpm db:migrate:prod`) so the image does not carry tsx.
 
-The migration schema is covered by an integration test that spins up an ephemeral Postgres via Testcontainers. The suite is gated by `RUN_DB_TESTS=1` (and a reachable Docker daemon), so `pnpm test` collects but skips it. Run it explicitly with `pnpm test:db`.
+The schema is covered by an integration test that spins up an ephemeral Postgres via Testcontainers. The suite is gated by `RUN_DB_TESTS=1` (and a reachable Docker daemon), so `pnpm test` collects but skips it. Run it explicitly with `pnpm test:db`.
 
 ## Adding a plugin
 
