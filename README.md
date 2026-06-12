@@ -60,7 +60,10 @@ The slash command list can also be generated as a Slack App manifest fragment vi
 Plugin-owned schemas are defined with [Drizzle ORM](https://orm.drizzle.team/) in `src/db/schema.ts`. SQL migrations are generated under `drizzle/` and applied by `src/db/migrate.ts`. The runtime reads `DATABASE_URL`.
 
 ```bash
-pnpm db:generate                                                       # regenerate drizzle/<n>_*.sql after editing schema.ts
+# Regenerate drizzle/<n>_*.sql after editing schema.ts.
+pnpm db:generate
+
+# Apply pending migrations.
 DATABASE_URL=postgres://user:pass@localhost:5432/slack_bot_llm_agent pnpm db:migrate
 ```
 
