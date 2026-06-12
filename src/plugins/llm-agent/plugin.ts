@@ -55,7 +55,7 @@ const isBotMessage = (event: SlackEvent): boolean => {
     return event.subtype === 'bot_message' || event.bot_id !== undefined
   }
   if (event.type === 'app_mention') {
-    return typeof event['bot_id'] === 'string'
+    return event.bot_id !== undefined
   }
   return false
 }
