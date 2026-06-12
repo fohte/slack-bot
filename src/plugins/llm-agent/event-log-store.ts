@@ -10,7 +10,6 @@ export interface EventLogRecord {
   readonly slackTeamId?: string | undefined
   readonly slackChannelId?: string | undefined
   readonly threadRootTs?: string | undefined
-  readonly taskName?: string | undefined
 }
 
 export interface EventLogStore {
@@ -28,7 +27,6 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
         slackTeamId: record.slackTeamId ?? null,
         slackChannelId: record.slackChannelId ?? null,
         threadRootTs: record.threadRootTs ?? null,
-        taskName: record.taskName ?? null,
       })
       .onConflictDoNothing({ target: eventLog.slackEventId })
       .returning({ slackEventId: eventLog.slackEventId })

@@ -112,23 +112,42 @@ export const createLlmAgentPlugin = (
 
       logger.info(
         {
-          event: 'llm_agent_event_received',
+          event:
+            outcome === 'accepted'
+              ? 'llm_agent_event_accepted'
+              : 'llm_agent_event_duplicate_skipped',
           event_type: event.type,
           event_id: eventId,
           team_id: ctx.envelope.team_id,
           outcome,
           ...fields,
         },
-        'llm-agent received event',
+        outcome === 'accepted'
+          ? 'llm-agent accepted event'
+          : 'llm-agent skipped duplicate event',
       )
 
       if (outcome === 'accepted' && onAccepted !== undefined) {
         try {
           await onAccepted({ ctx, event })
         } catch (error) {
-          // Roll back the accepted row so that Slack retries are re-processed
-          // instead of being silently dropped as rejected_duplicate.
-          await eventLogStore.deleteReceived(eventId)
+          // Roll back the accepted row so that a subsequent Slack retry is
+          // re-processed instead of being silently dropped as
+          // rejected_duplicate. A concurrent retry that has already taken the
+          // rejected_duplicate branch can still slip through; the next-task
+          // Task CR pipeline owns full at-least-once delivery.
+          try {
+            await eventLogStore.deleteReceived(eventId)
+          } catch (rollbackError) {
+            logger.error(
+              {
+                event: 'llm_agent_event_log_rollback_failed',
+                event_id: eventId,
+                err: rollbackError,
+              },
+              'failed to roll back event_log row after onAccepted failure',
+            )
+          }
           throw error
         }
       }
