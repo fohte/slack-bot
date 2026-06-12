@@ -7,6 +7,7 @@ import { CfAccessAuthError } from '@/types/errors'
 const baseEnv = {
   SLACK_SIGNING_SECRET: 'sig',
   SLACK_BOT_TOKEN: 'xoxb',
+  DATABASE_URL: 'postgres://localhost/test',
 }
 
 describe('CloudflareAccessHttpClient', () => {

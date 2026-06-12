@@ -1,4 +1,13 @@
-export type { LlmAgentPluginOptions } from '@/plugins/llm-agent/plugin'
+export type {
+  EventLogOutcome,
+  EventLogRecord,
+  EventLogStore,
+} from '@/plugins/llm-agent/event-log-store'
+export { createEventLogStore } from '@/plugins/llm-agent/event-log-store'
+export type {
+  LlmAgentAcceptedEvent,
+  LlmAgentPluginOptions,
+} from '@/plugins/llm-agent/plugin'
 export {
   createLlmAgentPlugin,
   LLM_AGENT_COMMANDS,

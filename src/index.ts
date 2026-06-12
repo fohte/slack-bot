@@ -52,8 +52,15 @@ export {
   ServiceError,
   ServiceUnavailable,
 } from '@/plugins/blog'
-export type { LlmAgentPluginOptions } from '@/plugins/llm-agent'
+export type {
+  EventLogOutcome,
+  EventLogRecord,
+  EventLogStore,
+  LlmAgentAcceptedEvent,
+  LlmAgentPluginOptions,
+} from '@/plugins/llm-agent'
 export {
+  createEventLogStore,
   createLlmAgentPlugin,
   LLM_AGENT_COMMANDS,
   LLM_AGENT_EVENT_SUBSCRIPTIONS,

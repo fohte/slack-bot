@@ -2,6 +2,7 @@ import type { CloudflareAccessHttpClientFactory } from '@/cf-access/http-client'
 import type { Config } from '@/config/config'
 import type { Logger } from '@/logger/logger'
 import type { Plugin } from '@/plugin/plugin'
+import type { EventLogStore } from '@/plugins/llm-agent'
 import type { InMemoryScheduler } from '@/scheduler/scheduler'
 import type { SlackWebClient } from '@/slack/web-client'
 
@@ -11,6 +12,7 @@ export interface PluginDeps {
   readonly slackClient: SlackWebClient
   readonly scheduler: InMemoryScheduler
   readonly cfAccess: CloudflareAccessHttpClientFactory
+  readonly eventLogStore: EventLogStore
 }
 
 export type PluginFactory = (deps: PluginDeps) => Plugin

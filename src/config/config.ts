@@ -12,6 +12,7 @@ export interface ServiceTokenPair {
 export interface Config {
   readonly slackSigningSecret: string
   readonly slackBotToken: string
+  readonly databaseUrl: string
   readonly port: number
   readonly maxConcurrentTasks: number
   readonly maxWebApiRetries: number
@@ -35,6 +36,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
 
   const slackSigningSecret = requireEnv(env, 'SLACK_SIGNING_SECRET')
   const slackBotToken = requireEnv(env, 'SLACK_BOT_TOKEN')
+  const databaseUrl = requireEnv(env, 'DATABASE_URL')
 
   const port = parsePositiveInt(env, 'PORT', DEFAULT_PORT)
   const maxConcurrentTasks = parsePositiveInt(
@@ -52,6 +54,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   return {
     slackSigningSecret,
     slackBotToken,
+    databaseUrl,
     port,
     maxConcurrentTasks,
     maxWebApiRetries,
