@@ -26,6 +26,7 @@ slack-bot is an HTTP-only Request URL receiver for Slack: it does not use Socket
 | `MAX_CONCURRENT_TASKS`                        | No       | `32`    | Maximum number of concurrent in-memory scheduler tasks. Registration beyond this limit fails.                  |
 | `MAX_WEB_API_RETRIES`                         | No       | `3`     | Maximum retry count for Slack Web API calls that hit HTTP 429.                                                 |
 | `LOG_LEVEL`                                   | No       | `info`  | One of `debug`, `info`, `warn`, `error`.                                                                       |
+| `DATABASE_URL`                                | No       | -       | Postgres connection string consumed by `pnpm db:migrate`. Required only for plugins that own a logical DB.     |
 | `CF_ACCESS_<PLUGIN_NAME_UPPER>_CLIENT_ID`     | No       | -       | Cloudflare Access Service Token client ID for the named plugin. Hyphens in the plugin name become underscores. |
 | `CF_ACCESS_<PLUGIN_NAME_UPPER>_CLIENT_SECRET` | No       | -       | Cloudflare Access Service Token client secret for the named plugin. Same naming rule as above.                 |
 
@@ -53,6 +54,20 @@ The slash command list can also be generated as a Slack App manifest fragment vi
 5. Start the bot: `pnpm start` (runs `tsx src/main.ts`).
 6. Expose the local server to Slack with ngrok: `ngrok http 8080`. Use the `https://...ngrok-free.app` URL as the Request URL prefix in the Slack App settings while developing.
 7. Run checks: `pnpm test` (typecheck plus unit) and `pnpm lint`.
+
+## Database migrations
+
+Plugin-owned schemas are defined with [Drizzle ORM](https://orm.drizzle.team/) in `src/db/schema.ts`. SQL migrations are generated under `drizzle/` and applied by `src/db/migrate.ts`. The runtime reads `DATABASE_URL`.
+
+```bash
+# Regenerate drizzle/<n>_*.sql after editing schema.ts.
+pnpm db:generate
+
+# Apply pending migrations.
+DATABASE_URL=postgres://user:pass@localhost:5432/slack_bot_llm_agent pnpm db:migrate
+```
+
+In production the bundled `dist/db/migrate.js` is used (`pnpm db:migrate:prod`) so the image does not carry tsx.
 
 ## Adding a plugin
 
