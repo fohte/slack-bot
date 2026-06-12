@@ -8,7 +8,11 @@ import { createLogger } from '@/logger/logger'
 import type { PluginDeps, PluginInput } from '@/plugin/deps'
 import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
-import { createEventLogStore, createLlmAgentPlugin } from '@/plugins/llm-agent'
+import {
+  createEventLogStore,
+  createLlmAgentPlugin,
+  startEventLogRetention,
+} from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
 import { createSignatureVerifier } from '@/security/signature-verifier'
@@ -41,6 +45,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
   const postgresClient = postgres(config.databaseUrl)
   const db = drizzle(postgresClient)
   const eventLogStore = createEventLogStore(db)
+  startEventLogRetention({ eventLogStore, logger })
 
   const deps: PluginDeps = {
     config,

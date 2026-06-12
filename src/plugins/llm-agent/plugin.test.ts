@@ -58,6 +58,9 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
       const index = records.findIndex((r) => r.slackEventId === slackEventId)
       if (index >= 0) records.splice(index, 1)
     },
+    async pruneOlderThan(): Promise<number> {
+      return 0
+    },
   }
 }
 

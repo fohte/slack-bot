@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, lt } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
 import { eventLog } from '@/db/schema'
@@ -15,6 +15,7 @@ export interface EventLogRecord {
 export interface EventLogStore {
   recordReceived(record: EventLogRecord): Promise<EventLogOutcome>
   deleteReceived(slackEventId: string): Promise<void>
+  pruneOlderThan(cutoff: Date): Promise<number>
 }
 
 export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
@@ -34,5 +35,12 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
   },
   async deleteReceived(slackEventId) {
     await db.delete(eventLog).where(eq(eventLog.slackEventId, slackEventId))
+  },
+  async pruneOlderThan(cutoff) {
+    const deleted = await db
+      .delete(eventLog)
+      .where(lt(eventLog.receivedAt, cutoff))
+      .returning({ slackEventId: eventLog.slackEventId })
+    return deleted.length
   },
 })
