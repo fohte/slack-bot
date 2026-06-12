@@ -14,6 +14,7 @@ export type {
   InteractionSource,
 } from '@/interaction/context'
 export { createInteractionContext } from '@/interaction/context'
+export type { EventContext } from '@/interaction/event-context'
 export type {
   MessageUpdater,
   SlackMessagePatch,
@@ -51,6 +52,13 @@ export {
   ServiceError,
   ServiceUnavailable,
 } from '@/plugins/blog'
+export type { LlmAgentPluginOptions } from '@/plugins/llm-agent'
+export {
+  createLlmAgentPlugin,
+  LLM_AGENT_COMMANDS,
+  LLM_AGENT_EVENT_SUBSCRIPTIONS,
+  LLM_AGENT_PLUGIN_NAME,
+} from '@/plugins/llm-agent'
 export type {
   InteractionRouter,
   RouterOptions,
@@ -104,7 +112,13 @@ export type {
   BlockActionsPayload,
   MessageActionPayload,
   ShortcutPayload,
+  SlackAppMentionEvent,
+  SlackEvent,
+  SlackEventBase,
+  SlackEventCallback,
   SlackInteractivityPayload,
+  SlackMessageEvent,
+  SlackUnknownEvent,
   SlashCommandBody,
   ViewClosedPayload,
   ViewPayloadView,

@@ -88,3 +88,49 @@ export type SlackInteractivityPayload =
   | ViewClosedPayload
   | ShortcutPayload
   | MessageActionPayload
+
+export interface SlackEventBase {
+  readonly type: string
+  readonly [key: string]: unknown
+}
+
+export interface SlackUnknownEvent extends SlackEventBase {
+  readonly type: string
+}
+
+export interface SlackMessageEvent extends SlackEventBase {
+  readonly type: 'message'
+  readonly channel?: string
+  readonly user?: string
+  readonly text?: string
+  readonly ts?: string
+  readonly thread_ts?: string
+  readonly channel_type?: string
+  readonly subtype?: string
+  readonly bot_id?: string
+}
+
+export interface SlackAppMentionEvent extends SlackEventBase {
+  readonly type: 'app_mention'
+  readonly channel?: string
+  readonly user?: string
+  readonly text?: string
+  readonly ts?: string
+  readonly thread_ts?: string
+}
+
+export type SlackEvent =
+  | SlackMessageEvent
+  | SlackAppMentionEvent
+  | SlackUnknownEvent
+
+export interface SlackEventCallback {
+  readonly type: 'event_callback'
+  readonly team_id?: string
+  readonly api_app_id?: string
+  readonly event: SlackEvent
+  readonly event_id?: string
+  readonly event_time?: number
+  readonly authorizations?: ReadonlyArray<Record<string, unknown>>
+  readonly [key: string]: unknown
+}
