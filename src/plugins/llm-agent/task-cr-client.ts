@@ -62,7 +62,7 @@ export const createKubernetesTaskCrClient = (
 ): TaskCrClient => {
   const kc = options.kubeConfig ?? new KubeConfig()
   if (options.kubeConfig === undefined) {
-    kc.loadFromCluster()
+    kc.loadFromDefault()
   }
   const api = kc.makeApiClient(CustomObjectsApi)
   return {
