@@ -10,7 +10,10 @@ import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
 import {
   createEventLogStore,
+  createKubernetesTaskCrClient,
   createLlmAgentPlugin,
+  createTaskDispatcher,
+  createThreadSessionStore,
   startEventLogRetention,
 } from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
@@ -45,6 +48,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
   const postgresClient = postgres(config.databaseUrl)
   const db = drizzle(postgresClient)
   const eventLogStore = createEventLogStore(db)
+  const threadSessionStore = createThreadSessionStore(db)
   startEventLogRetention({ eventLogStore, logger })
 
   const deps: PluginDeps = {
@@ -54,6 +58,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     scheduler,
     cfAccess,
     eventLogStore,
+    threadSessionStore,
   }
 
   const registry = createPluginRegistry()
@@ -90,8 +95,16 @@ const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   bootstrap({
     plugins: [
-      ({ logger, eventLogStore }) =>
-        createLlmAgentPlugin({ logger, eventLogStore }),
+      ({ logger, eventLogStore, threadSessionStore }) => {
+        const taskCrClient = createKubernetesTaskCrClient()
+        const onAccepted = createTaskDispatcher({
+          taskCrClient,
+          threadSessionStore,
+          eventLogStore,
+          logger,
+        })
+        return createLlmAgentPlugin({ logger, eventLogStore, onAccepted })
+      },
     ],
   })
 }
