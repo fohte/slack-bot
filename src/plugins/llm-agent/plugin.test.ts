@@ -61,6 +61,15 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
     async markTaskName(): Promise<{ updated: number }> {
       return { updated: 1 }
     },
+    async findByTaskName() {
+      return undefined
+    },
+    async markResponded(): Promise<{ updated: number }> {
+      return { updated: 0 }
+    },
+    async unmarkResponded(): Promise<{ updated: number }> {
+      return { updated: 0 }
+    },
     async pruneOlderThan(): Promise<number> {
       return 0
     },

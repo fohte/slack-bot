@@ -19,9 +19,18 @@ export {
 export type {
   EventLogOutcome,
   EventLogRecord,
+  EventLogRow,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
 export { createEventLogStore } from '@/plugins/llm-agent/event-log-store'
+export type {
+  OpencodeClient,
+  OpencodeClientOptions,
+} from '@/plugins/llm-agent/opencode-client'
+export {
+  createOpencodeClient,
+  DEFAULT_OPENCODE_BASE_URL,
+} from '@/plugins/llm-agent/opencode-client'
 export type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
@@ -33,18 +42,36 @@ export {
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
 export type {
+  TaskResponseHandler,
+  TaskResponseHandlerOptions,
+  TaskResponseOutcome,
+} from '@/plugins/llm-agent/response-handler'
+export { createTaskResponseHandler } from '@/plugins/llm-agent/response-handler'
+export type {
   TaskCrClient,
   TaskCrContext,
   TaskCrCreateOutcome,
+  TaskCrPhase,
   TaskCrSpec,
+  TaskCrStatus,
 } from '@/plugins/llm-agent/task-cr-client'
 export {
   buildTaskCrManifest,
   createKubernetesTaskCrClient,
+  parseTaskCrItem,
   taskCrNameForSlackEvent,
 } from '@/plugins/llm-agent/task-cr-client'
 export type {
+  TaskCrWatcherHandle,
+  TaskCrWatcherOptions,
+} from '@/plugins/llm-agent/task-cr-watcher'
+export {
+  DEFAULT_TASK_WATCH_INTERVAL_MS,
+  startTaskCrWatcher,
+} from '@/plugins/llm-agent/task-cr-watcher'
+export type {
   ThreadSessionKey,
   ThreadSessionStore,
+  ThreadSessionUpsert,
 } from '@/plugins/llm-agent/thread-session-store'
 export { createThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
