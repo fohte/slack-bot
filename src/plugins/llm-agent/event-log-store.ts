@@ -1,0 +1,46 @@
+import { eq, lt } from 'drizzle-orm'
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+
+import { eventLog } from '@/db/schema'
+
+export type EventLogOutcome = 'accepted' | 'rejected_duplicate'
+
+export interface EventLogRecord {
+  readonly slackEventId: string
+  readonly slackTeamId?: string | undefined
+  readonly slackChannelId?: string | undefined
+  readonly threadRootTs?: string | undefined
+}
+
+export interface EventLogStore {
+  recordReceived(record: EventLogRecord): Promise<EventLogOutcome>
+  deleteReceived(slackEventId: string): Promise<void>
+  pruneOlderThan(cutoff: Date): Promise<number>
+}
+
+export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
+  async recordReceived(record) {
+    const inserted = await db
+      .insert(eventLog)
+      .values({
+        slackEventId: record.slackEventId,
+        outcome: 'accepted',
+        slackTeamId: record.slackTeamId ?? null,
+        slackChannelId: record.slackChannelId ?? null,
+        threadRootTs: record.threadRootTs ?? null,
+      })
+      .onConflictDoNothing({ target: eventLog.slackEventId })
+      .returning({ slackEventId: eventLog.slackEventId })
+    return inserted.length > 0 ? 'accepted' : 'rejected_duplicate'
+  },
+  async deleteReceived(slackEventId) {
+    await db.delete(eventLog).where(eq(eventLog.slackEventId, slackEventId))
+  },
+  async pruneOlderThan(cutoff) {
+    const deleted = await db
+      .delete(eventLog)
+      .where(lt(eventLog.receivedAt, cutoff))
+      .returning({ slackEventId: eventLog.slackEventId })
+    return deleted.length
+  },
+})

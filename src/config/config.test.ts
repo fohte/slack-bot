@@ -6,6 +6,7 @@ import { ConfigLoadError } from '@/types/errors'
 const baseEnv = {
   SLACK_SIGNING_SECRET: 'sig',
   SLACK_BOT_TOKEN: 'xoxb-test',
+  DATABASE_URL: 'postgres://localhost/test',
 } satisfies NodeJS.ProcessEnv
 
 describe('loadConfig', () => {
@@ -13,6 +14,7 @@ describe('loadConfig', () => {
     const config = loadConfig({ env: { ...baseEnv } })
     expect(config.slackSigningSecret).toBe('sig')
     expect(config.slackBotToken).toBe('xoxb-test')
+    expect(config.databaseUrl).toBe('postgres://localhost/test')
     expect(config.port).toBe(8080)
     expect(config.maxConcurrentTasks).toBe(32)
     expect(config.maxWebApiRetries).toBe(3)
@@ -20,15 +22,18 @@ describe('loadConfig', () => {
   })
 
   it('throws ConfigLoadError when SLACK_SIGNING_SECRET is missing', () => {
-    expect(() => loadConfig({ env: { SLACK_BOT_TOKEN: 'xoxb-test' } })).toThrow(
-      ConfigLoadError,
-    )
+    const env = { ...baseEnv, SLACK_SIGNING_SECRET: undefined }
+    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 
   it('throws ConfigLoadError when SLACK_BOT_TOKEN is missing', () => {
-    expect(() => loadConfig({ env: { SLACK_SIGNING_SECRET: 'sig' } })).toThrow(
-      ConfigLoadError,
-    )
+    const env = { ...baseEnv, SLACK_BOT_TOKEN: undefined }
+    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
+  })
+
+  it('throws ConfigLoadError when DATABASE_URL is missing', () => {
+    const env = { ...baseEnv, DATABASE_URL: undefined }
+    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 
   it('parses overrides for numeric env vars', () => {

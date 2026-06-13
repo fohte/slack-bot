@@ -52,12 +52,24 @@ export {
   ServiceError,
   ServiceUnavailable,
 } from '@/plugins/blog'
-export type { LlmAgentPluginOptions } from '@/plugins/llm-agent'
+export type {
+  EventLogOutcome,
+  EventLogRecord,
+  EventLogRetentionHandle,
+  EventLogRetentionOptions,
+  EventLogStore,
+  LlmAgentAcceptedEvent,
+  LlmAgentPluginOptions,
+} from '@/plugins/llm-agent'
 export {
+  createEventLogStore,
   createLlmAgentPlugin,
+  EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS,
+  EVENT_LOG_DEFAULT_TTL_MS,
   LLM_AGENT_COMMANDS,
   LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
+  startEventLogRetention,
 } from '@/plugins/llm-agent'
 export type {
   InteractionRouter,

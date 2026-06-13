@@ -11,6 +11,7 @@ const stubDeps = (): PluginDeps =>
     slackClient: {} as PluginDeps['slackClient'],
     scheduler: {} as PluginDeps['scheduler'],
     cfAccess: {} as PluginDeps['cfAccess'],
+    eventLogStore: {} as PluginDeps['eventLogStore'],
   }) satisfies PluginDeps
 
 describe('resolvePlugin', () => {

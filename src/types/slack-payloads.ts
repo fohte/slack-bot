@@ -117,6 +117,7 @@ export interface SlackAppMentionEvent extends SlackEventBase {
   readonly text?: string
   readonly ts?: string
   readonly thread_ts?: string
+  readonly bot_id?: string
 }
 
 export type SlackEvent =
