@@ -309,6 +309,34 @@ describe('createTaskDispatcher', () => {
     expect(eventLogStore.marks).toEqual([])
   })
 
+  it('skips dispatch without throwing when team_id is missing', async () => {
+    const taskCrClient = createRecordingTaskCrClient('created')
+    const threadSessionStore = createSessionStore()
+    const eventLogStore = createRecordingEventLogStore()
+    const dispatcher = createTaskDispatcher({
+      taskCrClient,
+      threadSessionStore,
+      eventLogStore,
+    })
+
+    const accepted = buildAccepted({ eventId: 'Ev-no-team' })
+    const acceptedWithoutTeam: LlmAgentAcceptedEvent = {
+      ctx: {
+        envelope: {
+          type: 'event_callback',
+          event: accepted.event,
+          event_id: 'Ev-no-team',
+          event_time: 1700000000,
+        },
+      },
+      event: accepted.event,
+    }
+
+    await expect(dispatcher(acceptedWithoutTeam)).resolves.toBeUndefined()
+    expect(taskCrClient.created).toEqual([])
+    expect(eventLogStore.marks).toEqual([])
+  })
+
   it('produces a stable Task CR name from the Slack event_id', () => {
     const expected =
       'slack-' +

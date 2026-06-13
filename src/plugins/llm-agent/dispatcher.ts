@@ -59,8 +59,6 @@ export const createTaskDispatcher = (
   return async (accepted) => {
     const eventId = accepted.ctx.envelope.event_id
     if (eventId === undefined || eventId === '') {
-      // The plugin already guards against missing event_id before invoking
-      // onAccepted; treat as a programming error if it happens.
       throw new Error('llm-agent dispatcher invoked without event_id')
     }
 
@@ -73,9 +71,20 @@ export const createTaskDispatcher = (
       channel === undefined ||
       threadRootTs === undefined
     ) {
-      throw new Error(
-        'llm-agent dispatcher requires team_id, channel, and thread root ts',
+      // Swallow rather than throw: throwing here would roll back the
+      // event_log row, causing Slack retries to re-enter this branch
+      // forever. Logging + accepting the event drops the bad delivery.
+      logger.warn(
+        {
+          event: 'llm_agent_dispatch_skipped_missing_fields',
+          event_id: eventId,
+          has_team_id: teamId !== undefined,
+          has_channel: channel !== undefined,
+          has_thread_root_ts: threadRootTs !== undefined,
+        },
+        'llm-agent skipping dispatch: required envelope fields missing',
       )
+      return
     }
 
     const opencodeSessionId = await threadSessionStore.lookup({
@@ -115,14 +124,27 @@ export const createTaskDispatcher = (
       contexts,
     }
 
-    const outcome = await taskCrClient.create(task)
+    let outcome
+    try {
+      outcome = await taskCrClient.create(task)
+    } catch (error) {
+      logger.error(
+        {
+          event: 'llm_agent_task_dispatch_failed',
+          event_id: eventId,
+          task_name: taskName,
+          namespace,
+          err: error,
+        },
+        'llm-agent failed to create Task CR',
+      )
+      throw error
+    }
 
     const { updated } = await eventLogStore.markTaskName(eventId, taskName)
     if (updated === 0) {
-      // event_log row was already pruned (or never existed) by the time we
-      // tried to record task_name. The Task CR is still created; the linkage
-      // to its originating Slack event is just no longer queryable via
-      // event_log.
+      // Reachable only when retention prune removed the event_log row
+      // between INSERT in the plugin and UPDATE here.
       logger.warn(
         {
           event: 'llm_agent_event_log_task_name_orphan',

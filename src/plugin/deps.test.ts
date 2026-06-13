@@ -12,7 +12,7 @@ const stubDeps = (): PluginDeps =>
     scheduler: {} as PluginDeps['scheduler'],
     cfAccess: {} as PluginDeps['cfAccess'],
     eventLogStore: {} as PluginDeps['eventLogStore'],
-    db: {} as PluginDeps['db'],
+    threadSessionStore: {} as PluginDeps['threadSessionStore'],
   }) satisfies PluginDeps
 
 describe('resolvePlugin', () => {

@@ -48,6 +48,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
   const postgresClient = postgres(config.databaseUrl)
   const db = drizzle(postgresClient)
   const eventLogStore = createEventLogStore(db)
+  const threadSessionStore = createThreadSessionStore(db)
   startEventLogRetention({ eventLogStore, logger })
 
   const deps: PluginDeps = {
@@ -57,7 +58,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     scheduler,
     cfAccess,
     eventLogStore,
-    db,
+    threadSessionStore,
   }
 
   const registry = createPluginRegistry()
@@ -94,9 +95,8 @@ const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   bootstrap({
     plugins: [
-      ({ logger, eventLogStore, db }) => {
+      ({ logger, eventLogStore, threadSessionStore }) => {
         const taskCrClient = createKubernetesTaskCrClient()
-        const threadSessionStore = createThreadSessionStore(db)
         const onAccepted = createTaskDispatcher({
           taskCrClient,
           threadSessionStore,
