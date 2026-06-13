@@ -1,4 +1,13 @@
 export type {
+  TaskDispatcher,
+  TaskDispatcherOptions,
+} from '@/plugins/llm-agent/dispatcher'
+export {
+  createTaskDispatcher,
+  DEFAULT_TASK_CR_AGENT_NAME,
+  DEFAULT_TASK_CR_NAMESPACE,
+} from '@/plugins/llm-agent/dispatcher'
+export type {
   EventLogRetentionHandle,
   EventLogRetentionOptions,
 } from '@/plugins/llm-agent/event-log-retention'
@@ -23,3 +32,19 @@ export {
   LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
+export type {
+  TaskCrClient,
+  TaskCrContext,
+  TaskCrCreateOutcome,
+  TaskCrSpec,
+} from '@/plugins/llm-agent/task-cr-client'
+export {
+  buildTaskCrManifest,
+  createKubernetesTaskCrClient,
+  taskCrNameForSlackEvent,
+} from '@/plugins/llm-agent/task-cr-client'
+export type {
+  ThreadSessionKey,
+  ThreadSessionStore,
+} from '@/plugins/llm-agent/thread-session-store'
+export { createThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'

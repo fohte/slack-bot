@@ -15,6 +15,10 @@ export interface EventLogRecord {
 export interface EventLogStore {
   recordReceived(record: EventLogRecord): Promise<EventLogOutcome>
   deleteReceived(slackEventId: string): Promise<void>
+  markTaskName(
+    slackEventId: string,
+    taskName: string,
+  ): Promise<{ updated: number }>
   pruneOlderThan(cutoff: Date): Promise<number>
 }
 
@@ -35,6 +39,14 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
   },
   async deleteReceived(slackEventId) {
     await db.delete(eventLog).where(eq(eventLog.slackEventId, slackEventId))
+  },
+  async markTaskName(slackEventId, taskName) {
+    const updated = await db
+      .update(eventLog)
+      .set({ taskName })
+      .where(eq(eventLog.slackEventId, slackEventId))
+      .returning({ slackEventId: eventLog.slackEventId })
+    return { updated: updated.length }
   },
   async pruneOlderThan(cutoff) {
     const deleted = await db

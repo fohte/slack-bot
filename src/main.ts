@@ -10,7 +10,10 @@ import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
 import {
   createEventLogStore,
+  createKubernetesTaskCrClient,
   createLlmAgentPlugin,
+  createTaskDispatcher,
+  createThreadSessionStore,
   startEventLogRetention,
 } from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
@@ -54,6 +57,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     scheduler,
     cfAccess,
     eventLogStore,
+    db,
   }
 
   const registry = createPluginRegistry()
@@ -90,8 +94,17 @@ const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   bootstrap({
     plugins: [
-      ({ logger, eventLogStore }) =>
-        createLlmAgentPlugin({ logger, eventLogStore }),
+      ({ logger, eventLogStore, db }) => {
+        const taskCrClient = createKubernetesTaskCrClient()
+        const threadSessionStore = createThreadSessionStore(db)
+        const onAccepted = createTaskDispatcher({
+          taskCrClient,
+          threadSessionStore,
+          eventLogStore,
+          logger,
+        })
+        return createLlmAgentPlugin({ logger, eventLogStore, onAccepted })
+      },
     ],
   })
 }

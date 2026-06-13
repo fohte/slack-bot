@@ -1,3 +1,5 @@
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+
 import type { CloudflareAccessHttpClientFactory } from '@/cf-access/http-client'
 import type { Config } from '@/config/config'
 import type { Logger } from '@/logger/logger'
@@ -13,6 +15,7 @@ export interface PluginDeps {
   readonly scheduler: InMemoryScheduler
   readonly cfAccess: CloudflareAccessHttpClientFactory
   readonly eventLogStore: EventLogStore
+  readonly db: PostgresJsDatabase
 }
 
 export type PluginFactory = (deps: PluginDeps) => Plugin
