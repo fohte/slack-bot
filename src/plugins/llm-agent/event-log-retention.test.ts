@@ -13,6 +13,9 @@ const createStore = (
   recordReceived: vi.fn(),
   deleteReceived: vi.fn(),
   markTaskName: vi.fn(async () => ({ updated: 0 })),
+  findByTaskName: vi.fn(async () => undefined),
+  markResponded: vi.fn(async () => ({ updated: 0 })),
+  unmarkResponded: vi.fn(async () => ({ updated: 0 })),
   pruneOlderThan: vi.fn(pruneImpl),
 })
 

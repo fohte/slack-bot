@@ -38,6 +38,9 @@ const createRecordingTaskCrClient = (
       if (result instanceof Error) throw result
       return result
     },
+    async list() {
+      return []
+    },
   }
 }
 
@@ -56,6 +59,7 @@ const createSessionStore = (
     }
     return undefined
   },
+  async upsert() {},
 })
 
 interface RecordingEventLogStore extends EventLogStore {
@@ -75,6 +79,15 @@ const createRecordingEventLogStore = (
     async markTaskName(eventId, taskName): Promise<{ updated: number }> {
       marks.push([eventId, taskName])
       return { updated: 1 }
+    },
+    async findByTaskName() {
+      return undefined
+    },
+    async markResponded(): Promise<{ updated: number }> {
+      return { updated: 0 }
+    },
+    async unmarkResponded(): Promise<{ updated: number }> {
+      return { updated: 0 }
     },
     async pruneOlderThan(): Promise<number> {
       return 0
@@ -294,6 +307,7 @@ describe('createTaskDispatcher', () => {
       async lookup() {
         throw lookupError
       },
+      async upsert() {},
     }
     const eventLogStore = createRecordingEventLogStore()
     const dispatcher = createTaskDispatcher({
