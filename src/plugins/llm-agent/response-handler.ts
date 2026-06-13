@@ -29,10 +29,16 @@ export type TaskResponseHandler = (
 const DEFAULT_SUCCESS_FALLBACK =
   '(opencode did not produce an assistant message)'
 
+// Slack mrkdwn would otherwise interpret <, >, & inside the unstructured
+// k8s status message as user/channel mentions or HTML entities.
+// https://docs.slack.dev/messaging/formatting-message-text#escaping
+const escapeMrkdwn = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
 const formatFailureText = (task: TaskCrStatus): string => {
   const message = task.message?.trim()
   if (message !== undefined && message.length > 0) {
-    return `Task failed: ${message}`
+    return `Task failed: ${escapeMrkdwn(message)}`
   }
   return 'Task failed.'
 }

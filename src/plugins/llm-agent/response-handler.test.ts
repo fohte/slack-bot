@@ -213,6 +213,37 @@ describe('createTaskResponseHandler', () => {
     })
   })
 
+  it('escapes Slack mrkdwn metacharacters in the failure status message', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient()
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    await handler(
+      buildTask({
+        phase: 'Failed',
+        message: 'oom <U123> & <#C456>',
+        sessionId: undefined,
+      }),
+    )
+
+    expect(slack.posts).toEqual([
+      {
+        channel: 'C123',
+        thread_ts: '1700000000.000050',
+        text: 'Task failed: oom &lt;U123&gt; &amp; &lt;#C456&gt;',
+      },
+    ])
+  })
+
   it('posts a formatted failure message on Failed phase', async () => {
     const slack = createStubSlackClient()
     const opencode = createStubOpencodeClient()
