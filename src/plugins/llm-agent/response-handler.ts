@@ -94,6 +94,9 @@ export const createTaskResponseHandler = (
             task.sessionId,
           )
         } catch (error) {
+          // Don't throw: re-trying every tick when opencode is down would
+          // leave the user with no notification at all. Post the fallback
+          // so they at least learn the Task finished.
           logger.error(
             {
               event: 'llm_agent_response_opencode_fetch_failed',
@@ -101,9 +104,8 @@ export const createTaskResponseHandler = (
               session_id: task.sessionId,
               err: error,
             },
-            'failed to fetch latest assistant message from opencode',
+            'failed to fetch latest assistant message from opencode; falling back to placeholder text',
           )
-          throw error
         }
       }
       text = assistantText ?? successFallback
@@ -111,11 +113,6 @@ export const createTaskResponseHandler = (
       text = formatFailureText(task)
     }
 
-    // Reserve the row BEFORE posting to Slack so concurrent ticks (in this
-    // process or another replica) cannot both deliver the message. The
-    // conditional UPDATE in markResponded picks a single winner; losers
-    // exit silently. If Slack rejects the post we roll the row back so a
-    // later tick retries.
     const { updated } = await eventLogStore.markResponded(row.slackEventId)
     if (updated === 0) {
       return 'skipped_already_responded'
@@ -128,6 +125,8 @@ export const createTaskResponseHandler = (
         text,
       })
     } catch (error) {
+      // Roll back the reservation so a later tick can retry. Surface the
+      // original Slack failure even if the rollback itself fails.
       try {
         await eventLogStore.unmarkResponded(row.slackEventId)
       } catch (rollbackError) {

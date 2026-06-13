@@ -317,6 +317,42 @@ describe('createTaskResponseHandler', () => {
     })
   })
 
+  it('posts the fallback text when opencode fetch fails so the user is notified anyway', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({
+      error: new Error('opencode down'),
+    })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+      successFallbackText: '(opencode unavailable)',
+    })
+
+    const outcome = await handler(buildTask())
+
+    expect({
+      outcome,
+      posts: slack.posts,
+      responded: eventLog.responded,
+    }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: '(opencode unavailable)',
+        },
+      ],
+      responded: ['Ev123'],
+    })
+  })
+
   it('rolls back the responded marker when the Slack post fails so a later tick can retry', async () => {
     const slack = createStubSlackClient({ postError: new Error('slack down') })
     const opencode = createStubOpencodeClient({ text: 'Done!' })
