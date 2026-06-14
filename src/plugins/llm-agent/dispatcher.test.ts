@@ -192,6 +192,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await dispatcher(
@@ -243,6 +244,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await dispatcher(
@@ -290,6 +292,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await dispatcher(
@@ -329,6 +332,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await expect(
@@ -349,6 +353,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await expect(
@@ -371,6 +376,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await expect(
@@ -388,6 +394,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     const accepted = buildAccepted({ eventId: 'Ev-no-team' })
@@ -427,13 +434,21 @@ describe('createTaskDispatcher', () => {
       }),
     )
 
-    expect(slackClient.statusCalls).toEqual([
-      {
-        channel_id: 'C0123ABCD',
-        thread_ts: '1700000000.000050',
-        status: '考え中…',
-      },
-    ])
+    expect({
+      statusCalls: slackClient.statusCalls,
+      created: taskCrClient.created.length,
+      marks: eventLogStore.marks,
+    }).toEqual({
+      statusCalls: [
+        {
+          channel_id: 'C0123ABCD',
+          thread_ts: '1700000000.000050',
+          status: '考え中…',
+        },
+      ],
+      created: 1,
+      marks: [['Ev-status', taskCrNameForSlackEvent('Ev-status')]],
+    })
   })
 
   it('honors a custom thinkingStatus override', async () => {
@@ -451,13 +466,23 @@ describe('createTaskDispatcher', () => {
 
     await dispatcher(buildAccepted({ eventId: 'Ev-custom-status' }))
 
-    expect(slackClient.statusCalls).toEqual([
-      {
-        channel_id: 'C0123ABCD',
-        thread_ts: '1700000000.000100',
-        status: 'is thinking...',
-      },
-    ])
+    expect({
+      statusCalls: slackClient.statusCalls,
+      created: taskCrClient.created.length,
+      marks: eventLogStore.marks,
+    }).toEqual({
+      statusCalls: [
+        {
+          channel_id: 'C0123ABCD',
+          thread_ts: '1700000000.000100',
+          status: 'is thinking...',
+        },
+      ],
+      created: 1,
+      marks: [
+        ['Ev-custom-status', taskCrNameForSlackEvent('Ev-custom-status')],
+      ],
+    })
   })
 
   it('does not throw when setStatus fails (best-effort status indicator)', async () => {

@@ -22,7 +22,7 @@ export interface TaskDispatcherOptions {
   readonly taskCrClient: TaskCrClient
   readonly threadSessionStore: ThreadSessionStore
   readonly eventLogStore: EventLogStore
-  readonly slackClient?: SlackWebClient | undefined
+  readonly slackClient: SlackWebClient
   readonly thinkingStatus?: string | undefined
   readonly namespace?: string | undefined
   readonly agentName?: string | undefined
@@ -95,6 +95,16 @@ export const createTaskDispatcher = (
       )
       return
     }
+
+    // Set the indicator before create so that a fast-completing Task can
+    // never have its watcher-driven clear race ahead of our set and leave
+    // a stale "考え中…" sitting in the thread.
+    await trySetAssistantStatus({
+      slackClient,
+      target: { channelId: channel, threadTs: threadRootTs },
+      status: thinkingStatus,
+      logger,
+    })
 
     const opencodeSessionId = await threadSessionStore.lookup({
       slackTeamId: teamId,
@@ -177,14 +187,5 @@ export const createTaskDispatcher = (
         ? 'llm-agent dispatched Task CR'
         : 'llm-agent Task CR already existed; treated as accepted',
     )
-
-    if (slackClient !== undefined) {
-      await trySetAssistantStatus({
-        slackClient,
-        target: { channelId: channel, threadTs: threadRootTs },
-        status: thinkingStatus,
-        logger,
-      })
-    }
   }
 }
