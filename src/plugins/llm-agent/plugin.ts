@@ -88,20 +88,18 @@ const decideForMessage = async (
   threadSessionStore: ThreadSessionStore,
   teamId: string | undefined,
 ): Promise<GateDecision> => {
-  // bot_message is already filtered upstream. Other subtypes (message_changed,
-  // message_deleted, channel_join, ...) carry the user-visible text in a
-  // nested field and Slack does not deliver an accompanying app_mention even
-  // when the edited body mentions the bot, so they would slip past the
-  // mention check below. Drop them outright.
+  // Non-default message subtypes (message_changed, message_deleted,
+  // channel_join, ...) carry user-visible text in a nested field and Slack
+  // does not emit a paired app_mention even when the edited body mentions
+  // the bot.
   if (event.type === 'message' && event.subtype !== undefined) {
     return { accept: false, reason: 'unsupported_message_subtype' }
   }
 
   if (fields.channel_type === 'im') return { accept: true, reason: 'dm' }
 
-  // A channel message that mentions the bot is also delivered as an
-  // `app_mention` event with a separate event_id; defer to that delivery to
-  // avoid a duplicate reply.
+  // A channel message that mentions the bot is also delivered as a separate
+  // `app_mention` event; let that delivery handle it.
   if (fields.text !== undefined && mentionPattern.test(fields.text)) {
     return { accept: false, reason: 'duplicate_of_app_mention' }
   }
