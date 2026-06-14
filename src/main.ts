@@ -115,7 +115,7 @@ const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   bootstrap({
     plugins: [
-      ({ logger, eventLogStore, threadSessionStore }) => {
+      ({ config, logger, eventLogStore, threadSessionStore }) => {
         const taskCrClient = createKubernetesTaskCrClient()
         const onAccepted = createTaskDispatcher({
           taskCrClient,
@@ -123,7 +123,13 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
           eventLogStore,
           logger,
         })
-        return createLlmAgentPlugin({ logger, eventLogStore, onAccepted })
+        return createLlmAgentPlugin({
+          logger,
+          eventLogStore,
+          threadSessionStore,
+          botUserId: config.slackBotUserId,
+          onAccepted,
+        })
       },
     ],
   })

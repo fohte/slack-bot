@@ -6,6 +6,7 @@ import { ConfigLoadError } from '@/types/errors'
 const baseEnv = {
   SLACK_SIGNING_SECRET: 'sig',
   SLACK_BOT_TOKEN: 'xoxb-test',
+  SLACK_BOT_USER_ID: 'U_BOT',
   DATABASE_URL: 'postgres://localhost/test',
 } satisfies NodeJS.ProcessEnv
 
@@ -14,6 +15,7 @@ describe('loadConfig', () => {
     const config = loadConfig({ env: { ...baseEnv } })
     expect(config.slackSigningSecret).toBe('sig')
     expect(config.slackBotToken).toBe('xoxb-test')
+    expect(config.slackBotUserId).toBe('U_BOT')
     expect(config.databaseUrl).toBe('postgres://localhost/test')
     expect(config.port).toBe(8080)
     expect(config.maxConcurrentTasks).toBe(32)
@@ -28,6 +30,11 @@ describe('loadConfig', () => {
 
   it('throws ConfigLoadError when SLACK_BOT_TOKEN is missing', () => {
     const env = { ...baseEnv, SLACK_BOT_TOKEN: undefined }
+    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
+  })
+
+  it('throws ConfigLoadError when SLACK_BOT_USER_ID is missing', () => {
+    const env = { ...baseEnv, SLACK_BOT_USER_ID: undefined }
     expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 
