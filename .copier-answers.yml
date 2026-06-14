@@ -1,10 +1,11 @@
 # Changes here will be overwritten by Copier
-_commit: v0.8.2
+_commit: v0.8.3
 _src_path: https://github.com/fohte/generic-boilerplate
 description: "@fohte's personal pluggable Slack bot"
 is_public: true
 project_name: slack-bot
 repo_language: en
+subpackages: []
 type: node
 use_release_please: false
 use_storybook: false

@@ -21,10 +21,10 @@
   "devDependencies": {
     "@commitlint/cli": "21.0.2",
     "@eslint/eslintrc": "3.3.5",
-    "@fohte/eslint-config": "0.3.3",
+    "@fohte/eslint-config": "0.3.4",
     "@tsconfig/node-lts": "24.0.0",
     "@tsconfig/strictest": "2.0.8",
-    "@types/node": "24.12.4",
+    "@types/node": "24.13.1",
     "concurrently": "10.0.3",
     "drizzle-kit": "0.31.10",
     "eslint": "10.4.1",
