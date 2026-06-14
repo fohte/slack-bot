@@ -7,6 +7,7 @@ import { CfAccessAuthError } from '@/types/errors'
 const baseEnv = {
   SLACK_SIGNING_SECRET: 'sig',
   SLACK_BOT_TOKEN: 'xoxb',
+  SLACK_BOT_USER_ID: 'U_BOT',
   DATABASE_URL: 'postgres://localhost/test',
 }
 

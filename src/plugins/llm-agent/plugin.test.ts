@@ -9,12 +9,19 @@ import type {
   EventLogRecord,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
-import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
+import type {
+  LlmAgentAcceptedEvent,
+  LlmAgentPluginOptions,
+} from '@/plugins/llm-agent/plugin'
 import {
   createLlmAgentPlugin,
   LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
+import type {
+  ThreadSessionKey,
+  ThreadSessionStore,
+} from '@/plugins/llm-agent/thread-session-store'
 import { createInteractionRouter } from '@/router/router'
 import type { SlackWebClient } from '@/slack/web-client'
 import type {
@@ -76,6 +83,35 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
   }
 }
 
+const BOT_USER_ID = 'U_BOT'
+
+const createStubThreadSessionStore = (
+  sessions: ReadonlyArray<readonly [ThreadSessionKey, string]> = [],
+): ThreadSessionStore => ({
+  async lookup(key) {
+    for (const [k, sessionId] of sessions) {
+      if (
+        k.slackTeamId === key.slackTeamId &&
+        k.slackChannelId === key.slackChannelId &&
+        k.threadRootTs === key.threadRootTs
+      ) {
+        return sessionId
+      }
+    }
+    return undefined
+  },
+  async upsert() {},
+})
+
+const buildPluginOptions = (
+  overrides: Partial<LlmAgentPluginOptions> = {},
+): LlmAgentPluginOptions => ({
+  eventLogStore: createInMemoryEventLogStore(),
+  threadSessionStore: createStubThreadSessionStore(),
+  botUserId: BOT_USER_ID,
+  ...overrides,
+})
+
 const normalizePlugin = (plugin: Plugin): Record<string, unknown> => {
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(plugin)) {
@@ -94,6 +130,7 @@ const buildMessageEnvelope = (
     user: 'U123',
     text: 'hello',
     ts: '1700000000.000100',
+    channel_type: 'im',
     ...overrides,
   }
   return {
@@ -107,9 +144,7 @@ const buildMessageEnvelope = (
 
 describe('createLlmAgentPlugin', () => {
   it('exposes the expected plugin shape', () => {
-    const plugin = createLlmAgentPlugin({
-      eventLogStore: createInMemoryEventLogStore(),
-    })
+    const plugin = createLlmAgentPlugin(buildPluginOptions())
     expect(normalizePlugin(plugin)).toEqual({
       name: LLM_AGENT_PLUGIN_NAME,
       commands: [],
@@ -120,9 +155,7 @@ describe('createLlmAgentPlugin', () => {
 
   it('dispatches message and app_mention events through the router', async () => {
     const onEvent = vi.fn<OnEventFn>(async () => {})
-    const plugin = createLlmAgentPlugin({
-      eventLogStore: createInMemoryEventLogStore(),
-    })
+    const plugin = createLlmAgentPlugin(buildPluginOptions())
     const wrappedPlugin = { ...plugin, onEvent }
     const registry = createPluginRegistry()
     registry.register(wrappedPlugin)
@@ -179,9 +212,7 @@ describe('createLlmAgentPlugin', () => {
 
   it('does not dispatch events whose type is not subscribed', async () => {
     const onEvent = vi.fn<OnEventFn>(async () => {})
-    const plugin = createLlmAgentPlugin({
-      eventLogStore: createInMemoryEventLogStore(),
-    })
+    const plugin = createLlmAgentPlugin(buildPluginOptions())
     const wrappedPlugin = { ...plugin, onEvent }
     const registry = createPluginRegistry()
     registry.register(wrappedPlugin)
@@ -207,7 +238,9 @@ describe('createLlmAgentPlugin', () => {
   it('records the event and invokes onAccepted on first delivery', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
-    const plugin = createLlmAgentPlugin({ eventLogStore, onAccepted })
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
     const envelope = buildMessageEnvelope('Ev-first', {
       thread_ts: '1700000000.000050',
     })
@@ -231,7 +264,7 @@ describe('createLlmAgentPlugin', () => {
 
   it('falls back to event ts as thread root when thread_ts is absent', async () => {
     const eventLogStore = createInMemoryEventLogStore()
-    const plugin = createLlmAgentPlugin({ eventLogStore })
+    const plugin = createLlmAgentPlugin(buildPluginOptions({ eventLogStore }))
     const envelope = buildMessageEnvelope('Ev-no-thread')
 
     await plugin.onEvent?.({ envelope }, envelope.event)
@@ -249,7 +282,9 @@ describe('createLlmAgentPlugin', () => {
   it('treats a redelivered event as rejected_duplicate and skips onAccepted', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
-    const plugin = createLlmAgentPlugin({ eventLogStore, onAccepted })
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
     const envelope = buildMessageEnvelope('Ev-retry')
 
     await plugin.onEvent?.({ envelope }, envelope.event)
@@ -270,7 +305,9 @@ describe('createLlmAgentPlugin', () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
     const recordSpy = vi.spyOn(eventLogStore, 'recordReceived')
-    const plugin = createLlmAgentPlugin({ eventLogStore, onAccepted })
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
     const envelope = buildMessageEnvelope('Ev-bot', { subtype: 'bot_message' })
 
     await plugin.onEvent?.({ envelope }, envelope.event)
@@ -282,7 +319,7 @@ describe('createLlmAgentPlugin', () => {
   it('skips event_log writes for messages carrying bot_id', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const recordSpy = vi.spyOn(eventLogStore, 'recordReceived')
-    const plugin = createLlmAgentPlugin({ eventLogStore })
+    const plugin = createLlmAgentPlugin(buildPluginOptions({ eventLogStore }))
     const envelope = buildMessageEnvelope('Ev-botid', { bot_id: 'B1' })
 
     await plugin.onEvent?.({ envelope }, envelope.event)
@@ -297,7 +334,9 @@ describe('createLlmAgentPlugin', () => {
       .fn<(event: LlmAgentAcceptedEvent) => Promise<void>>()
       .mockRejectedValueOnce(error)
       .mockResolvedValue(undefined)
-    const plugin = createLlmAgentPlugin({ eventLogStore, onAccepted })
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
     const envelope = buildMessageEnvelope('Ev-retryable')
 
     await expect(
@@ -320,7 +359,7 @@ describe('createLlmAgentPlugin', () => {
   it('skips event_log writes for app_mention events carrying bot_id', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const recordSpy = vi.spyOn(eventLogStore, 'recordReceived')
-    const plugin = createLlmAgentPlugin({ eventLogStore })
+    const plugin = createLlmAgentPlugin(buildPluginOptions({ eventLogStore }))
     const envelope: SlackEventCallback = {
       type: 'event_callback',
       team_id: 'T123',
@@ -344,7 +383,7 @@ describe('createLlmAgentPlugin', () => {
   it('skips event_log writes when envelope has no event_id', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const recordSpy = vi.spyOn(eventLogStore, 'recordReceived')
-    const plugin = createLlmAgentPlugin({ eventLogStore })
+    const plugin = createLlmAgentPlugin(buildPluginOptions({ eventLogStore }))
     const envelope: SlackEventCallback = {
       type: 'event_callback',
       team_id: 'T123',
@@ -361,5 +400,253 @@ describe('createLlmAgentPlugin', () => {
     await plugin.onEvent?.({ envelope }, envelope.event)
 
     expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('accepts DM messages without requiring a bot mention', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-dm', {
+      channel_type: 'im',
+      text: 'just chatting',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-dm',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000100',
+        },
+      ],
+      onAcceptedCalls: 1,
+    })
+  })
+
+  it('accepts channel app_mention events', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+    const envelope: SlackEventCallback = {
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'app_mention',
+        channel: 'C123',
+        user: 'U123',
+        text: '<@U_BOT> hi',
+        ts: '1700000001.000200',
+      },
+      event_id: 'Ev-mention',
+      event_time: 1700000001,
+    }
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-mention',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000001.000200',
+        },
+      ],
+      onAcceptedCalls: 1,
+    })
+  })
+
+  it('skips channel message events that mention the bot to avoid duplicating the app_mention delivery', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-msg-with-mention', {
+      channel_type: 'channel',
+      text: '<@U_BOT|botname> hi there',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [],
+      onAcceptedCalls: 0,
+    })
+  })
+
+  it('dispatches a mention only once when both message and app_mention are delivered', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+
+    const messageEnvelope = buildMessageEnvelope('Ev-dup-msg', {
+      channel_type: 'channel',
+      text: '<@U_BOT> hi',
+    })
+    const appMentionEnvelope: SlackEventCallback = {
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'app_mention',
+        channel: 'C123',
+        user: 'U123',
+        text: '<@U_BOT> hi',
+        ts: '1700000000.000100',
+      },
+      event_id: 'Ev-dup-mention',
+      event_time: 1700000000,
+    }
+
+    await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
+    await plugin.onEvent?.(
+      { envelope: appMentionEnvelope },
+      appMentionEnvelope.event,
+    )
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-dup-mention',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000100',
+        },
+      ],
+      onAcceptedCalls: 1,
+    })
+  })
+
+  it('accepts mention-less channel messages when the thread already has an opencode session', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const threadSessionStore = createStubThreadSessionStore([
+      [
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000050',
+        },
+        'ses_abcdef',
+      ],
+    ])
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, threadSessionStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-thread-hit', {
+      channel_type: 'channel',
+      text: 'follow up',
+      thread_ts: '1700000000.000050',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-thread-hit',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000050',
+        },
+      ],
+      onAcceptedCalls: 1,
+    })
+  })
+
+  it('skips mention-less channel messages when no thread session exists', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-thread-miss', {
+      channel_type: 'channel',
+      text: 'random chatter',
+      thread_ts: '1700000000.000050',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [],
+      onAcceptedCalls: 0,
+    })
+  })
+
+  it('skips the thread session lookup for top-level channel messages without thread_ts', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const threadSessionStore = createStubThreadSessionStore()
+    const lookupSpy = vi.spyOn(threadSessionStore, 'lookup')
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, threadSessionStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-top-level', {
+      channel_type: 'channel',
+      text: 'random chatter',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+      lookupCalls: lookupSpy.mock.calls.length,
+    }).toEqual({
+      records: [],
+      onAcceptedCalls: 0,
+      lookupCalls: 0,
+    })
+  })
+
+  it('skips message_changed subtype even when the edited body mentions the bot', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-edited', {
+      channel_type: 'channel',
+      subtype: 'message_changed',
+      text: '<@U_BOT> please',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [],
+      onAcceptedCalls: 0,
+    })
   })
 })

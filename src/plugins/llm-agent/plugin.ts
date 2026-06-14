@@ -6,6 +6,7 @@ import type {
   EventLogOutcome,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
+import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
 import type { SlackEvent } from '@/types/slack-payloads'
 
 export const LLM_AGENT_PLUGIN_NAME = 'llm-agent'
@@ -24,6 +25,8 @@ export interface LlmAgentAcceptedEvent {
 
 export interface LlmAgentPluginOptions {
   readonly eventLogStore: EventLogStore
+  readonly threadSessionStore: ThreadSessionStore
+  readonly botUserId: string
   readonly logger?: Logger | undefined
   readonly onAccepted?:
     | ((accepted: LlmAgentAcceptedEvent) => void | Promise<void>)
@@ -35,6 +38,8 @@ interface ExtractedFields {
   readonly user?: string | undefined
   readonly ts?: string | undefined
   readonly thread_ts?: string | undefined
+  readonly channel_type?: string | undefined
+  readonly text?: string | undefined
 }
 
 const asOptionalString = (value: unknown): string | undefined =>
@@ -47,6 +52,8 @@ const extractFields = (event: SlackEvent): ExtractedFields => {
     user: asOptionalString(event.user),
     ts: asOptionalString(event.ts),
     thread_ts: asOptionalString(event.thread_ts),
+    channel_type: asOptionalString(event.channel_type),
+    text: asOptionalString(event.text),
   }
 }
 
@@ -60,11 +67,71 @@ const isBotMessage = (event: SlackEvent): boolean => {
   return false
 }
 
+type GateReason =
+  | 'app_mention'
+  | 'dm'
+  | 'thread_continuation'
+  | 'duplicate_of_app_mention'
+  | 'no_mention_no_thread_session'
+  | 'unsupported_message_subtype'
+  | 'unsupported_event'
+
+interface GateDecision {
+  readonly accept: boolean
+  readonly reason: GateReason
+}
+
+const decideForMessage = async (
+  event: SlackEvent,
+  fields: ExtractedFields,
+  mentionPattern: RegExp,
+  threadSessionStore: ThreadSessionStore,
+  teamId: string | undefined,
+): Promise<GateDecision> => {
+  // Non-default message subtypes (message_changed, message_deleted,
+  // channel_join, ...) carry user-visible text in a nested field and Slack
+  // does not emit a paired app_mention even when the edited body mentions
+  // the bot.
+  if (event.type === 'message' && event.subtype !== undefined) {
+    return { accept: false, reason: 'unsupported_message_subtype' }
+  }
+
+  if (fields.channel_type === 'im') return { accept: true, reason: 'dm' }
+
+  // A channel message that mentions the bot is also delivered as a separate
+  // `app_mention` event; let that delivery handle it.
+  if (fields.text !== undefined && mentionPattern.test(fields.text)) {
+    return { accept: false, reason: 'duplicate_of_app_mention' }
+  }
+
+  // Skip the lookup for top-level channel messages: thread_ts is undefined,
+  // so the message is not part of an existing thread and no session can
+  // possibly be mapped to it.
+  if (
+    fields.thread_ts !== undefined &&
+    teamId !== undefined &&
+    fields.channel !== undefined
+  ) {
+    const sessionId = await threadSessionStore.lookup({
+      slackTeamId: teamId,
+      slackChannelId: fields.channel,
+      threadRootTs: fields.thread_ts,
+    })
+    if (sessionId !== undefined) {
+      return { accept: true, reason: 'thread_continuation' }
+    }
+  }
+
+  return { accept: false, reason: 'no_mention_no_thread_session' }
+}
+
 export const createLlmAgentPlugin = (
   options: LlmAgentPluginOptions,
 ): Plugin => {
   const logger = options.logger ?? noopLogger
-  const { eventLogStore, onAccepted } = options
+  const { eventLogStore, threadSessionStore, botUserId, onAccepted } = options
+  // Slack mentions appear as `<@U123>` or `<@U123|label>`.
+  const mentionPattern = new RegExp(`<@${botUserId}(?:\\|[^>]*)?>`, 'u')
 
   return {
     name: LLM_AGENT_PLUGIN_NAME,
@@ -87,6 +154,37 @@ export const createLlmAgentPlugin = (
       }
 
       const fields = extractFields(event)
+
+      let decision: GateDecision
+      if (event.type === 'app_mention') {
+        decision = { accept: true, reason: 'app_mention' }
+      } else if (event.type === 'message') {
+        decision = await decideForMessage(
+          event,
+          fields,
+          mentionPattern,
+          threadSessionStore,
+          ctx.envelope.team_id,
+        )
+      } else {
+        decision = { accept: false, reason: 'unsupported_event' }
+      }
+
+      if (!decision.accept) {
+        logger.info(
+          {
+            event: 'llm_agent_event_gated',
+            event_type: event.type,
+            event_id: eventId,
+            team_id: ctx.envelope.team_id,
+            reason: decision.reason,
+            ...fields,
+          },
+          'llm-agent skipped event by gating rule',
+        )
+        return
+      }
+
       const threadRootTs = fields.thread_ts ?? fields.ts
 
       let outcome: EventLogOutcome
@@ -120,6 +218,7 @@ export const createLlmAgentPlugin = (
           event_id: eventId,
           team_id: ctx.envelope.team_id,
           outcome,
+          gate_reason: decision.reason,
           ...fields,
         },
         outcome === 'accepted'

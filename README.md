@@ -22,6 +22,7 @@ slack-bot is an HTTP-only Request URL receiver for Slack: it does not use Socket
 | --------------------------------------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------- |
 | `SLACK_SIGNING_SECRET`                        | Yes      | -       | Slack App signing secret. Used for HMAC-SHA256 verification of every Slack request.                            |
 | `SLACK_BOT_TOKEN`                             | Yes      | -       | Bot User OAuth Token (`xoxb-...`). Used by the Slack Web API client.                                           |
+| `SLACK_BOT_USER_ID`                           | Yes      | -       | Bot user ID (`U...`). Used to detect mentions to the bot in channel messages.                                  |
 | `PORT`                                        | No       | `8080`  | TCP port the HTTP server listens on.                                                                           |
 | `MAX_CONCURRENT_TASKS`                        | No       | `32`    | Maximum number of concurrent in-memory scheduler tasks. Registration beyond this limit fails.                  |
 | `MAX_WEB_API_RETRIES`                         | No       | `3`     | Maximum retry count for Slack Web API calls that hit HTTP 429.                                                 |
@@ -38,7 +39,7 @@ Perform these steps once per Slack workspace.
 
 1. Create a new Slack App at https://api.slack.com/apps using "From scratch".
 2. Open **Basic Information**, copy the **Signing Secret**, and set it as `SLACK_SIGNING_SECRET`.
-3. Open **OAuth & Permissions** and add the bot scopes you need. The minimum recommended set is `chat:write`, `commands`, and `chat:write.public`. Plugins may require additional scopes (for example, `views:write` for modal-based flows). Install the app to the workspace, copy the **Bot User OAuth Token** (`xoxb-...`), and set it as `SLACK_BOT_TOKEN`.
+3. Open **OAuth & Permissions** and add the bot scopes you need. The minimum recommended set is `chat:write`, `commands`, and `chat:write.public`. Plugins may require additional scopes (for example, `views:write` for modal-based flows). Install the app to the workspace, copy the **Bot User OAuth Token** (`xoxb-...`), and set it as `SLACK_BOT_TOKEN`. Open **App Home** (or call `auth.test` with the token) to copy the bot's user ID (`U...`) and set it as `SLACK_BOT_USER_ID`.
 4. Open **Slash Commands** and register each command exposed by the deployed plugins (for example, `/crawl-list`). Follow the hyphenated naming convention described below. Set the Request URL to `https://<your-host>/api/slack/commands`.
 5. Open **Interactivity & Shortcuts**, enable interactivity, and set the Request URL to `https://<your-host>/api/slack/interactivity`.
 6. Open **Event Subscriptions** (only required when a plugin uses it), enable events, and set the Request URL to `https://<your-host>/api/slack/events`. Slack sends a `url_verification` challenge on save; the bot answers it automatically.
