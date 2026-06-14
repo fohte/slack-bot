@@ -20,18 +20,29 @@ interface StubSlackClient extends SlackWebClient {
     thread_ts: string | undefined
     text: string | undefined
   }>
+  readonly statusCalls: ReadonlyArray<{
+    channel_id: string
+    thread_ts: string
+    status: string
+  }>
 }
 
 const createStubSlackClient = (
-  options: { postError?: Error } = {},
+  options: { postError?: Error; statusError?: Error } = {},
 ): StubSlackClient => {
   const posts: Array<{
     channel: string | undefined
     thread_ts: string | undefined
     text: string | undefined
   }> = []
+  const statusCalls: Array<{
+    channel_id: string
+    thread_ts: string
+    status: string
+  }> = []
   const stub = {
     posts,
+    statusCalls,
     async postMessage(arg: {
       channel?: string
       thread_ts?: string
@@ -48,6 +59,19 @@ const createStubSlackClient = (
         ts: '1700000099.000001',
         channel: arg.channel,
       } as never
+    },
+    async setAssistantThreadStatus(arg: {
+      channel_id: string
+      thread_ts: string
+      status: string
+    }) {
+      if (options.statusError !== undefined) throw options.statusError
+      statusCalls.push({
+        channel_id: arg.channel_id,
+        thread_ts: arg.thread_ts,
+        status: arg.status,
+      })
+      return { ok: true } as never
     },
     async updateMessage() {
       throw new Error('not implemented')
@@ -562,5 +586,85 @@ describe('createTaskResponseHandler', () => {
       responded: ['Ev123'],
       upserts: [],
     })
+  })
+
+  it('clears the assistant thread status after a successful post', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({ text: 'Done!' })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    await handler(buildTask())
+
+    expect(slack.statusCalls).toEqual([
+      {
+        channel_id: 'C123',
+        thread_ts: '1700000000.000050',
+        status: '',
+      },
+    ])
+  })
+
+  it('still returns responded when clearing the assistant status fails', async () => {
+    const slack = createStubSlackClient({
+      statusError: new Error('channel_not_supported'),
+    })
+    const opencode = createStubOpencodeClient({ text: 'Done!' })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    const outcome = await handler(buildTask())
+
+    expect({
+      outcome,
+      posts: slack.posts,
+      statusCalls: slack.statusCalls,
+      responded: eventLog.responded,
+    }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: 'Done!',
+        },
+      ],
+      statusCalls: [],
+      responded: ['Ev123'],
+    })
+  })
+
+  it('does not attempt to clear the assistant status when the post itself fails', async () => {
+    const slack = createStubSlackClient({ postError: new Error('slack down') })
+    const opencode = createStubOpencodeClient({ text: 'Done!' })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    await expect(handler(buildTask())).rejects.toThrow('slack down')
+    expect(slack.statusCalls).toEqual([])
   })
 })

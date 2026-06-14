@@ -1,5 +1,9 @@
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
+import {
+  DEFAULT_THINKING_STATUS,
+  trySetAssistantStatus,
+} from '@/plugins/llm-agent/assistant-status'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import type {
@@ -9,6 +13,7 @@ import type {
 } from '@/plugins/llm-agent/task-cr-client'
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
 import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
+import type { SlackWebClient } from '@/slack/web-client'
 
 export const DEFAULT_TASK_CR_NAMESPACE = 'kubeopencode'
 export const DEFAULT_TASK_CR_AGENT_NAME = 'slack-bot'
@@ -17,6 +22,8 @@ export interface TaskDispatcherOptions {
   readonly taskCrClient: TaskCrClient
   readonly threadSessionStore: ThreadSessionStore
   readonly eventLogStore: EventLogStore
+  readonly slackClient?: SlackWebClient | undefined
+  readonly thinkingStatus?: string | undefined
   readonly namespace?: string | undefined
   readonly agentName?: string | undefined
   readonly logger?: Logger | undefined
@@ -54,7 +61,9 @@ export const createTaskDispatcher = (
   const logger = options.logger ?? noopLogger
   const namespace = options.namespace ?? DEFAULT_TASK_CR_NAMESPACE
   const agentName = options.agentName ?? DEFAULT_TASK_CR_AGENT_NAME
-  const { taskCrClient, threadSessionStore, eventLogStore } = options
+  const thinkingStatus = options.thinkingStatus ?? DEFAULT_THINKING_STATUS
+  const { taskCrClient, threadSessionStore, eventLogStore, slackClient } =
+    options
 
   return async (accepted) => {
     const eventId = accepted.ctx.envelope.event_id
@@ -168,5 +177,14 @@ export const createTaskDispatcher = (
         ? 'llm-agent dispatched Task CR'
         : 'llm-agent Task CR already existed; treated as accepted',
     )
+
+    if (slackClient !== undefined) {
+      await trySetAssistantStatus({
+        slackClient,
+        target: { channelId: channel, threadTs: threadRootTs },
+        status: thinkingStatus,
+        logger,
+      })
+    }
   }
 }
