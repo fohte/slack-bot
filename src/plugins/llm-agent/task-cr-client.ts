@@ -33,7 +33,6 @@ export interface TaskCrStatus {
   readonly namespace: string
   readonly phase: TaskCrPhase | undefined
   readonly message: string | undefined
-  readonly sessionId: string | undefined
 }
 
 export interface TaskCrClient {
@@ -87,9 +86,7 @@ export const parseTaskCrItem = (
   const status = isRecord(item['status']) ? item['status'] : undefined
   const phase = asOptionalString(status?.['phase'])
   const message = asOptionalString(status?.['message'])
-  const session = isRecord(status?.['session']) ? status['session'] : undefined
-  const sessionId = asOptionalString(session?.['id'])
-  return { name, namespace, phase, message, sessionId }
+  return { name, namespace, phase, message }
 }
 
 export const createKubernetesTaskCrClient = (

@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { parseTaskCrItem } from '@/plugins/llm-agent/task-cr-client'
 
 describe('parseTaskCrItem', () => {
-  it('extracts name, phase, message and sessionId from a Task CR list item', () => {
+  it('extracts name, phase, and message from a Task CR list item', () => {
     const item = {
       metadata: { name: 'slack-abc', namespace: 'kubeopencode' },
       status: {
-        phase: 'Succeeded',
+        phase: 'Completed',
         message: 'done',
         session: { id: 'ses_42' },
       },
@@ -15,9 +15,8 @@ describe('parseTaskCrItem', () => {
     expect(parseTaskCrItem(item, 'fallback-ns')).toEqual({
       name: 'slack-abc',
       namespace: 'kubeopencode',
-      phase: 'Succeeded',
+      phase: 'Completed',
       message: 'done',
-      sessionId: 'ses_42',
     })
   })
 
@@ -28,7 +27,6 @@ describe('parseTaskCrItem', () => {
       namespace: 'fallback-ns',
       phase: undefined,
       message: undefined,
-      sessionId: undefined,
     })
   })
 

@@ -93,4 +93,58 @@ describe('createOpencodeClient', () => {
       /non-array payload/,
     )
   })
+
+  it('finds a session id by exact title match', async () => {
+    const client = createOpencodeClient({
+      fetchImpl: buildFetch([
+        { id: 'ses_other', title: 'other-task' },
+        { id: 'ses_match', title: 'slack-17fed95f6e7c7d96' },
+        { id: 'ses_dup', title: 'slack-17fed95f6e7c7d96' },
+      ]),
+      maxAttempts: 1,
+    })
+    expect(await client.findSessionIdByTitle('slack-17fed95f6e7c7d96')).toBe(
+      'ses_match',
+    )
+  })
+
+  it('returns undefined when no session matches the title', async () => {
+    const client = createOpencodeClient({
+      fetchImpl: buildFetch([{ id: 'ses_other', title: 'other-task' }]),
+      maxAttempts: 1,
+    })
+    expect(await client.findSessionIdByTitle('slack-missing')).toBeUndefined()
+  })
+
+  it('retries transient failures on session listing', async () => {
+    let calls = 0
+    const fetchImpl: typeof fetch = (async () => {
+      calls += 1
+      if (calls < 3) return new Response('{}', { status: 503 })
+      return new Response(
+        JSON.stringify([{ id: 'ses_x', title: 'slack-target' }]),
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+    const client = createOpencodeClient({
+      fetchImpl,
+      maxAttempts: 3,
+      sleepImpl: noopSleep,
+    })
+    expect(await client.findSessionIdByTitle('slack-target')).toBe('ses_x')
+    expect(calls).toBe(3)
+  })
+
+  it('throws after exhausting retries on persistent 5xx for session lookup', async () => {
+    const fetchImpl: typeof fetch = (async () =>
+      new Response('{}', { status: 500 })) as unknown as typeof fetch
+    const client = createOpencodeClient({
+      fetchImpl,
+      maxAttempts: 2,
+      sleepImpl: noopSleep,
+    })
+    await expect(client.findSessionIdByTitle('slack-target')).rejects.toThrow(
+      /HTTP 500/,
+    )
+  })
 })

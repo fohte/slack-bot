@@ -57,7 +57,7 @@ export const startTaskCrWatcher = (
       }
       let respondedCount = 0
       for (const task of tasks) {
-        if (task.phase !== 'Succeeded' && task.phase !== 'Failed') continue
+        if (task.phase !== 'Completed' && task.phase !== 'Failed') continue
         try {
           const outcome = await handler(task)
           if (outcome === 'responded') respondedCount += 1
