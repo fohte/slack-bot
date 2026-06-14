@@ -1,5 +1,9 @@
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
+import {
+  CLEAR_STATUS,
+  trySetAssistantStatus,
+} from '@/plugins/llm-agent/assistant-status'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { TaskCrStatus } from '@/plugins/llm-agent/task-cr-client'
@@ -169,6 +173,16 @@ export const createTaskResponseHandler = (
       }
       throw error
     }
+
+    await trySetAssistantStatus({
+      slackClient,
+      target: {
+        channelId: row.slackChannelId,
+        threadTs: row.threadRootTs,
+      },
+      status: CLEAR_STATUS,
+      logger,
+    })
 
     if (task.phase === 'Completed' && sessionId !== undefined) {
       try {

@@ -1,4 +1,6 @@
 import {
+  type AssistantThreadsSetStatusArguments,
+  type AssistantThreadsSetStatusResponse,
   type ChatDeleteArguments,
   type ChatDeleteResponse,
   type ChatPostMessageArguments,
@@ -45,6 +47,9 @@ export interface SlackWebClient {
     url: string,
     payload: ResponseUrlPayload,
   ): Promise<ResponseUrlResult>
+  setAssistantThreadStatus(
+    arg: AssistantThreadsSetStatusArguments,
+  ): Promise<AssistantThreadsSetStatusResponse>
 }
 
 export interface SlackWebClientOptions {
@@ -73,6 +78,8 @@ export const createSlackWebClient = (
     pushView: (arg) => callMethod(() => client.views.push(arg)),
     postToResponseUrl: (url, payload) =>
       postToResponseUrl(fetchImpl, url, payload),
+    setAssistantThreadStatus: (arg) =>
+      callMethod(() => client.assistant.threads.setStatus(arg)),
   }
 }
 
