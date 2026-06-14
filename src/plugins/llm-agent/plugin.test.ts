@@ -601,6 +601,32 @@ describe('createLlmAgentPlugin', () => {
     })
   })
 
+  it('skips the thread session lookup for top-level channel messages without thread_ts', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const threadSessionStore = createStubThreadSessionStore()
+    const lookupSpy = vi.spyOn(threadSessionStore, 'lookup')
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, threadSessionStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-top-level', {
+      channel_type: 'channel',
+      text: 'random chatter',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+      lookupCalls: lookupSpy.mock.calls.length,
+    }).toEqual({
+      records: [],
+      onAcceptedCalls: 0,
+      lookupCalls: 0,
+    })
+  })
+
   it('skips message_changed subtype even when the edited body mentions the bot', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()

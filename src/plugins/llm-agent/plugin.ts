@@ -104,16 +104,18 @@ const decideForMessage = async (
     return { accept: false, reason: 'duplicate_of_app_mention' }
   }
 
-  const threadRootTs = fields.thread_ts ?? fields.ts
+  // Skip the lookup for top-level channel messages: thread_ts is undefined,
+  // so the message is not part of an existing thread and no session can
+  // possibly be mapped to it.
   if (
+    fields.thread_ts !== undefined &&
     teamId !== undefined &&
-    fields.channel !== undefined &&
-    threadRootTs !== undefined
+    fields.channel !== undefined
   ) {
     const sessionId = await threadSessionStore.lookup({
       slackTeamId: teamId,
       slackChannelId: fields.channel,
-      threadRootTs,
+      threadRootTs: fields.thread_ts,
     })
     if (sessionId !== undefined) {
       return { accept: true, reason: 'thread_continuation' }
