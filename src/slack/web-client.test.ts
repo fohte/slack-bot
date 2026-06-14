@@ -15,6 +15,11 @@ interface MockWebClient {
     update: ReturnType<typeof vi.fn>
     push: ReturnType<typeof vi.fn>
   }
+  assistant: {
+    threads: {
+      setStatus: ReturnType<typeof vi.fn>
+    }
+  }
 }
 
 const buildMockClient = (): MockWebClient => ({
@@ -27,6 +32,11 @@ const buildMockClient = (): MockWebClient => ({
     open: vi.fn(),
     update: vi.fn(),
     push: vi.fn(),
+  },
+  assistant: {
+    threads: {
+      setStatus: vi.fn(),
+    },
   },
 })
 
@@ -123,6 +133,60 @@ describe('SlackWebClient', () => {
         text: 'hi',
       }),
     ).rejects.toBeInstanceOf(SlackApiError)
+  })
+
+  it('forwards setAssistantThreadStatus arguments and result', async () => {
+    const mock = buildMockClient()
+    mock.assistant.threads.setStatus.mockResolvedValue({ ok: true })
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+    })
+    const result = await client.setAssistantThreadStatus({
+      channel_id: 'C1',
+      thread_ts: '1700000000.000050',
+      status: 'is thinking...',
+    })
+    expect({
+      result,
+      calls: mock.assistant.threads.setStatus.mock.calls,
+    }).toEqual({
+      result: { ok: true },
+      calls: [
+        [
+          {
+            channel_id: 'C1',
+            thread_ts: '1700000000.000050',
+            status: 'is thinking...',
+          },
+        ],
+      ],
+    })
+  })
+
+  it('rethrows setAssistantThreadStatus failures as SlackApiError', async () => {
+    const mock = buildMockClient()
+    const slackErr = new Error('platform error') as Error & {
+      data: { error: string }
+    }
+    slackErr.data = { error: 'channel_not_supported' }
+    mock.assistant.threads.setStatus.mockRejectedValue(slackErr)
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+    })
+    await expect(
+      client.setAssistantThreadStatus({
+        channel_id: 'C1',
+        thread_ts: '1700000000.000050',
+        status: 'is thinking...',
+      }),
+    ).rejects.toMatchObject({
+      name: 'SlackApiError',
+      slackError: 'channel_not_supported',
+    })
   })
 
   it('throws SlackApiError when response_url returns non-2xx', async () => {

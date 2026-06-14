@@ -1,4 +1,13 @@
 export type {
+  AssistantStatusTarget,
+  SetAssistantStatusOptions,
+} from '@/plugins/llm-agent/assistant-status'
+export {
+  CLEAR_STATUS,
+  DEFAULT_THINKING_STATUS,
+  trySetAssistantStatus,
+} from '@/plugins/llm-agent/assistant-status'
+export type {
   TaskDispatcher,
   TaskDispatcherOptions,
 } from '@/plugins/llm-agent/dispatcher'

@@ -18,10 +18,67 @@ import type {
   ThreadSessionKey,
   ThreadSessionStore,
 } from '@/plugins/llm-agent/thread-session-store'
+import type { SlackWebClient } from '@/slack/web-client'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
 } from '@/types/slack-payloads'
+
+interface RecordingSlackClient extends SlackWebClient {
+  readonly statusCalls: ReadonlyArray<{
+    channel_id: string
+    thread_ts: string
+    status: string
+  }>
+}
+
+const createRecordingSlackClient = (
+  options: { statusError?: Error } = {},
+): RecordingSlackClient => {
+  const statusCalls: Array<{
+    channel_id: string
+    thread_ts: string
+    status: string
+  }> = []
+  const stub = {
+    statusCalls,
+    async setAssistantThreadStatus(arg: {
+      channel_id: string
+      thread_ts: string
+      status: string
+    }) {
+      if (options.statusError !== undefined) throw options.statusError
+      statusCalls.push({
+        channel_id: arg.channel_id,
+        thread_ts: arg.thread_ts,
+        status: arg.status,
+      })
+      return { ok: true } as never
+    },
+    async postMessage() {
+      throw new Error('not implemented')
+    },
+    async updateMessage() {
+      throw new Error('not implemented')
+    },
+    async deleteMessage() {
+      throw new Error('not implemented')
+    },
+    async openView() {
+      throw new Error('not implemented')
+    },
+    async updateView() {
+      throw new Error('not implemented')
+    },
+    async pushView() {
+      throw new Error('not implemented')
+    },
+    async postToResponseUrl() {
+      throw new Error('not implemented')
+    },
+  }
+  return stub as unknown as RecordingSlackClient
+}
 
 interface RecordingTaskCrClient extends TaskCrClient {
   readonly created: readonly TaskCrSpec[]
@@ -135,6 +192,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await dispatcher(
@@ -186,6 +244,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await dispatcher(
@@ -233,6 +292,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await dispatcher(
@@ -272,6 +332,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await expect(
@@ -292,6 +353,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await expect(
@@ -314,6 +376,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     await expect(
@@ -331,6 +394,7 @@ describe('createTaskDispatcher', () => {
       taskCrClient,
       threadSessionStore,
       eventLogStore,
+      slackClient: createRecordingSlackClient(),
     })
 
     const accepted = buildAccepted({ eventId: 'Ev-no-team' })
@@ -349,6 +413,105 @@ describe('createTaskDispatcher', () => {
     await expect(dispatcher(acceptedWithoutTeam)).resolves.toBeUndefined()
     expect(taskCrClient.created).toEqual([])
     expect(eventLogStore.marks).toEqual([])
+  })
+
+  it('sets the assistant thread status after dispatch when slackClient is provided', async () => {
+    const taskCrClient = createRecordingTaskCrClient('created')
+    const threadSessionStore = createSessionStore()
+    const eventLogStore = createRecordingEventLogStore()
+    const slackClient = createRecordingSlackClient()
+    const dispatcher = createTaskDispatcher({
+      taskCrClient,
+      threadSessionStore,
+      eventLogStore,
+      slackClient,
+    })
+
+    await dispatcher(
+      buildAccepted({
+        eventId: 'Ev-status',
+        threadTs: '1700000000.000050',
+      }),
+    )
+
+    expect({
+      statusCalls: slackClient.statusCalls,
+      created: taskCrClient.created.length,
+      marks: eventLogStore.marks,
+    }).toEqual({
+      statusCalls: [
+        {
+          channel_id: 'C0123ABCD',
+          thread_ts: '1700000000.000050',
+          status: 'is thinking...',
+        },
+      ],
+      created: 1,
+      marks: [['Ev-status', taskCrNameForSlackEvent('Ev-status')]],
+    })
+  })
+
+  it('honors a custom thinkingStatus override', async () => {
+    const taskCrClient = createRecordingTaskCrClient('created')
+    const threadSessionStore = createSessionStore()
+    const eventLogStore = createRecordingEventLogStore()
+    const slackClient = createRecordingSlackClient()
+    const dispatcher = createTaskDispatcher({
+      taskCrClient,
+      threadSessionStore,
+      eventLogStore,
+      slackClient,
+      thinkingStatus: 'crunching numbers',
+    })
+
+    await dispatcher(buildAccepted({ eventId: 'Ev-custom-status' }))
+
+    expect({
+      statusCalls: slackClient.statusCalls,
+      created: taskCrClient.created.length,
+      marks: eventLogStore.marks,
+    }).toEqual({
+      statusCalls: [
+        {
+          channel_id: 'C0123ABCD',
+          thread_ts: '1700000000.000100',
+          status: 'crunching numbers',
+        },
+      ],
+      created: 1,
+      marks: [
+        ['Ev-custom-status', taskCrNameForSlackEvent('Ev-custom-status')],
+      ],
+    })
+  })
+
+  it('does not throw when setStatus fails (best-effort status indicator)', async () => {
+    const taskCrClient = createRecordingTaskCrClient('created')
+    const threadSessionStore = createSessionStore()
+    const eventLogStore = createRecordingEventLogStore()
+    const slackClient = createRecordingSlackClient({
+      statusError: new Error('channel_not_supported'),
+    })
+    const dispatcher = createTaskDispatcher({
+      taskCrClient,
+      threadSessionStore,
+      eventLogStore,
+      slackClient,
+    })
+
+    await expect(
+      dispatcher(buildAccepted({ eventId: 'Ev-status-fail' })),
+    ).resolves.toBeUndefined()
+
+    expect({
+      created: taskCrClient.created.length,
+      statusCalls: slackClient.statusCalls,
+      marks: eventLogStore.marks,
+    }).toEqual({
+      created: 1,
+      statusCalls: [],
+      marks: [['Ev-status-fail', taskCrNameForSlackEvent('Ev-status-fail')]],
+    })
   })
 
   it('produces a stable Task CR name from the Slack event_id', () => {

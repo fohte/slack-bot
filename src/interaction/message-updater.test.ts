@@ -16,6 +16,7 @@ const buildMockClient = () => ({
   postToResponseUrl: vi
     .fn()
     .mockResolvedValue({ channelId: 'C1', messageTs: '1.2', raw: {} }),
+  setAssistantThreadStatus: vi.fn(),
 })
 
 describe('MessageUpdater (originalUpdater)', () => {
