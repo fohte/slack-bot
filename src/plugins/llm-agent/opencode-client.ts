@@ -6,6 +6,7 @@ export const DEFAULT_OPENCODE_RETRY_DELAY_MS = 1000
 
 export interface OpencodeClient {
   fetchLatestAssistantText(sessionId: string): Promise<string | undefined>
+  findSessionIdByTitle(title: string): Promise<string | undefined>
 }
 
 export interface OpencodeClientOptions {
@@ -69,6 +70,30 @@ const fetchOnce = async (
   return undefined
 }
 
+const findSessionIdOnce = async (
+  fetchImpl: typeof fetch,
+  url: string,
+  title: string,
+): Promise<string | undefined> => {
+  const response = await fetchImpl(url, { method: 'GET' })
+  if (!response.ok) {
+    throw new Error(
+      `opencode GET /session failed with HTTP ${String(response.status)}`,
+    )
+  }
+  const raw: unknown = await response.json()
+  if (!Array.isArray(raw)) {
+    throw new Error(`opencode GET /session returned non-array payload`)
+  }
+  for (const entry of raw as readonly unknown[]) {
+    if (!isRecord(entry)) continue
+    if (entry['title'] !== title) continue
+    const id = entry['id']
+    if (typeof id === 'string' && id.length > 0) return id
+  }
+  return undefined
+}
+
 export const createOpencodeClient = (
   options: OpencodeClientOptions = {},
 ): OpencodeClient => {
@@ -91,6 +116,21 @@ export const createOpencodeClient = (
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
           return await fetchOnce(fetchImpl, url, sessionId)
+        } catch (error) {
+          lastError = error
+          if (attempt < maxAttempts) {
+            await sleep(retryDelayMs)
+          }
+        }
+      }
+      throw lastError
+    },
+    async findSessionIdByTitle(title) {
+      const url = `${baseUrl}/session`
+      let lastError: unknown
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          return await findSessionIdOnce(fetchImpl, url, title)
         } catch (error) {
           lastError = error
           if (attempt < maxAttempts) {

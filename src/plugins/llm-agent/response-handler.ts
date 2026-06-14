@@ -53,7 +53,7 @@ export const createTaskResponseHandler = (
     options
 
   return async (task) => {
-    if (task.phase !== 'Succeeded' && task.phase !== 'Failed') {
+    if (task.phase !== 'Completed' && task.phase !== 'Failed') {
       return 'skipped_non_terminal'
     }
 
@@ -92,13 +92,27 @@ export const createTaskResponseHandler = (
     }
 
     let text: string
-    if (task.phase === 'Succeeded') {
+    let sessionId: string | undefined
+    if (task.phase === 'Completed') {
+      // Task CR status does not carry the opencode session id; resolve it by
+      // title, which our wrapper sets to task.name.
+      try {
+        sessionId = await opencodeClient.findSessionIdByTitle(task.name)
+      } catch (error) {
+        logger.error(
+          {
+            event: 'llm_agent_response_session_lookup_failed',
+            task_name: task.name,
+            err: error,
+          },
+          'failed to look up opencode session by title; will post failure placeholder',
+        )
+      }
       let assistantText: string | undefined
-      if (task.sessionId !== undefined) {
+      if (sessionId !== undefined) {
         try {
-          assistantText = await opencodeClient.fetchLatestAssistantText(
-            task.sessionId,
-          )
+          assistantText =
+            await opencodeClient.fetchLatestAssistantText(sessionId)
         } catch (error) {
           // Don't throw: re-trying every tick when opencode is down would
           // leave the user with no notification at all. Post the fallback
@@ -107,12 +121,20 @@ export const createTaskResponseHandler = (
             {
               event: 'llm_agent_response_opencode_fetch_failed',
               task_name: task.name,
-              session_id: task.sessionId,
+              session_id: sessionId,
               err: error,
             },
             'failed to fetch latest assistant message from opencode; falling back to placeholder text',
           )
         }
+      } else {
+        logger.warn(
+          {
+            event: 'llm_agent_response_session_not_found',
+            task_name: task.name,
+          },
+          'opencode session not found for Completed Task; terminating with placeholder',
+        )
       }
       text = assistantText ?? successFallback
     } else {
@@ -149,20 +171,20 @@ export const createTaskResponseHandler = (
       throw error
     }
 
-    if (task.phase === 'Succeeded' && task.sessionId !== undefined) {
+    if (task.phase === 'Completed' && sessionId !== undefined) {
       try {
         await threadSessionStore.upsert({
           slackTeamId: row.slackTeamId,
           slackChannelId: row.slackChannelId,
           threadRootTs: row.threadRootTs,
-          opencodeSessionId: task.sessionId,
+          opencodeSessionId: sessionId,
         })
       } catch (error) {
         logger.error(
           {
             event: 'llm_agent_response_session_upsert_failed',
             task_name: task.name,
-            session_id: task.sessionId,
+            session_id: sessionId,
             err: error,
           },
           'failed to upsert thread_session_map after responding',
@@ -176,7 +198,7 @@ export const createTaskResponseHandler = (
         task_name: task.name,
         slack_event_id: row.slackEventId,
         phase: task.phase,
-        session_id: task.sessionId,
+        session_id: sessionId,
       },
       'llm-agent posted Task CR response to Slack',
     )

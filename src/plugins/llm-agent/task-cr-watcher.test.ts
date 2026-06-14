@@ -39,28 +39,25 @@ const noopSetInterval = (() => 0 as unknown as NodeJS.Timeout) as (
 const noopClearInterval = (() => {}) as (h: NodeJS.Timeout) => void
 
 describe('startTaskCrWatcher', () => {
-  it('dispatches Succeeded and Failed Tasks to the handler and skips non-terminal phases', async () => {
+  it('dispatches Completed and Failed Tasks to the handler and skips non-terminal phases', async () => {
     const tasks: TaskCrStatus[] = [
       {
         name: 'slack-aaa',
         namespace: 'kubeopencode',
-        phase: 'Succeeded',
+        phase: 'Completed',
         message: undefined,
-        sessionId: 'ses_1',
       },
       {
         name: 'slack-bbb',
         namespace: 'kubeopencode',
         phase: 'Running',
         message: undefined,
-        sessionId: undefined,
       },
       {
         name: 'slack-ccc',
         namespace: 'kubeopencode',
         phase: 'Failed',
         message: 'boom',
-        sessionId: undefined,
       },
     ]
     const client = createStubTaskCrClient([tasks])
@@ -94,16 +91,14 @@ describe('startTaskCrWatcher', () => {
       {
         name: 'slack-aaa',
         namespace: 'kubeopencode',
-        phase: 'Succeeded',
+        phase: 'Completed',
         message: undefined,
-        sessionId: 'ses_1',
       },
       {
         name: 'slack-bbb',
         namespace: 'kubeopencode',
-        phase: 'Succeeded',
+        phase: 'Completed',
         message: undefined,
-        sessionId: 'ses_2',
       },
     ]
     const client = createStubTaskCrClient([tasks])
@@ -146,16 +141,14 @@ describe('startTaskCrWatcher', () => {
       {
         name: 'slack-old-success',
         namespace: 'kubeopencode',
-        phase: 'Succeeded',
+        phase: 'Completed',
         message: undefined,
-        sessionId: 'ses_old',
       },
       {
         name: 'slack-old-failure',
         namespace: 'kubeopencode',
         phase: 'Failed',
         message: 'broke',
-        sessionId: undefined,
       },
     ]
     const client = createStubTaskCrClient([tasks])

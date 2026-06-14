@@ -71,12 +71,28 @@ const createStubSlackClient = (
   return stub as unknown as StubSlackClient
 }
 
+interface StubOpencodeOptions {
+  readonly text?: string
+  readonly error?: Error
+  readonly sessionId?: string | undefined
+  readonly explicitSessionId?: boolean
+  readonly sessionLookupError?: Error
+}
+
 const createStubOpencodeClient = (
-  options: { text?: string; error?: Error } = {},
+  options: StubOpencodeOptions = {},
 ): OpencodeClient => ({
   async fetchLatestAssistantText() {
     if (options.error !== undefined) throw options.error
     return options.text
+  },
+  async findSessionIdByTitle() {
+    if (options.sessionLookupError !== undefined) {
+      throw options.sessionLookupError
+    }
+    if (options.explicitSessionId === true) return options.sessionId
+    // Default to a found session so happy-path tests don't need to set it.
+    return 'ses_abc'
   },
 })
 
@@ -164,14 +180,13 @@ const buildRow = (overrides: Partial<EventLogRow> = {}): EventLogRow => ({
 const buildTask = (overrides: Partial<TaskCrStatus> = {}): TaskCrStatus => ({
   name: 'slack-abcdef0123456789',
   namespace: 'kubeopencode',
-  phase: 'Succeeded',
+  phase: 'Completed',
   message: undefined,
-  sessionId: 'ses_abc',
   ...overrides,
 })
 
 describe('createTaskResponseHandler', () => {
-  it('posts assistant text and transitions event_log to responded on Succeeded', async () => {
+  it('posts assistant text and transitions event_log to responded on Completed', async () => {
     const slack = createStubSlackClient()
     const opencode = createStubOpencodeClient({ text: 'Done!' })
     const eventLog = createStubEventLogStore([
@@ -231,7 +246,6 @@ describe('createTaskResponseHandler', () => {
       buildTask({
         phase: 'Failed',
         message: 'oom <U123> & <#C456>',
-        sessionId: undefined,
       }),
     )
 
@@ -259,7 +273,7 @@ describe('createTaskResponseHandler', () => {
     })
 
     const outcome = await handler(
-      buildTask({ phase: 'Failed', message: 'oom', sessionId: undefined }),
+      buildTask({ phase: 'Failed', message: 'oom' }),
     )
 
     expect({
@@ -470,6 +484,83 @@ describe('createTaskResponseHandler', () => {
         },
       ],
       responded: ['Ev123'],
+    })
+  })
+
+  it('terminates with the fallback text when no opencode session matches the Task name', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({
+      sessionId: undefined,
+      explicitSessionId: true,
+    })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+      successFallbackText: '(opencode session missing)',
+    })
+
+    const outcome = await handler(buildTask())
+
+    expect({
+      outcome,
+      posts: slack.posts,
+      responded: eventLog.responded,
+      upserts: sessions.upserts,
+    }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: '(opencode session missing)',
+        },
+      ],
+      responded: ['Ev123'],
+      upserts: [],
+    })
+  })
+
+  it('terminates with the fallback text when the session lookup itself errors', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({
+      sessionLookupError: new Error('opencode unreachable'),
+    })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+      successFallbackText: '(opencode unavailable)',
+    })
+
+    const outcome = await handler(buildTask())
+
+    expect({
+      outcome,
+      posts: slack.posts,
+      responded: eventLog.responded,
+      upserts: sessions.upserts,
+    }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: '(opencode unavailable)',
+        },
+      ],
+      responded: ['Ev123'],
+      upserts: [],
     })
   })
 })
