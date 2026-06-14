@@ -94,8 +94,7 @@ export const createTaskResponseHandler = (
     let text: string
     let sessionId: string | undefined
     if (task.phase === 'Completed') {
-      // Task CR status does not carry the opencode session id; resolve it by
-      // title, which our wrapper sets to task.name.
+      // Our wrapper sets the opencode session title to task.name.
       try {
         sessionId = await opencodeClient.findSessionIdByTitle(task.name)
       } catch (error) {
@@ -105,7 +104,7 @@ export const createTaskResponseHandler = (
             task_name: task.name,
             err: error,
           },
-          'failed to look up opencode session by title; will post failure placeholder',
+          'failed to look up opencode session by title; falling back to placeholder text',
         )
       }
       let assistantText: string | undefined
