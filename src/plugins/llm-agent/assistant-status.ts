@@ -25,6 +25,14 @@ export interface SetAssistantStatusOptions {
 // (Agents & AI Apps split-view); calls from a plain channel fail with
 // channel_not_supported. Swallow failures so the caller's main flow is
 // unaffected by this display-only indicator.
+//
+// set/clear failures are not symmetric in severity:
+//   - set failure: the indicator never appears (degraded UX, acceptable)
+//   - clear failure: a stale "thinking..." sits in a thread that already
+//     received the reply (broken UX, operators need to know)
+// clear failures are logged at error level so they surface in monitoring;
+// set failures stay at warn since they are the expected outcome whenever
+// the indicator is not configured.
 export const trySetAssistantStatus = async (
   options: SetAssistantStatusOptions,
 ): Promise<void> => {
@@ -36,15 +44,26 @@ export const trySetAssistantStatus = async (
       status: options.status,
     })
   } catch (error) {
-    logger.warn(
-      {
-        event: 'llm_agent_assistant_status_failed',
-        channel_id: options.target.channelId,
-        thread_ts: options.target.threadTs,
-        status_length: options.status.length,
-        err: error,
-      },
-      'failed to set assistant thread status; continuing without status indicator',
-    )
+    const isClear = options.status === CLEAR_STATUS
+    const payload = {
+      event: isClear
+        ? 'llm_agent_assistant_status_clear_failed'
+        : 'llm_agent_assistant_status_set_failed',
+      channel_id: options.target.channelId,
+      thread_ts: options.target.threadTs,
+      status_length: options.status.length,
+      err: error,
+    }
+    if (isClear) {
+      logger.error(
+        payload,
+        'failed to clear assistant thread status; stale indicator may remain in the thread',
+      )
+    } else {
+      logger.warn(
+        payload,
+        'failed to set assistant thread status; continuing without status indicator',
+      )
+    }
   }
 }
