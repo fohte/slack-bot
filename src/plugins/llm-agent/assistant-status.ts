@@ -2,9 +2,9 @@ import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import type { SlackWebClient } from '@/slack/web-client'
 
-// Slack renders this as "<bot name> 考え中…" under the user's message
-// in the Agents & AI Apps split-view.
-export const DEFAULT_THINKING_STATUS = '考え中…'
+// Slack renders this as "<bot name> is thinking..." under the user's
+// message in the Agents & AI Apps split-view.
+export const DEFAULT_THINKING_STATUS = 'is thinking...'
 
 // Slack clears the indicator when status is set to an empty string.
 export const CLEAR_STATUS = ''

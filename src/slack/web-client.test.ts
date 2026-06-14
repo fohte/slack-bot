@@ -146,7 +146,7 @@ describe('SlackWebClient', () => {
     const result = await client.setAssistantThreadStatus({
       channel_id: 'C1',
       thread_ts: '1700000000.000050',
-      status: '考え中…',
+      status: 'is thinking...',
     })
     expect({
       result,
@@ -158,7 +158,7 @@ describe('SlackWebClient', () => {
           {
             channel_id: 'C1',
             thread_ts: '1700000000.000050',
-            status: '考え中…',
+            status: 'is thinking...',
           },
         ],
       ],
@@ -181,7 +181,7 @@ describe('SlackWebClient', () => {
       client.setAssistantThreadStatus({
         channel_id: 'C1',
         thread_ts: '1700000000.000050',
-        status: '考え中…',
+        status: 'is thinking...',
       }),
     ).rejects.toMatchObject({
       name: 'SlackApiError',

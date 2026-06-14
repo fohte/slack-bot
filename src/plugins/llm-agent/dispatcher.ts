@@ -98,7 +98,7 @@ export const createTaskDispatcher = (
 
     // Set the indicator before create so that a fast-completing Task can
     // never have its watcher-driven clear race ahead of our set and leave
-    // a stale "考え中…" sitting in the thread.
+    // a stale indicator sitting in the thread.
     await trySetAssistantStatus({
       slackClient,
       target: { channelId: channel, threadTs: threadRootTs },

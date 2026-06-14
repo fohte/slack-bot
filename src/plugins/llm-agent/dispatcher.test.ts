@@ -443,7 +443,7 @@ describe('createTaskDispatcher', () => {
         {
           channel_id: 'C0123ABCD',
           thread_ts: '1700000000.000050',
-          status: '考え中…',
+          status: 'is thinking...',
         },
       ],
       created: 1,
@@ -461,7 +461,7 @@ describe('createTaskDispatcher', () => {
       threadSessionStore,
       eventLogStore,
       slackClient,
-      thinkingStatus: 'is thinking...',
+      thinkingStatus: 'crunching numbers',
     })
 
     await dispatcher(buildAccepted({ eventId: 'Ev-custom-status' }))
@@ -475,7 +475,7 @@ describe('createTaskDispatcher', () => {
         {
           channel_id: 'C0123ABCD',
           thread_ts: '1700000000.000100',
-          status: 'is thinking...',
+          status: 'crunching numbers',
         },
       ],
       created: 1,
