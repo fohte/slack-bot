@@ -98,18 +98,41 @@ export const createTaskResponseHandler = (
     let text: string
     let sessionId: string | undefined
     if (task.phase === 'Completed') {
-      // Our wrapper sets the opencode session title to task.name.
+      // Resumed thread: the opencode session title still matches the *first*
+      // task.name in this thread, so findSessionIdByTitle would miss it on
+      // the 2nd+ turn. Look up by Slack thread instead.
       try {
-        sessionId = await opencodeClient.findSessionIdByTitle(task.name)
+        sessionId = await threadSessionStore.lookup({
+          slackTeamId: row.slackTeamId,
+          slackChannelId: row.slackChannelId,
+          threadRootTs: row.threadRootTs,
+        })
       } catch (error) {
         logger.error(
           {
-            event: 'llm_agent_response_session_lookup_failed',
+            event: 'llm_agent_response_thread_session_lookup_failed',
             task_name: task.name,
             err: error,
           },
-          'failed to look up opencode session by title; falling back to placeholder text',
+          'failed to look up opencode session via thread_session_map; falling back to title lookup',
         )
+      }
+      if (sessionId === undefined) {
+        // First turn in a thread: thread_session_map is only written after a
+        // successful response, so it's empty here. Our wrapper sets the
+        // opencode session title to task.name, so look it up that way.
+        try {
+          sessionId = await opencodeClient.findSessionIdByTitle(task.name)
+        } catch (error) {
+          logger.error(
+            {
+              event: 'llm_agent_response_session_lookup_failed',
+              task_name: task.name,
+              err: error,
+            },
+            'failed to look up opencode session by title; falling back to placeholder text',
+          )
+        }
       }
       let assistantText: string | undefined
       if (sessionId !== undefined) {
