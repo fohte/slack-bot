@@ -29,6 +29,7 @@ interface RecordingSlackClient extends SlackWebClient {
     channel_id: string
     thread_ts: string
     status: string
+    loading_messages: readonly string[] | undefined
   }>
 }
 
@@ -39,6 +40,7 @@ const createRecordingSlackClient = (
     channel_id: string
     thread_ts: string
     status: string
+    loading_messages: readonly string[] | undefined
   }> = []
   const stub = {
     statusCalls,
@@ -46,12 +48,14 @@ const createRecordingSlackClient = (
       channel_id: string
       thread_ts: string
       status: string
+      loading_messages?: string[]
     }) {
       if (options.statusError !== undefined) throw options.statusError
       statusCalls.push({
         channel_id: arg.channel_id,
         thread_ts: arg.thread_ts,
         status: arg.status,
+        loading_messages: arg.loading_messages,
       })
       return { ok: true } as never
     },
@@ -444,6 +448,7 @@ describe('createTaskDispatcher', () => {
           channel_id: 'C0123ABCD',
           thread_ts: '1700000000.000050',
           status: 'is thinking...',
+          loading_messages: ['Preparing your task…'],
         },
       ],
       created: 1,
@@ -462,6 +467,7 @@ describe('createTaskDispatcher', () => {
       eventLogStore,
       slackClient,
       thinkingStatus: 'crunching numbers',
+      thinkingLoadingMessages: ['Crunching numbers…'],
     })
 
     await dispatcher(buildAccepted({ eventId: 'Ev-custom-status' }))
@@ -476,6 +482,7 @@ describe('createTaskDispatcher', () => {
           channel_id: 'C0123ABCD',
           thread_ts: '1700000000.000100',
           status: 'crunching numbers',
+          loading_messages: ['Crunching numbers…'],
         },
       ],
       created: 1,

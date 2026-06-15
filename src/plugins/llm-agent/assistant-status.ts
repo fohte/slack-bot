@@ -9,6 +9,45 @@ export const DEFAULT_THINKING_STATUS = 'is thinking...'
 // Slack clears the indicator when status is set to an empty string.
 export const CLEAR_STATUS = ''
 
+// When loading_messages is omitted, Slack fills the conversation bubble
+// with its own generic copy ("Finding answers…", "Summarizing findings…"
+// etc.), which misrepresents what the bot is actually doing. Pass a
+// single-element array per phase to pin the bubble copy to text we own.
+export interface PhaseStatus {
+  readonly status: string
+  readonly loadingMessages: readonly string[]
+}
+
+// Used by the dispatcher between Slack event receipt and the first time
+// the watcher observes a Task CR phase; intentionally matches Pending.
+export const INITIAL_PHASE_STATUS: PhaseStatus = {
+  status: DEFAULT_THINKING_STATUS,
+  loadingMessages: ['Preparing your task…'],
+}
+
+// The Task CR `status.phase` enum is fixed by the kubeopencode.io CRD:
+//   Pending | Queued | Running | Completed | Failed
+// Only non-terminal phases get a bubble message; terminal phases hand
+// off to the response handler which clears the indicator.
+const PHASE_STATUS_MAP: Readonly<Record<string, PhaseStatus>> = {
+  Pending: INITIAL_PHASE_STATUS,
+  Queued: {
+    status: 'is waiting in queue...',
+    loadingMessages: ['Waiting in queue…'],
+  },
+  Running: {
+    status: 'is working on it...',
+    loadingMessages: ['Working on it…'],
+  },
+}
+
+export const statusForPhase = (
+  phase: string | undefined,
+): PhaseStatus | undefined => {
+  if (phase === undefined) return undefined
+  return PHASE_STATUS_MAP[phase]
+}
+
 export interface AssistantStatusTarget {
   readonly channelId: string
   readonly threadTs: string
@@ -18,6 +57,7 @@ export interface SetAssistantStatusOptions {
   readonly slackClient: SlackWebClient
   readonly target: AssistantStatusTarget
   readonly status: string
+  readonly loadingMessages?: readonly string[] | undefined
   readonly logger?: Logger | undefined
 }
 
@@ -42,6 +82,9 @@ export const trySetAssistantStatus = async (
       channel_id: options.target.channelId,
       thread_ts: options.target.threadTs,
       status: options.status,
+      ...(options.loadingMessages !== undefined && {
+        loading_messages: [...options.loadingMessages],
+      }),
     })
   } catch (error) {
     const isClear = options.status === CLEAR_STATUS

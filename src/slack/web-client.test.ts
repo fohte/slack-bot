@@ -165,6 +165,32 @@ describe('SlackWebClient', () => {
     })
   })
 
+  it('forwards setAssistantThreadStatus loading_messages to the underlying client', async () => {
+    const mock = buildMockClient()
+    mock.assistant.threads.setStatus.mockResolvedValue({ ok: true })
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+    })
+    await client.setAssistantThreadStatus({
+      channel_id: 'C1',
+      thread_ts: '1700000000.000050',
+      status: 'is thinking...',
+      loading_messages: ['Preparing your task…'],
+    })
+    expect(mock.assistant.threads.setStatus.mock.calls).toEqual([
+      [
+        {
+          channel_id: 'C1',
+          thread_ts: '1700000000.000050',
+          status: 'is thinking...',
+          loading_messages: ['Preparing your task…'],
+        },
+      ],
+    ])
+  })
+
   it('rethrows setAssistantThreadStatus failures as SlackApiError', async () => {
     const mock = buildMockClient()
     const slackErr = new Error('platform error') as Error & {

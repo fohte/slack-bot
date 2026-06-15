@@ -1,14 +1,22 @@
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import type { TaskResponseHandler } from '@/plugins/llm-agent/response-handler'
-import type { TaskCrClient } from '@/plugins/llm-agent/task-cr-client'
+import type {
+  TaskCrClient,
+  TaskCrStatus,
+} from '@/plugins/llm-agent/task-cr-client'
 
 export const DEFAULT_TASK_WATCH_INTERVAL_MS = 5000
+
+export type TaskPhaseTransitionHandler = (
+  task: TaskCrStatus,
+) => Promise<void> | void
 
 export interface TaskCrWatcherOptions {
   readonly taskCrClient: TaskCrClient
   readonly handler: TaskResponseHandler
   readonly namespace: string
+  readonly onPhaseTransition?: TaskPhaseTransitionHandler | undefined
   readonly intervalMs?: number | undefined
   readonly logger?: Logger | undefined
   readonly setIntervalImpl?:
@@ -29,8 +37,9 @@ export const startTaskCrWatcher = (
   const intervalMs = options.intervalMs ?? DEFAULT_TASK_WATCH_INTERVAL_MS
   const setIntervalImpl = options.setIntervalImpl ?? setInterval
   const clearIntervalImpl = options.clearIntervalImpl ?? clearInterval
-  const { taskCrClient, handler, namespace } = options
+  const { taskCrClient, handler, namespace, onPhaseTransition } = options
 
+  const lastPhases = new Map<string, string | undefined>()
   let running = false
 
   const runOnce = async (): Promise<number> => {
@@ -57,10 +66,37 @@ export const startTaskCrWatcher = (
       }
       let respondedCount = 0
       for (const task of tasks) {
+        if (onPhaseTransition !== undefined) {
+          const previous = lastPhases.get(task.name)
+          if (previous !== task.phase) {
+            try {
+              await onPhaseTransition(task)
+              // Record only after success so a failed transition re-fires
+              // on the next tick instead of being silently swallowed.
+              lastPhases.set(task.name, task.phase)
+            } catch (error) {
+              logger.error(
+                {
+                  event: 'llm_agent_task_watch_phase_transition_failed',
+                  task_name: task.name,
+                  namespace: task.namespace,
+                  phase: task.phase,
+                  err: error,
+                },
+                'task watcher phase transition handler threw',
+              )
+            }
+          }
+        }
+
         if (task.phase !== 'Completed' && task.phase !== 'Failed') continue
         try {
           const outcome = await handler(task)
           if (outcome === 'responded') respondedCount += 1
+          // Once a task has reached a terminal phase and been handled,
+          // it will not transition again; drop the entry so the map
+          // does not grow unbounded.
+          lastPhases.delete(task.name)
         } catch (error) {
           logger.error(
             {
