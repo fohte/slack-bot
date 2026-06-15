@@ -55,14 +55,8 @@ export interface SlackWebClient {
   setAssistantThreadStatus(
     arg: AssistantThreadsSetStatusArguments,
   ): Promise<AssistantThreadsSetStatusResponse>
-  // Downloads a Slack-hosted file (url_private) using the bot token.
-  // Slack file URLs are not publicly accessible; the bot token must be sent
-  // as a Bearer token. Reference: https://docs.slack.dev/authentication/installing-with-oauth#using
-  //
-  // The URL host is checked against `.slack.com` so a tampered url_private
-  // cannot leak the bot token to an attacker-controlled host.
-  //
-  // This method does not honor `maxRetries`; the caller owns retry on 429/5xx.
+  // Host is pinned to *.slack.com so a tampered url_private cannot exfiltrate
+  // the bot token. maxRetries is not honored; caller owns retry on 429/5xx.
   downloadFile(url: string): Promise<SlackFileDownload>
 }
 
@@ -121,17 +115,33 @@ const downloadSlackFile = async (
       {},
     )
   }
-  const response = await fetchImpl(url, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${botToken}` },
-  })
+  let response: Response
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${botToken}` },
+    })
+  } catch (err) {
+    throw new SlackApiError(
+      `slack file download network error: ${err instanceof Error ? err.message : String(err)}`,
+      {},
+    )
+  }
   if (!response.ok) {
     throw new SlackApiError(
       `slack file download failed with HTTP ${String(response.status)}`,
       { status: response.status },
     )
   }
-  const buf = await response.arrayBuffer()
+  let buf: ArrayBuffer
+  try {
+    buf = await response.arrayBuffer()
+  } catch (err) {
+    throw new SlackApiError(
+      `slack file body read error: ${err instanceof Error ? err.message : String(err)}`,
+      { status: response.status },
+    )
+  }
   return {
     bytes: new Uint8Array(buf),
     contentType: response.headers.get('content-type') ?? undefined,

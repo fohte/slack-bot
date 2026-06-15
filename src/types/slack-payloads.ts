@@ -98,8 +98,7 @@ export interface SlackUnknownEvent extends SlackEventBase {
   readonly type: string
 }
 
-// Slack file object as carried on message/app_mention events. The full object
-// has dozens of fields; only the ones we actually consume are typed.
+// Slack file object on message/app_mention events.
 // Reference: https://docs.slack.dev/reference/objects/file-object
 export interface SlackFile {
   readonly id?: string

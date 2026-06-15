@@ -5,7 +5,7 @@ import {
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
-import { isImageFile } from '@/plugins/llm-agent/files'
+import { extractSlackFiles, isImageFile } from '@/plugins/llm-agent/files'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import type {
   TaskCrClient,
@@ -56,8 +56,7 @@ const extractEventFields = (
   const threadTs =
     typeof event.thread_ts === 'string' ? event.thread_ts : undefined
   const text = typeof event.text === 'string' ? event.text : undefined
-  const files = Array.isArray(event.files) ? event.files : []
-  return { channel, ts, threadTs, text, files }
+  return { channel, ts, threadTs, text, files: extractSlackFiles(event) }
 }
 
 const buildAttachmentSummary = (images: readonly SlackFile[]): string => {
