@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { slackifyMarkdown } from 'slackify-markdown'
+import { describe, expect, it, vi } from 'vitest'
 
 import type {
   EventLogOutcome,
@@ -13,6 +14,14 @@ import type {
   ThreadSessionUpsert,
 } from '@/plugins/llm-agent/thread-session-store'
 import type { SlackWebClient } from '@/slack/web-client'
+
+vi.mock('slackify-markdown', async (importActual) => {
+  const actual = await importActual<typeof import('slackify-markdown')>()
+  return {
+    ...actual,
+    slackifyMarkdown: vi.fn(actual.slackifyMarkdown),
+  }
+})
 
 interface StubSlackClient extends SlackWebClient {
   readonly posts: ReadonlyArray<{
@@ -308,6 +317,65 @@ describe('createTaskResponseHandler', () => {
         text: '(no **assistant** message)',
       },
     ])
+  })
+
+  it('falls back to the success fallback when the assistant text is whitespace-only after conversion (chat.postMessage would otherwise reject with no_text)', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({ text: '   \n  \n  ' })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+      successFallbackText: '(whitespace only)',
+    })
+
+    await handler(buildTask())
+
+    expect(slack.posts).toEqual([
+      {
+        channel: 'C123',
+        thread_ts: '1700000000.000050',
+        text: '(whitespace only)',
+      },
+    ])
+  })
+
+  it('escapes Slack mrkdwn metacharacters in the raw text fallback when slackify-markdown throws (so raw <@U…> in the LLM reply does not turn into a live mention)', async () => {
+    vi.mocked(slackifyMarkdown).mockImplementationOnce(() => {
+      throw new Error('parser exploded')
+    })
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({
+      text: 'hi <@U123> & <#C456>',
+    })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    const outcome = await handler(buildTask())
+
+    expect({ outcome, posts: slack.posts }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: 'hi &lt;@U123&gt; &amp; &lt;#C456&gt;',
+        },
+      ],
+    })
   })
 
   it('falls back to the success fallback when the assistant text collapses to empty after slackify conversion (chat.postMessage would otherwise reject with no_text)', async () => {
