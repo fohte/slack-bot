@@ -1,3 +1,5 @@
+import { slackifyMarkdown } from 'slackify-markdown'
+
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import {
@@ -162,7 +164,33 @@ export const createTaskResponseHandler = (
           'opencode session not found for Completed Task; terminating with placeholder',
         )
       }
-      text = assistantText ?? successFallback
+      // LLM output uses CommonMark/GFM; Slack mrkdwn is a different dialect.
+      // slackifyMarkdown always appends a trailing newline (remark-stringify),
+      // so trim it.
+      let converted: string | undefined
+      if (assistantText !== undefined) {
+        try {
+          converted = slackifyMarkdown(assistantText).replace(/\n+$/, '')
+        } catch (error) {
+          // Same rationale as the opencode-fetch catch above: a parser bug
+          // would otherwise leave the user with no notification at all.
+          logger.error(
+            {
+              event: 'llm_agent_response_slackify_failed',
+              task_name: task.name,
+              err: error,
+            },
+            'failed to convert assistant text to Slack mrkdwn; falling back to raw text',
+          )
+          converted = assistantText
+        }
+      }
+      // Empty converted text would make chat.postMessage reject with no_text
+      // and trigger an unmark/retry loop on the same input.
+      text =
+        converted !== undefined && converted.length > 0
+          ? converted
+          : successFallback
     } else {
       text = formatFailureText(task)
     }

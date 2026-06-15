@@ -257,6 +257,86 @@ describe('createTaskResponseHandler', () => {
     })
   })
 
+  it('converts CommonMark/GFM markdown in the assistant text to Slack mrkdwn before posting', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({
+      text: '**bold** and [link](https://example.com)\n\n- item one\n- item two',
+    })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    await handler(buildTask())
+
+    expect(slack.posts).toEqual([
+      {
+        channel: 'C123',
+        thread_ts: '1700000000.000050',
+        text: '​*bold*​ and <https://example.com|link>\n\n•   item one\n•   item two',
+      },
+    ])
+  })
+
+  it('does not convert the success fallback when opencode returns no assistant text (markdown-like fallback would otherwise be mangled)', async () => {
+    const slack = createStubSlackClient()
+    const opencode = createStubOpencodeClient({})
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+      successFallbackText: '(no **assistant** message)',
+    })
+
+    await handler(buildTask())
+
+    expect(slack.posts).toEqual([
+      {
+        channel: 'C123',
+        thread_ts: '1700000000.000050',
+        text: '(no **assistant** message)',
+      },
+    ])
+  })
+
+  it('falls back to the success fallback when the assistant text collapses to empty after slackify conversion (chat.postMessage would otherwise reject with no_text)', async () => {
+    const slack = createStubSlackClient()
+    // HTML comments are stripped by slackify-markdown's removeHtmlComments plugin
+    const opencode = createStubOpencodeClient({ text: '<!-- nothing -->' })
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore()
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+      successFallbackText: '(empty after conversion)',
+    })
+
+    await handler(buildTask())
+
+    expect(slack.posts).toEqual([
+      {
+        channel: 'C123',
+        thread_ts: '1700000000.000050',
+        text: '(empty after conversion)',
+      },
+    ])
+  })
+
   it('uses the thread_session_map entry for resumed threads instead of the stale opencode title', async () => {
     const slack = createStubSlackClient()
     const fetchCalls: string[] = []
