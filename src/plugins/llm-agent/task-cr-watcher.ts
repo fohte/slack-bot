@@ -64,6 +64,14 @@ export const startTaskCrWatcher = (
         )
         return 0
       }
+      // Drop entries for tasks no longer present in the cluster so the
+      // map cannot grow unbounded when CRs are deleted without first
+      // reaching a terminal phase.
+      const activeNames = new Set(tasks.map((t) => t.name))
+      for (const name of lastPhases.keys()) {
+        if (!activeNames.has(name)) lastPhases.delete(name)
+      }
+
       let respondedCount = 0
       for (const task of tasks) {
         if (onPhaseTransition !== undefined) {
@@ -93,10 +101,6 @@ export const startTaskCrWatcher = (
         try {
           const outcome = await handler(task)
           if (outcome === 'responded') respondedCount += 1
-          // Once a task has reached a terminal phase and been handled,
-          // it will not transition again; drop the entry so the map
-          // does not grow unbounded.
-          lastPhases.delete(task.name)
         } catch (error) {
           logger.error(
             {

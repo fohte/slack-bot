@@ -179,7 +179,21 @@ describe('startTaskCrWatcher', () => {
         message: undefined,
       },
     ]
-    const client = createStubTaskCrClient([tick1, tick2, tick3])
+    const tick4: TaskCrStatus[] = [
+      {
+        name: 'slack-aaa',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+      {
+        name: 'slack-bbb',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+    ]
+    const client = createStubTaskCrClient([tick1, tick2, tick3, tick4])
     const transitions: Array<{ name: string; phase: string | undefined }> = []
     const watcher = startTaskCrWatcher({
       taskCrClient: client,
@@ -195,11 +209,19 @@ describe('startTaskCrWatcher', () => {
     const responded1 = await watcher.runOnce()
     const responded2 = await watcher.runOnce()
     const responded3 = await watcher.runOnce()
+    const responded4 = await watcher.runOnce()
 
-    expect({ responded1, responded2, responded3, transitions }).toEqual({
+    expect({
+      responded1,
+      responded2,
+      responded3,
+      responded4,
+      transitions,
+    }).toEqual({
       responded1: 0,
       responded2: 0,
       responded3: 1,
+      responded4: 1,
       transitions: [
         { name: 'slack-aaa', phase: 'Pending' },
         { name: 'slack-bbb', phase: 'Running' },
