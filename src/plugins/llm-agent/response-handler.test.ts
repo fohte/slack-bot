@@ -176,13 +176,18 @@ interface StubThreadSessionStore extends ThreadSessionStore {
 }
 
 const createStubThreadSessionStore = (
-  options: { upsertError?: Error } = {},
+  options: {
+    upsertError?: Error
+    lookupResult?: string | undefined
+    lookupError?: Error
+  } = {},
 ): StubThreadSessionStore => {
   const upserts: ThreadSessionUpsert[] = []
   return {
     upserts,
     async lookup() {
-      return undefined
+      if (options.lookupError !== undefined) throw options.lookupError
+      return options.lookupResult
     },
     async upsert(record) {
       if (options.upsertError !== undefined) throw options.upsertError
@@ -249,6 +254,185 @@ describe('createTaskResponseHandler', () => {
           opencodeSessionId: 'ses_abc',
         },
       ],
+    })
+  })
+
+  it('uses the thread_session_map entry for resumed threads instead of the stale opencode title', async () => {
+    const slack = createStubSlackClient()
+    const fetchCalls: string[] = []
+    const titleCalls: string[] = []
+    const opencode: OpencodeClient = {
+      async fetchLatestAssistantText(sessionId) {
+        fetchCalls.push(sessionId)
+        return 'Resumed answer'
+      },
+      async findSessionIdByTitle(title) {
+        titleCalls.push(title)
+        return undefined
+      },
+    }
+    const eventLog = createStubEventLogStore([
+      [
+        'slack-resumed-task-name',
+        buildRow({ taskName: 'slack-resumed-task-name' }),
+      ],
+    ])
+    const sessions = createStubThreadSessionStore({
+      lookupResult: 'ses_resumed',
+    })
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    const outcome = await handler(
+      buildTask({ name: 'slack-resumed-task-name' }),
+    )
+
+    expect({
+      outcome,
+      posts: slack.posts,
+      responded: eventLog.responded,
+      upserts: sessions.upserts,
+      fetchCalls,
+      titleCalls,
+    }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: 'Resumed answer',
+        },
+      ],
+      responded: ['Ev123'],
+      upserts: [
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000050',
+          opencodeSessionId: 'ses_resumed',
+        },
+      ],
+      fetchCalls: ['ses_resumed'],
+      titleCalls: [],
+    })
+  })
+
+  it('falls back to the opencode title lookup when thread_session_map has no entry', async () => {
+    const slack = createStubSlackClient()
+    const fetchCalls: string[] = []
+    const titleCalls: string[] = []
+    const opencode: OpencodeClient = {
+      async fetchLatestAssistantText(sessionId) {
+        fetchCalls.push(sessionId)
+        return 'First answer'
+      },
+      async findSessionIdByTitle(title) {
+        titleCalls.push(title)
+        return 'ses_first'
+      },
+    }
+    const eventLog = createStubEventLogStore([
+      [
+        'slack-first-task-name',
+        buildRow({ taskName: 'slack-first-task-name' }),
+      ],
+    ])
+    const sessions = createStubThreadSessionStore({ lookupResult: undefined })
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    const outcome = await handler(buildTask({ name: 'slack-first-task-name' }))
+
+    expect({
+      outcome,
+      posts: slack.posts,
+      upserts: sessions.upserts,
+      fetchCalls,
+      titleCalls,
+    }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: 'First answer',
+        },
+      ],
+      upserts: [
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000050',
+          opencodeSessionId: 'ses_first',
+        },
+      ],
+      fetchCalls: ['ses_first'],
+      titleCalls: ['slack-first-task-name'],
+    })
+  })
+
+  it('falls back to the opencode title lookup when thread_session_map lookup throws', async () => {
+    const slack = createStubSlackClient()
+    const fetchCalls: string[] = []
+    const titleCalls: string[] = []
+    const opencode: OpencodeClient = {
+      async fetchLatestAssistantText(sessionId) {
+        fetchCalls.push(sessionId)
+        return 'Recovered answer'
+      },
+      async findSessionIdByTitle(title) {
+        titleCalls.push(title)
+        return 'ses_recovered'
+      },
+    }
+    const eventLog = createStubEventLogStore([
+      ['slack-abcdef0123456789', buildRow()],
+    ])
+    const sessions = createStubThreadSessionStore({
+      lookupError: new Error('db down'),
+    })
+    const handler = createTaskResponseHandler({
+      slackClient: slack,
+      opencodeClient: opencode,
+      eventLogStore: eventLog,
+      threadSessionStore: sessions,
+    })
+
+    const outcome = await handler(buildTask())
+
+    expect({
+      outcome,
+      posts: slack.posts,
+      upserts: sessions.upserts,
+      fetchCalls,
+      titleCalls,
+    }).toEqual({
+      outcome: 'responded',
+      posts: [
+        {
+          channel: 'C123',
+          thread_ts: '1700000000.000050',
+          text: 'Recovered answer',
+        },
+      ],
+      upserts: [
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000050',
+          opencodeSessionId: 'ses_recovered',
+        },
+      ],
+      fetchCalls: ['ses_recovered'],
+      titleCalls: ['slack-abcdef0123456789'],
     })
   })
 
