@@ -22,6 +22,7 @@ import type { SlackWebClient } from '@/slack/web-client'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
+  SlackFile,
 } from '@/types/slack-payloads'
 
 interface RecordingSlackClient extends SlackWebClient {
@@ -161,6 +162,7 @@ const buildAccepted = (
     ts?: string
     threadTs?: string
     text?: string
+    files?: readonly SlackFile[]
   } = {},
 ): LlmAgentAcceptedEvent => {
   const event: SlackAppMentionEvent = {
@@ -172,6 +174,7 @@ const buildAccepted = (
     ...(overrides.threadTs !== undefined
       ? { thread_ts: overrides.threadTs }
       : {}),
+    ...(overrides.files !== undefined ? { files: overrides.files } : {}),
   }
   const envelope: SlackEventCallback = {
     type: 'event_callback',
@@ -512,6 +515,121 @@ describe('createTaskDispatcher', () => {
       statusCalls: [],
       marks: [['Ev-status-fail', taskCrNameForSlackEvent('Ev-status-fail')]],
     })
+  })
+
+  it('appends an image-attachments context summarising image files on the message', async () => {
+    const taskCrClient = createRecordingTaskCrClient('created')
+    const threadSessionStore = createSessionStore()
+    const eventLogStore = createRecordingEventLogStore()
+    const dispatcher = createTaskDispatcher({
+      taskCrClient,
+      threadSessionStore,
+      eventLogStore,
+      slackClient: createRecordingSlackClient(),
+    })
+
+    await dispatcher(
+      buildAccepted({
+        eventId: 'Ev-with-images',
+        threadTs: '1700000000.000050',
+        files: [
+          {
+            id: 'F1',
+            name: 'screenshot.png',
+            mimetype: 'image/png',
+            size: 1024,
+            url_private:
+              'https://files.slack.com/files-pri/T1-F1/screenshot.png',
+          },
+          {
+            id: 'F2',
+            name: 'notes.txt',
+            mimetype: 'text/plain',
+            size: 42,
+            url_private: 'https://files.slack.com/files-pri/T1-F2/notes.txt',
+          },
+          {
+            id: 'F3',
+            name: 'photo.jpg',
+            mimetype: 'image/jpeg',
+            size: 2048,
+            url_private: 'https://files.slack.com/files-pri/T1-F3/photo.jpg',
+          },
+        ],
+      }),
+    )
+
+    const expectedSummary = [
+      'The user attached 2 image(s) to this Slack message. Only this metadata is available; the image bytes themselves are not included.',
+      '- screenshot.png (image/png 1024 bytes)',
+      '- photo.jpg (image/jpeg 2048 bytes)',
+    ].join('\n')
+
+    expect(taskCrClient.created).toEqual([
+      {
+        name: taskCrNameForSlackEvent('Ev-with-images'),
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: 'please help',
+        contexts: [
+          {
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C0123ABCD',
+          },
+          {
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '1700000000.000050',
+          },
+          {
+            name: 'slack-image-attachments',
+            mountPath: 'slack-context/image-attachments',
+            text: expectedSummary,
+          },
+        ],
+      },
+    ])
+  })
+
+  it('omits the image-attachments context when no image files are present', async () => {
+    const taskCrClient = createRecordingTaskCrClient('created')
+    const threadSessionStore = createSessionStore()
+    const eventLogStore = createRecordingEventLogStore()
+    const dispatcher = createTaskDispatcher({
+      taskCrClient,
+      threadSessionStore,
+      eventLogStore,
+      slackClient: createRecordingSlackClient(),
+    })
+
+    await dispatcher(
+      buildAccepted({
+        eventId: 'Ev-text-only-file',
+        threadTs: '1700000000.000050',
+        files: [
+          {
+            id: 'F1',
+            name: 'notes.txt',
+            mimetype: 'text/plain',
+            size: 42,
+          },
+        ],
+      }),
+    )
+
+    expect(taskCrClient.created[0]?.contexts).toEqual([
+      {
+        name: 'slack-channel',
+        mountPath: 'slack-context/channel',
+        text: 'C0123ABCD',
+      },
+      {
+        name: 'slack-thread-ts',
+        mountPath: 'slack-context/thread-ts',
+        text: '1700000000.000050',
+      },
+    ])
   })
 
   it('produces a stable Task CR name from the Slack event_id', () => {

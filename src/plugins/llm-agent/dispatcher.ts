@@ -5,6 +5,7 @@ import {
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
+import { isImageFile } from '@/plugins/llm-agent/files'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import type {
   TaskCrClient,
@@ -14,6 +15,7 @@ import type {
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
 import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
 import type { SlackWebClient } from '@/slack/web-client'
+import type { SlackFile } from '@/types/slack-payloads'
 
 export const DEFAULT_TASK_CR_NAMESPACE = 'kubeopencode'
 export const DEFAULT_TASK_CR_AGENT_NAME = 'slack-bot'
@@ -45,14 +47,31 @@ const extractEventFields = (
   readonly ts?: string | undefined
   readonly threadTs?: string | undefined
   readonly text?: string | undefined
+  readonly files: readonly SlackFile[]
 } => {
-  if (event.type !== 'message' && event.type !== 'app_mention') return {}
+  if (event.type !== 'message' && event.type !== 'app_mention')
+    return { files: [] }
   const channel = typeof event.channel === 'string' ? event.channel : undefined
   const ts = typeof event.ts === 'string' ? event.ts : undefined
   const threadTs =
     typeof event.thread_ts === 'string' ? event.thread_ts : undefined
   const text = typeof event.text === 'string' ? event.text : undefined
-  return { channel, ts, threadTs, text }
+  const files = Array.isArray(event.files) ? event.files : []
+  return { channel, ts, threadTs, text, files }
+}
+
+const buildAttachmentSummary = (images: readonly SlackFile[]): string => {
+  const lines = images.map((f, idx) => {
+    const fallback = f.id ?? `image-${String(idx + 1)}`
+    const name = f.name ?? f.title ?? fallback
+    const mime = f.mimetype ?? 'application/octet-stream'
+    const size = typeof f.size === 'number' ? ` ${String(f.size)} bytes` : ''
+    return `- ${name} (${mime}${size})`
+  })
+  return [
+    `The user attached ${String(images.length)} image(s) to this Slack message. Only this metadata is available; the image bytes themselves are not included.`,
+    ...lines,
+  ].join('\n')
 }
 
 export const createTaskDispatcher = (
@@ -134,6 +153,15 @@ export const createTaskDispatcher = (
       })
     }
 
+    const images = fields.files.filter(isImageFile)
+    if (images.length > 0) {
+      contexts.push({
+        name: 'slack-image-attachments',
+        mountPath: 'slack-context/image-attachments',
+        text: buildAttachmentSummary(images),
+      })
+    }
+
     const taskName = taskCrNameForSlackEvent(eventId)
     const task: TaskCrSpec = {
       name: taskName,
@@ -182,6 +210,7 @@ export const createTaskDispatcher = (
         namespace,
         outcome,
         session_resumed: opencodeSessionId !== undefined,
+        image_count: images.length > 0 ? images.length : undefined,
       },
       outcome === 'created'
         ? 'llm-agent dispatched Task CR'

@@ -6,8 +6,9 @@ import type {
   EventLogOutcome,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
+import { isImageFile } from '@/plugins/llm-agent/files'
 import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
-import type { SlackEvent } from '@/types/slack-payloads'
+import type { SlackEvent, SlackFile } from '@/types/slack-payloads'
 
 export const LLM_AGENT_PLUGIN_NAME = 'llm-agent'
 
@@ -40,13 +41,23 @@ interface ExtractedFields {
   readonly thread_ts?: string | undefined
   readonly channel_type?: string | undefined
   readonly text?: string | undefined
+  readonly file_count?: number | undefined
+  readonly image_count?: number | undefined
 }
 
 const asOptionalString = (value: unknown): string | undefined =>
   typeof value === 'string' ? value : undefined
 
+const extractFiles = (event: SlackEvent): readonly SlackFile[] => {
+  if (event.type !== 'message' && event.type !== 'app_mention') return []
+  const files = event.files
+  return Array.isArray(files) ? (files as readonly SlackFile[]) : []
+}
+
 const extractFields = (event: SlackEvent): ExtractedFields => {
   if (event.type !== 'message' && event.type !== 'app_mention') return {}
+  const files = extractFiles(event)
+  const imageCount = files.filter(isImageFile).length
   return {
     channel: asOptionalString(event.channel),
     user: asOptionalString(event.user),
@@ -54,6 +65,8 @@ const extractFields = (event: SlackEvent): ExtractedFields => {
     thread_ts: asOptionalString(event.thread_ts),
     channel_type: asOptionalString(event.channel_type),
     text: asOptionalString(event.text),
+    file_count: files.length > 0 ? files.length : undefined,
+    image_count: imageCount > 0 ? imageCount : undefined,
   }
 }
 

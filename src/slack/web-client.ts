@@ -36,6 +36,11 @@ export interface ResponseUrlResult {
   readonly raw: unknown
 }
 
+export interface SlackFileDownload {
+  readonly bytes: Uint8Array
+  readonly contentType: string | undefined
+}
+
 export interface SlackWebClient {
   postMessage(arg: ChatPostMessageArguments): Promise<ChatPostMessageResponse>
   updateMessage(arg: ChatUpdateArguments): Promise<ChatUpdateResponse>
@@ -50,6 +55,15 @@ export interface SlackWebClient {
   setAssistantThreadStatus(
     arg: AssistantThreadsSetStatusArguments,
   ): Promise<AssistantThreadsSetStatusResponse>
+  // Downloads a Slack-hosted file (url_private) using the bot token.
+  // Slack file URLs are not publicly accessible; the bot token must be sent
+  // as a Bearer token. Reference: https://docs.slack.dev/authentication/installing-with-oauth#using
+  //
+  // The URL host is checked against `.slack.com` so a tampered url_private
+  // cannot leak the bot token to an attacker-controlled host.
+  //
+  // This method does not honor `maxRetries`; the caller owns retry on 429/5xx.
+  downloadFile(url: string): Promise<SlackFileDownload>
 }
 
 export interface SlackWebClientOptions {
@@ -80,6 +94,47 @@ export const createSlackWebClient = (
       postToResponseUrl(fetchImpl, url, payload),
     setAssistantThreadStatus: (arg) =>
       callMethod(() => client.assistant.threads.setStatus(arg)),
+    downloadFile: (url) => downloadSlackFile(fetchImpl, options.botToken, url),
+  }
+}
+
+const SLACK_FILE_HOST_SUFFIX = '.slack.com'
+
+const downloadSlackFile = async (
+  fetchImpl: typeof fetch,
+  botToken: string,
+  url: string,
+): Promise<SlackFileDownload> => {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new SlackApiError(`invalid slack file URL: ${url}`, {})
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    (parsed.hostname !== 'slack.com' &&
+      !parsed.hostname.endsWith(SLACK_FILE_HOST_SUFFIX))
+  ) {
+    throw new SlackApiError(
+      `refusing to download non-Slack URL: ${parsed.hostname}`,
+      {},
+    )
+  }
+  const response = await fetchImpl(url, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${botToken}` },
+  })
+  if (!response.ok) {
+    throw new SlackApiError(
+      `slack file download failed with HTTP ${String(response.status)}`,
+      { status: response.status },
+    )
+  }
+  const buf = await response.arrayBuffer()
+  return {
+    bytes: new Uint8Array(buf),
+    contentType: response.headers.get('content-type') ?? undefined,
   }
 }
 
