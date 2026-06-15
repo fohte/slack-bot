@@ -172,23 +172,23 @@ export const createTaskResponseHandler = (
         try {
           converted = slackifyMarkdown(assistantText).replace(/\n+$/, '')
         } catch (error) {
-          // Same rationale as the opencode-fetch catch above: a parser bug
-          // would otherwise leave the user with no notification at all.
           logger.error(
             {
               event: 'llm_agent_response_slackify_failed',
               task_name: task.name,
               err: error,
             },
-            'failed to convert assistant text to Slack mrkdwn; falling back to raw text',
+            'failed to convert assistant text to Slack mrkdwn; falling back to escaped raw text',
           )
-          converted = assistantText
+          // escapeMrkdwn so raw `<@U…>` / `<#C…>` / `<!channel>` in the LLM
+          // reply do not turn into live mentions.
+          converted = escapeMrkdwn(assistantText)
         }
       }
-      // Empty converted text would make chat.postMessage reject with no_text
+      // Whitespace-only text would make chat.postMessage reject with no_text
       // and trigger an unmark/retry loop on the same input.
       text =
-        converted !== undefined && converted.length > 0
+        converted !== undefined && converted.trim().length > 0
           ? converted
           : successFallback
     } else {
