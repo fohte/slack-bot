@@ -1,3 +1,5 @@
+import { slackifyMarkdown } from 'slackify-markdown'
+
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import {
@@ -162,7 +164,33 @@ export const createTaskResponseHandler = (
           'opencode session not found for Completed Task; terminating with placeholder',
         )
       }
-      text = assistantText ?? successFallback
+      // LLM output uses CommonMark/GFM; Slack mrkdwn is a different dialect.
+      // slackifyMarkdown always appends a trailing newline (remark-stringify),
+      // so trim it.
+      let converted: string | undefined
+      if (assistantText !== undefined) {
+        try {
+          converted = slackifyMarkdown(assistantText).replace(/\n+$/, '')
+        } catch (error) {
+          logger.error(
+            {
+              event: 'llm_agent_response_slackify_failed',
+              task_name: task.name,
+              err: error,
+            },
+            'failed to convert assistant text to Slack mrkdwn; falling back to escaped raw text',
+          )
+          // escapeMrkdwn so raw `<@U…>` / `<#C…>` / `<!channel>` in the LLM
+          // reply do not turn into live mentions.
+          converted = escapeMrkdwn(assistantText)
+        }
+      }
+      // Whitespace-only text would make chat.postMessage reject with no_text
+      // and trigger an unmark/retry loop on the same input.
+      text =
+        converted !== undefined && converted.trim().length > 0
+          ? converted
+          : successFallback
     } else {
       text = formatFailureText(task)
     }
