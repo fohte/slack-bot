@@ -136,6 +136,174 @@ describe('startTaskCrWatcher', () => {
     await expect(watcher.runOnce()).resolves.toBe(0)
   })
 
+  it('invokes onPhaseTransition only when a Task CR phase changes between ticks', async () => {
+    const tick1: TaskCrStatus[] = [
+      {
+        name: 'slack-aaa',
+        namespace: 'kubeopencode',
+        phase: 'Pending',
+        message: undefined,
+      },
+      {
+        name: 'slack-bbb',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+    ]
+    const tick2: TaskCrStatus[] = [
+      {
+        name: 'slack-aaa',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+      {
+        name: 'slack-bbb',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+    ]
+    const tick3: TaskCrStatus[] = [
+      {
+        name: 'slack-aaa',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+      {
+        name: 'slack-bbb',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+    ]
+    const tick4: TaskCrStatus[] = [
+      {
+        name: 'slack-aaa',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+      {
+        name: 'slack-bbb',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+    ]
+    const client = createStubTaskCrClient([tick1, tick2, tick3, tick4])
+    const transitions: Array<{ name: string; phase: string | undefined }> = []
+    const watcher = startTaskCrWatcher({
+      taskCrClient: client,
+      handler: async () => 'responded',
+      onPhaseTransition: (task) => {
+        transitions.push({ name: task.name, phase: task.phase })
+      },
+      namespace: 'kubeopencode',
+      setIntervalImpl: noopSetInterval,
+      clearIntervalImpl: noopClearInterval,
+    })
+
+    const responded1 = await watcher.runOnce()
+    const responded2 = await watcher.runOnce()
+    const responded3 = await watcher.runOnce()
+    const responded4 = await watcher.runOnce()
+
+    expect({
+      responded1,
+      responded2,
+      responded3,
+      responded4,
+      transitions,
+    }).toEqual({
+      responded1: 0,
+      responded2: 0,
+      responded3: 1,
+      responded4: 1,
+      transitions: [
+        { name: 'slack-aaa', phase: 'Pending' },
+        { name: 'slack-bbb', phase: 'Running' },
+        { name: 'slack-aaa', phase: 'Running' },
+        { name: 'slack-aaa', phase: 'Completed' },
+      ],
+    })
+  })
+
+  it('retries onPhaseTransition on the next tick when a previous invocation threw', async () => {
+    const tasks: TaskCrStatus[] = [
+      {
+        name: 'slack-aaa',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+    ]
+    const client = createStubTaskCrClient([tasks, tasks])
+    let attempts = 0
+    const observed: Array<{ name: string; phase: string | undefined }> = []
+    const watcher = startTaskCrWatcher({
+      taskCrClient: client,
+      handler: async () => 'responded',
+      onPhaseTransition: (task) => {
+        attempts += 1
+        if (attempts === 1) throw new Error('boom')
+        observed.push({ name: task.name, phase: task.phase })
+      },
+      namespace: 'kubeopencode',
+      setIntervalImpl: noopSetInterval,
+      clearIntervalImpl: noopClearInterval,
+    })
+
+    await watcher.runOnce()
+    await watcher.runOnce()
+
+    expect({ attempts, observed }).toEqual({
+      attempts: 2,
+      observed: [{ name: 'slack-aaa', phase: 'Running' }],
+    })
+  })
+
+  it('continues processing remaining Tasks when onPhaseTransition throws', async () => {
+    const tasks: TaskCrStatus[] = [
+      {
+        name: 'slack-aaa',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+      {
+        name: 'slack-bbb',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+    ]
+    const client = createStubTaskCrClient([tasks])
+    const handled: string[] = []
+    const watcher = startTaskCrWatcher({
+      taskCrClient: client,
+      handler: async (task) => {
+        handled.push(task.name)
+        return 'responded'
+      },
+      onPhaseTransition: () => {
+        throw new Error('boom')
+      },
+      namespace: 'kubeopencode',
+      setIntervalImpl: noopSetInterval,
+      clearIntervalImpl: noopClearInterval,
+    })
+
+    const responded = await watcher.runOnce()
+
+    expect({ responded, handled }).toEqual({
+      responded: 1,
+      handled: ['slack-bbb'],
+    })
+  })
+
   it('resyncs on startup by processing terminal Tasks on the first tick', async () => {
     const tasks: TaskCrStatus[] = [
       {

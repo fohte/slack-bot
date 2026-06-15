@@ -14,6 +14,7 @@ import {
   createLlmAgentPlugin,
   createOpencodeClient,
   createTaskDispatcher,
+  createTaskPhaseStatusHandler,
   createTaskResponseHandler,
   createThreadSessionStore,
   DEFAULT_TASK_CR_NAMESPACE,
@@ -64,9 +65,15 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     threadSessionStore,
     logger,
   })
+  const phaseStatusHandler = createTaskPhaseStatusHandler({
+    slackClient,
+    eventLogStore,
+    logger,
+  })
   startTaskCrWatcher({
     taskCrClient,
     handler: responseHandler,
+    onPhaseTransition: phaseStatusHandler,
     namespace: DEFAULT_TASK_CR_NAMESPACE,
     logger,
   })

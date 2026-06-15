@@ -1,10 +1,13 @@
 export type {
   AssistantStatusTarget,
+  PhaseStatus,
   SetAssistantStatusOptions,
 } from '@/plugins/llm-agent/assistant-status'
 export {
   CLEAR_STATUS,
   DEFAULT_THINKING_STATUS,
+  INITIAL_PHASE_STATUS,
+  statusForPhase,
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 export type {
@@ -41,6 +44,11 @@ export {
   DEFAULT_OPENCODE_BASE_URL,
 } from '@/plugins/llm-agent/opencode-client'
 export type {
+  TaskPhaseStatusHandler,
+  TaskPhaseStatusHandlerOptions,
+} from '@/plugins/llm-agent/phase-status-handler'
+export { createTaskPhaseStatusHandler } from '@/plugins/llm-agent/phase-status-handler'
+export type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
 } from '@/plugins/llm-agent/plugin'
@@ -73,6 +81,7 @@ export {
 export type {
   TaskCrWatcherHandle,
   TaskCrWatcherOptions,
+  TaskPhaseTransitionHandler,
 } from '@/plugins/llm-agent/task-cr-watcher'
 export {
   DEFAULT_TASK_WATCH_INTERVAL_MS,

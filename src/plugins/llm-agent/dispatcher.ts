@@ -1,7 +1,7 @@
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import {
-  DEFAULT_THINKING_STATUS,
+  INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
@@ -24,6 +24,7 @@ export interface TaskDispatcherOptions {
   readonly eventLogStore: EventLogStore
   readonly slackClient: SlackWebClient
   readonly thinkingStatus?: string | undefined
+  readonly thinkingLoadingMessages?: readonly string[] | undefined
   readonly namespace?: string | undefined
   readonly agentName?: string | undefined
   readonly logger?: Logger | undefined
@@ -61,7 +62,9 @@ export const createTaskDispatcher = (
   const logger = options.logger ?? noopLogger
   const namespace = options.namespace ?? DEFAULT_TASK_CR_NAMESPACE
   const agentName = options.agentName ?? DEFAULT_TASK_CR_AGENT_NAME
-  const thinkingStatus = options.thinkingStatus ?? DEFAULT_THINKING_STATUS
+  const thinkingStatus = options.thinkingStatus ?? INITIAL_PHASE_STATUS.status
+  const thinkingLoadingMessages =
+    options.thinkingLoadingMessages ?? INITIAL_PHASE_STATUS.loadingMessages
   const { taskCrClient, threadSessionStore, eventLogStore, slackClient } =
     options
 
@@ -103,6 +106,7 @@ export const createTaskDispatcher = (
       slackClient,
       target: { channelId: channel, threadTs: threadRootTs },
       status: thinkingStatus,
+      loadingMessages: thinkingLoadingMessages,
       logger,
     })
 
