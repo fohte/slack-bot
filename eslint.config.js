@@ -22,7 +22,7 @@ export default config(
     },
   },
   {
-    files: ['**/*.test.ts', 'tests/**/*.ts'],
+    files: ['**/*.test.ts', '**/_test-utils.ts', 'tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-type-assertion': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',

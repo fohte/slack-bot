@@ -34,7 +34,7 @@ export const makeSlack = (
     pushView: vi.fn(),
     postToResponseUrl,
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- partial mock intentionally cast to the full client shape for tests
+
   return { client: partial as SlackWebClient, postToResponseUrl }
 }
 

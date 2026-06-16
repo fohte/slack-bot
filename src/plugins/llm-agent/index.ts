@@ -7,7 +7,6 @@ export {
   CLEAR_STATUS,
   DEFAULT_THINKING_STATUS,
   INITIAL_PHASE_STATUS,
-  statusForPhase,
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 export type {
@@ -16,8 +15,7 @@ export type {
 } from '@/plugins/llm-agent/dispatcher'
 export {
   createTaskDispatcher,
-  DEFAULT_TASK_CR_AGENT_NAME,
-  DEFAULT_TASK_CR_NAMESPACE,
+  envelopeFromAccepted,
 } from '@/plugins/llm-agent/dispatcher'
 export type {
   EventLogRetentionHandle,
@@ -44,11 +42,6 @@ export {
   DEFAULT_OPENCODE_BASE_URL,
 } from '@/plugins/llm-agent/opencode-client'
 export type {
-  TaskPhaseStatusHandler,
-  TaskPhaseStatusHandlerOptions,
-} from '@/plugins/llm-agent/phase-status-handler'
-export { createTaskPhaseStatusHandler } from '@/plugins/llm-agent/phase-status-handler'
-export type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
 } from '@/plugins/llm-agent/plugin'
@@ -59,11 +52,26 @@ export {
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
 export type {
-  TaskResponseHandler,
-  TaskResponseHandlerOptions,
-  TaskResponseOutcome,
-} from '@/plugins/llm-agent/response-handler'
-export { createTaskResponseHandler } from '@/plugins/llm-agent/response-handler'
+  ProcessMentionDeps,
+  SlackEnvelope,
+  SubmitTaskResult,
+  TerminalOutcome,
+  WaitForCompletionOptions,
+} from '@/plugins/llm-agent/process-mention'
+export {
+  bubbleForK8sPhase,
+  DEFAULT_POLL_INTERVAL_MS,
+  DEFAULT_SUCCESS_FALLBACK,
+  DEFAULT_TASK_CR_AGENT_NAME,
+  DEFAULT_TASK_CR_NAMESPACE,
+  PREPARING_BUBBLE,
+  processMention,
+  QUEUED_BUBBLE,
+  respond,
+  RUNNING_BUBBLE,
+  submitTask,
+  waitForCompletion,
+} from '@/plugins/llm-agent/process-mention'
 export type {
   TaskCrClient,
   TaskCrContext,
@@ -78,15 +86,6 @@ export {
   parseTaskCrItem,
   taskCrNameForSlackEvent,
 } from '@/plugins/llm-agent/task-cr-client'
-export type {
-  TaskCrWatcherHandle,
-  TaskCrWatcherOptions,
-  TaskPhaseTransitionHandler,
-} from '@/plugins/llm-agent/task-cr-watcher'
-export {
-  DEFAULT_TASK_WATCH_INTERVAL_MS,
-  startTaskCrWatcher,
-} from '@/plugins/llm-agent/task-cr-watcher'
 export type {
   ThreadSessionKey,
   ThreadSessionStore,
