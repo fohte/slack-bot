@@ -14,11 +14,8 @@ import {
   createLlmAgentPlugin,
   createOpencodeClient,
   createTaskDispatcher,
-  createTaskResponseHandler,
   createThreadSessionStore,
-  DEFAULT_TASK_CR_NAMESPACE,
   startEventLogRetention,
-  startTaskCrWatcher,
 } from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
@@ -54,22 +51,6 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
   const eventLogStore = createEventLogStore(db)
   const threadSessionStore = createThreadSessionStore(db)
   startEventLogRetention({ eventLogStore, logger })
-
-  const taskCrClient = createKubernetesTaskCrClient()
-  const opencodeClient = createOpencodeClient()
-  const responseHandler = createTaskResponseHandler({
-    slackClient,
-    opencodeClient,
-    eventLogStore,
-    threadSessionStore,
-    logger,
-  })
-  startTaskCrWatcher({
-    taskCrClient,
-    handler: responseHandler,
-    namespace: DEFAULT_TASK_CR_NAMESPACE,
-    logger,
-  })
 
   const deps: PluginDeps = {
     config,
@@ -117,8 +98,10 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
     plugins: [
       ({ config, logger, slackClient, eventLogStore, threadSessionStore }) => {
         const taskCrClient = createKubernetesTaskCrClient()
+        const opencodeClient = createOpencodeClient()
         const onAccepted = createTaskDispatcher({
           taskCrClient,
+          opencodeClient,
           threadSessionStore,
           eventLogStore,
           slackClient,

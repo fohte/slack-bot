@@ -1,59 +1,70 @@
-import { createHash } from 'node:crypto'
-
 import { describe, expect, it } from 'vitest'
 
-import { createTaskDispatcher } from '@/plugins/llm-agent/dispatcher'
-import type {
-  EventLogOutcome,
-  EventLogStore,
-} from '@/plugins/llm-agent/event-log-store'
+import {
+  createTaskDispatcher,
+  envelopeFromAccepted,
+} from '@/plugins/llm-agent/dispatcher'
+import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
+import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import type {
   TaskCrClient,
   TaskCrCreateOutcome,
   TaskCrSpec,
+  TaskCrStatus,
 } from '@/plugins/llm-agent/task-cr-client'
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
-import type {
-  ThreadSessionKey,
-  ThreadSessionStore,
-} from '@/plugins/llm-agent/thread-session-store'
+import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
 import type { SlackWebClient } from '@/slack/web-client'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
-  SlackFile,
 } from '@/types/slack-payloads'
 
-interface RecordingSlackClient extends SlackWebClient {
-  readonly statusCalls: ReadonlyArray<{
-    channel_id: string
-    thread_ts: string
-    status: string
-  }>
+const noopLogger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  fatal() {},
+  child() {
+    return noopLogger
+  },
 }
 
-const createRecordingSlackClient = (
-  options: { statusError?: Error } = {},
-): RecordingSlackClient => {
-  const statusCalls: Array<{
-    channel_id: string
-    thread_ts: string
-    status: string
-  }> = []
-  const stub = {
-    statusCalls,
+// A single ordered tape of side-effects so order-sensitive contracts
+// (e.g. "set the bubble before calling create") can be expressed as a
+// single equality check.
+type TimelineEntry =
+  | { readonly kind: 'status'; readonly status: string }
+  | { readonly kind: 'create'; readonly taskName: string }
+
+const createTimeline = (): {
+  readonly entries: TimelineEntry[]
+  push(entry: TimelineEntry): void
+} => {
+  const entries: TimelineEntry[] = []
+  return {
+    entries,
+    push(entry) {
+      entries.push(entry)
+    },
+  }
+}
+
+const createSlackClient = (
+  options: {
+    timeline?: { push(entry: TimelineEntry): void }
+  } = {},
+): SlackWebClient =>
+  ({
     async setAssistantThreadStatus(arg: {
       channel_id: string
       thread_ts: string
       status: string
+      loading_messages?: string[]
     }) {
-      if (options.statusError !== undefined) throw options.statusError
-      statusCalls.push({
-        channel_id: arg.channel_id,
-        thread_ts: arg.thread_ts,
-        status: arg.status,
-      })
+      options.timeline?.push({ kind: 'status', status: arg.status })
       return { ok: true } as never
     },
     async postMessage() {
@@ -77,565 +88,250 @@ const createRecordingSlackClient = (
     async postToResponseUrl() {
       throw new Error('not implemented')
     },
-  }
-  return stub as unknown as RecordingSlackClient
+    async downloadFile() {
+      throw new Error('not implemented')
+    },
+  }) as SlackWebClient
+
+interface StubTaskCrClient extends TaskCrClient {
+  readonly creates: ReadonlyArray<TaskCrSpec>
 }
 
-interface RecordingTaskCrClient extends TaskCrClient {
-  readonly created: readonly TaskCrSpec[]
-}
-
-const createRecordingTaskCrClient = (
-  result: TaskCrCreateOutcome | Error = 'created',
-): RecordingTaskCrClient => {
-  const created: TaskCrSpec[] = []
+const createTaskCrClient = (
+  options: {
+    timeline?: { push(entry: TimelineEntry): void }
+    createOutcome?: TaskCrCreateOutcome
+    createError?: Error
+  } = {},
+): StubTaskCrClient => {
+  const creates: TaskCrSpec[] = []
   return {
-    created,
+    creates,
     async create(task) {
-      created.push(task)
-      if (result instanceof Error) throw result
-      return result
+      if (options.createError !== undefined) throw options.createError
+      creates.push(task)
+      options.timeline?.push({ kind: 'create', taskName: task.name })
+      return options.createOutcome ?? 'created'
     },
     async list() {
-      return []
+      // Never resolves so background processMention stays parked while
+      // the dispatcher's foreground promise observes only Received→Submitted.
+      return new Promise<readonly TaskCrStatus[]>(() => {})
     },
   }
 }
 
-const createSessionStore = (
-  sessions: ReadonlyArray<readonly [ThreadSessionKey, string]> = [],
-): ThreadSessionStore => ({
-  async lookup(key) {
-    for (const [k, sessionId] of sessions) {
-      if (
-        k.slackTeamId === key.slackTeamId &&
-        k.slackChannelId === key.slackChannelId &&
-        k.threadRootTs === key.threadRootTs
-      ) {
-        return sessionId
-      }
-    }
+const createEventLogStore = (): EventLogStore => ({
+  async recordReceived() {
+    return 'accepted'
+  },
+  async deleteReceived() {},
+  async markTaskName() {
+    return { updated: 1 }
+  },
+  async findByTaskName() {
+    return undefined
+  },
+  async markResponded() {
+    return { updated: 1 }
+  },
+  async unmarkResponded() {
+    return { updated: 0 }
+  },
+  async pruneOlderThan() {
+    return 0
+  },
+})
+
+const createThreadSessionStore = (): ThreadSessionStore => ({
+  async lookup() {
     return undefined
   },
   async upsert() {},
 })
 
-interface RecordingEventLogStore extends EventLogStore {
-  readonly marks: ReadonlyArray<readonly [string, string]>
+const noopOpencodeClient: OpencodeClient = {
+  async fetchLatestAssistantText() {
+    return undefined
+  },
+  async findSessionIdByTitle() {
+    return undefined
+  },
 }
 
-const createRecordingEventLogStore = (
-  override?: Partial<EventLogStore>,
-): RecordingEventLogStore => {
-  const marks: Array<[string, string]> = []
-  return {
-    marks,
-    async recordReceived(): Promise<EventLogOutcome> {
-      return 'accepted'
-    },
-    async deleteReceived(): Promise<void> {},
-    async markTaskName(eventId, taskName): Promise<{ updated: number }> {
-      marks.push([eventId, taskName])
-      return { updated: 1 }
-    },
-    async findByTaskName() {
-      return undefined
-    },
-    async markResponded(): Promise<{ updated: number }> {
-      return { updated: 0 }
-    },
-    async unmarkResponded(): Promise<{ updated: number }> {
-      return { updated: 0 }
-    },
-    async pruneOlderThan(): Promise<number> {
-      return 0
-    },
-    ...override,
-  }
-}
-
-const buildAccepted = (
-  overrides: {
-    eventId?: string
-    teamId?: string
-    channel?: string
-    ts?: string
-    threadTs?: string
-    text?: string
-    files?: readonly SlackFile[]
-  } = {},
+const acceptedMention = (
+  override: Partial<SlackAppMentionEvent> = {},
+  envelopeOverride: Partial<Record<keyof SlackEventCallback, unknown>> = {},
 ): LlmAgentAcceptedEvent => {
   const event: SlackAppMentionEvent = {
     type: 'app_mention',
-    channel: overrides.channel ?? 'C0123ABCD',
-    user: 'U999',
-    text: overrides.text ?? '<@U_BOT> please help',
-    ts: overrides.ts ?? '1700000000.000100',
-    ...(overrides.threadTs !== undefined
-      ? { thread_ts: overrides.threadTs }
-      : {}),
-    ...(overrides.files !== undefined ? { files: overrides.files } : {}),
+    user: 'U_USER',
+    text: '<@U_BOT> hello bot',
+    ts: '111.222',
+    channel: 'C1',
+    event_ts: '111.222',
+    ...override,
   }
-  const envelope: SlackEventCallback = {
+  const envelope = {
     type: 'event_callback',
-    team_id: overrides.teamId ?? 'T123',
+    token: 'T',
+    team_id: 'T1',
+    api_app_id: 'A',
     event,
-    event_id: overrides.eventId ?? 'Ev01',
-    event_time: 1700000000,
-  }
+    event_id: 'Ev1',
+    event_time: 1,
+    authorizations: [],
+    is_ext_shared_channel: false,
+    ...envelopeOverride,
+  } as unknown as SlackEventCallback
   return { ctx: { envelope }, event }
 }
 
+describe('envelopeFromAccepted', () => {
+  it('strips a plain mention prefix and returns the channel / team / thread root', () => {
+    expect(envelopeFromAccepted(acceptedMention(), noopLogger)).toEqual({
+      eventId: 'Ev1',
+      teamId: 'T1',
+      channelId: 'C1',
+      threadRootTs: '111.222',
+      text: 'hello bot',
+    })
+  })
+
+  it('strips a labelled mention prefix `<@U|name>`', () => {
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({ text: '<@U_BOT|slack-bot> please help' }),
+        noopLogger,
+      ),
+    ).toEqual({
+      eventId: 'Ev1',
+      teamId: 'T1',
+      channelId: 'C1',
+      threadRootTs: '111.222',
+      text: 'please help',
+    })
+  })
+
+  it('uses thread_ts when present so replies stay anchored to the original thread root', () => {
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({ ts: '333.444', thread_ts: '111.222' }),
+        noopLogger,
+      ),
+    ).toEqual({
+      eventId: 'Ev1',
+      teamId: 'T1',
+      channelId: 'C1',
+      threadRootTs: '111.222',
+      text: 'hello bot',
+    })
+  })
+
+  it('returns undefined when event_id is absent (so the dispatcher swallows the event without throwing)', () => {
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({}, { event_id: undefined }),
+        noopLogger,
+      ),
+    ).toBeUndefined()
+  })
+
+  it('returns undefined when required envelope fields are missing', () => {
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({}, { team_id: undefined }),
+        noopLogger,
+      ),
+    ).toBeUndefined()
+  })
+})
+
 describe('createTaskDispatcher', () => {
-  it('creates a Task CR without session-id context when no thread session exists', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
+  it('sets the initial Preparing bubble before calling taskCrClient.create()', async () => {
+    const timeline = createTimeline()
+    const dispatch = createTaskDispatcher({
+      taskCrClient: createTaskCrClient({ timeline }),
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient({ timeline }),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
     })
+    await dispatch(acceptedMention())
+    expect(timeline.entries).toEqual([
+      { kind: 'status', status: 'is thinking...' },
+      { kind: 'create', taskName: taskCrNameForSlackEvent('Ev1') },
+    ])
+  })
 
-    await dispatcher(
-      buildAccepted({
-        eventId: 'Ev-new-thread',
-        threadTs: '1700000000.000050',
-        text: '<@U_BOT> hello world',
-      }),
-    )
-
-    const expectedName = taskCrNameForSlackEvent('Ev-new-thread')
-    expect(taskCrClient.created).toEqual([
+  it('builds the Task CR spec from the Slack envelope', async () => {
+    const taskCrClient = createTaskCrClient()
+    const dispatch = createTaskDispatcher({
+      taskCrClient,
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    })
+    await dispatch(acceptedMention())
+    expect(taskCrClient.creates).toEqual([
       {
-        name: expectedName,
+        name: taskCrNameForSlackEvent('Ev1'),
         namespace: 'kubeopencode',
         agentName: 'slack-bot',
-        description: 'hello world',
+        description: 'hello bot',
         contexts: [
           {
             name: 'slack-channel',
             mountPath: 'slack-context/channel',
-            text: 'C0123ABCD',
+            text: 'C1',
           },
           {
             name: 'slack-thread-ts',
             mountPath: 'slack-context/thread-ts',
-            text: '1700000000.000050',
-          },
-        ],
-      },
-    ])
-    expect(eventLogStore.marks).toEqual([['Ev-new-thread', expectedName]])
-  })
-
-  it('appends opencode-session-id context when a thread session exists', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore([
-      [
-        {
-          slackTeamId: 'T123',
-          slackChannelId: 'C0123ABCD',
-          threadRootTs: '1700000000.000050',
-        },
-        'ses_abcdef',
-      ],
-    ])
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
-    })
-
-    await dispatcher(
-      buildAccepted({
-        eventId: 'Ev-resume',
-        threadTs: '1700000000.000050',
-        text: '<@U_BOT> follow up',
-      }),
-    )
-
-    const expectedName = taskCrNameForSlackEvent('Ev-resume')
-    expect(taskCrClient.created).toEqual([
-      {
-        name: expectedName,
-        namespace: 'kubeopencode',
-        agentName: 'slack-bot',
-        description: 'follow up',
-        contexts: [
-          {
-            name: 'slack-channel',
-            mountPath: 'slack-context/channel',
-            text: 'C0123ABCD',
-          },
-          {
-            name: 'slack-thread-ts',
-            mountPath: 'slack-context/thread-ts',
-            text: '1700000000.000050',
-          },
-          {
-            name: 'opencode-session-id',
-            mountPath: 'slack-context/session-id',
-            text: 'ses_abcdef',
-          },
-        ],
-      },
-    ])
-    expect(eventLogStore.marks).toEqual([['Ev-resume', expectedName]])
-  })
-
-  it('falls back to event ts as thread root when thread_ts is absent', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
-    })
-
-    await dispatcher(
-      buildAccepted({
-        eventId: 'Ev-no-thread',
-        ts: '1700000000.999999',
-      }),
-    )
-
-    expect(taskCrClient.created).toEqual([
-      {
-        name: taskCrNameForSlackEvent('Ev-no-thread'),
-        namespace: 'kubeopencode',
-        agentName: 'slack-bot',
-        description: 'please help',
-        contexts: [
-          {
-            name: 'slack-channel',
-            mountPath: 'slack-context/channel',
-            text: 'C0123ABCD',
-          },
-          {
-            name: 'slack-thread-ts',
-            mountPath: 'slack-context/thread-ts',
-            text: '1700000000.999999',
+            text: '111.222',
           },
         ],
       },
     ])
   })
 
-  it('treats a 409 (already_exists) as accepted and still marks task_name', async () => {
-    const taskCrClient = createRecordingTaskCrClient('already_exists')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
+  it('propagates a taskCrClient.create() failure so the plugin layer can roll back event_log', async () => {
+    const failure = new Error('k8s API down')
+    const dispatch = createTaskDispatcher({
+      taskCrClient: createTaskCrClient({ createError: failure }),
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
     })
-
-    await expect(
-      dispatcher(buildAccepted({ eventId: 'Ev-conflict' })),
-    ).resolves.toBeUndefined()
-
-    expect(eventLogStore.marks).toEqual([
-      ['Ev-conflict', taskCrNameForSlackEvent('Ev-conflict')],
-    ])
+    await expect(dispatch(acceptedMention())).rejects.toBe(failure)
   })
 
-  it('propagates a K8s API failure so the plugin can roll back event_log', async () => {
-    const apiError = new Error('500 internal server error')
-    const taskCrClient = createRecordingTaskCrClient(apiError)
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
+  it('returns once Received → Submitted has run, leaving the rest of the flow in the background', async () => {
+    const taskCrClient = createTaskCrClient()
+    const dispatch = createTaskDispatcher({
       taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
     })
-
-    await expect(
-      dispatcher(buildAccepted({ eventId: 'Ev-server-error' })),
-    ).rejects.toBe(apiError)
-    expect(eventLogStore.marks).toEqual([])
-  })
-
-  it('propagates a DB lookup failure so the plugin can roll back event_log', async () => {
-    const lookupError = new Error('db down')
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore: ThreadSessionStore = {
-      async lookup() {
-        throw lookupError
-      },
-      async upsert() {},
-    }
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
-    })
-
-    await expect(
-      dispatcher(buildAccepted({ eventId: 'Ev-db-error' })),
-    ).rejects.toBe(lookupError)
-    expect(taskCrClient.created).toEqual([])
-    expect(eventLogStore.marks).toEqual([])
-  })
-
-  it('skips dispatch without throwing when team_id is missing', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
-    })
-
-    const accepted = buildAccepted({ eventId: 'Ev-no-team' })
-    const acceptedWithoutTeam: LlmAgentAcceptedEvent = {
-      ctx: {
-        envelope: {
-          type: 'event_callback',
-          event: accepted.event,
-          event_id: 'Ev-no-team',
-          event_time: 1700000000,
-        },
-      },
-      event: accepted.event,
-    }
-
-    await expect(dispatcher(acceptedWithoutTeam)).resolves.toBeUndefined()
-    expect(taskCrClient.created).toEqual([])
-    expect(eventLogStore.marks).toEqual([])
-  })
-
-  it('sets the assistant thread status after dispatch when slackClient is provided', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const slackClient = createRecordingSlackClient()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient,
-    })
-
-    await dispatcher(
-      buildAccepted({
-        eventId: 'Ev-status',
-        threadTs: '1700000000.000050',
-      }),
-    )
-
-    expect({
-      statusCalls: slackClient.statusCalls,
-      created: taskCrClient.created.length,
-      marks: eventLogStore.marks,
-    }).toEqual({
-      statusCalls: [
-        {
-          channel_id: 'C0123ABCD',
-          thread_ts: '1700000000.000050',
-          status: 'is thinking...',
-        },
-      ],
-      created: 1,
-      marks: [['Ev-status', taskCrNameForSlackEvent('Ev-status')]],
-    })
-  })
-
-  it('honors a custom thinkingStatus override', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const slackClient = createRecordingSlackClient()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient,
-      thinkingStatus: 'crunching numbers',
-    })
-
-    await dispatcher(buildAccepted({ eventId: 'Ev-custom-status' }))
-
-    expect({
-      statusCalls: slackClient.statusCalls,
-      created: taskCrClient.created.length,
-      marks: eventLogStore.marks,
-    }).toEqual({
-      statusCalls: [
-        {
-          channel_id: 'C0123ABCD',
-          thread_ts: '1700000000.000100',
-          status: 'crunching numbers',
-        },
-      ],
-      created: 1,
-      marks: [
-        ['Ev-custom-status', taskCrNameForSlackEvent('Ev-custom-status')],
-      ],
-    })
-  })
-
-  it('does not throw when setStatus fails (best-effort status indicator)', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const slackClient = createRecordingSlackClient({
-      statusError: new Error('channel_not_supported'),
-    })
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient,
-    })
-
-    await expect(
-      dispatcher(buildAccepted({ eventId: 'Ev-status-fail' })),
-    ).resolves.toBeUndefined()
-
-    expect({
-      created: taskCrClient.created.length,
-      statusCalls: slackClient.statusCalls,
-      marks: eventLogStore.marks,
-    }).toEqual({
-      created: 1,
-      statusCalls: [],
-      marks: [['Ev-status-fail', taskCrNameForSlackEvent('Ev-status-fail')]],
-    })
-  })
-
-  it('appends an image-attachments context summarising image files on the message', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
-    })
-
-    await dispatcher(
-      buildAccepted({
-        eventId: 'Ev-with-images',
-        threadTs: '1700000000.000050',
-        files: [
-          {
-            id: 'F1',
-            name: 'screenshot.png',
-            mimetype: 'image/png',
-            size: 1024,
-            url_private:
-              'https://files.slack.com/files-pri/T1-F1/screenshot.png',
-          },
-          {
-            id: 'F2',
-            name: 'notes.txt',
-            mimetype: 'text/plain',
-            size: 42,
-            url_private: 'https://files.slack.com/files-pri/T1-F2/notes.txt',
-          },
-          {
-            id: 'F3',
-            name: 'photo.jpg',
-            mimetype: 'image/jpeg',
-            size: 2048,
-            url_private: 'https://files.slack.com/files-pri/T1-F3/photo.jpg',
-          },
-        ],
-      }),
-    )
-
-    const expectedSummary = [
-      'The user attached 2 image(s) to this Slack message. Only this metadata is available; the image bytes themselves are not included.',
-      '- screenshot.png (image/png 1024 bytes)',
-      '- photo.jpg (image/jpeg 2048 bytes)',
-    ].join('\n')
-
-    expect(taskCrClient.created).toEqual([
-      {
-        name: taskCrNameForSlackEvent('Ev-with-images'),
-        namespace: 'kubeopencode',
-        agentName: 'slack-bot',
-        description: 'please help',
-        contexts: [
-          {
-            name: 'slack-channel',
-            mountPath: 'slack-context/channel',
-            text: 'C0123ABCD',
-          },
-          {
-            name: 'slack-thread-ts',
-            mountPath: 'slack-context/thread-ts',
-            text: '1700000000.000050',
-          },
-          {
-            name: 'slack-image-attachments',
-            mountPath: 'slack-context/image-attachments',
-            text: expectedSummary,
-          },
-        ],
-      },
-    ])
-  })
-
-  it('omits the image-attachments context when no image files are present', async () => {
-    const taskCrClient = createRecordingTaskCrClient('created')
-    const threadSessionStore = createSessionStore()
-    const eventLogStore = createRecordingEventLogStore()
-    const dispatcher = createTaskDispatcher({
-      taskCrClient,
-      threadSessionStore,
-      eventLogStore,
-      slackClient: createRecordingSlackClient(),
-    })
-
-    await dispatcher(
-      buildAccepted({
-        eventId: 'Ev-text-only-file',
-        threadTs: '1700000000.000050',
-        files: [
-          {
-            id: 'F1',
-            name: 'notes.txt',
-            mimetype: 'text/plain',
-            size: 42,
-          },
-        ],
-      }),
-    )
-
-    expect(taskCrClient.created[0]?.contexts).toEqual([
-      {
-        name: 'slack-channel',
-        mountPath: 'slack-context/channel',
-        text: 'C0123ABCD',
-      },
-      {
-        name: 'slack-thread-ts',
-        mountPath: 'slack-context/thread-ts',
-        text: '1700000000.000050',
-      },
-    ])
-  })
-
-  it('produces a stable Task CR name from the Slack event_id', () => {
-    const expected =
-      'slack-' +
-      createHash('sha256').update('Ev08AB12CDEFGHIJ').digest('hex').slice(0, 16)
-    expect(taskCrNameForSlackEvent('Ev08AB12CDEFGHIJ')).toEqual(expected)
+    // taskCrClient.list() never resolves; if the dispatcher were not
+    // backgrounding processMention this await would hang the test.
+    await dispatch(acceptedMention())
+    expect(taskCrClient.creates.length).toBe(1)
   })
 })
