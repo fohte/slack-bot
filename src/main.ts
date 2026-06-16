@@ -10,6 +10,7 @@ import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
 import {
   createEventLogStore,
+  createKubernetesConfigMapClient,
   createKubernetesTaskCrClient,
   createLlmAgentPlugin,
   createOpencodeClient,
@@ -98,9 +99,11 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
     plugins: [
       ({ config, logger, slackClient, eventLogStore, threadSessionStore }) => {
         const taskCrClient = createKubernetesTaskCrClient()
+        const configMapClient = createKubernetesConfigMapClient()
         const opencodeClient = createOpencodeClient()
         const onAccepted = createTaskDispatcher({
           taskCrClient,
+          configMapClient,
           opencodeClient,
           threadSessionStore,
           eventLogStore,

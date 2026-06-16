@@ -4,6 +4,7 @@ import {
   INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
+import { extractSlackFiles, isImageFile } from '@/plugins/llm-agent/files'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import { processMention } from '@/plugins/llm-agent/process-mention'
 import type {
@@ -11,6 +12,7 @@ import type {
   SlackEnvelope,
 } from '@/plugins/llm-agent/process-mention-deps'
 import { submitTask } from '@/plugins/llm-agent/steps/submit-task'
+import type { SlackFile } from '@/types/slack-payloads'
 
 export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
@@ -28,6 +30,7 @@ interface ExtractedFields {
   readonly ts: string | undefined
   readonly threadTs: string | undefined
   readonly text: string | undefined
+  readonly images: readonly SlackFile[]
 }
 
 const extractEventFields = (
@@ -39,6 +42,7 @@ const extractEventFields = (
       ts: undefined,
       threadTs: undefined,
       text: undefined,
+      images: [],
     }
   }
   return {
@@ -46,6 +50,7 @@ const extractEventFields = (
     ts: typeof event.ts === 'string' ? event.ts : undefined,
     threadTs: typeof event.thread_ts === 'string' ? event.thread_ts : undefined,
     text: typeof event.text === 'string' ? event.text : undefined,
+    images: extractSlackFiles(event).filter(isImageFile),
   }
 }
 
@@ -93,6 +98,7 @@ export const envelopeFromAccepted = (
     channelId: channel,
     threadRootTs,
     text: stripMentionPrefix(fields.text ?? ''),
+    images: fields.images,
   }
 }
 

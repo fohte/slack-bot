@@ -1,3 +1,4 @@
+import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import type {
   EventLogRow,
   EventLogStore,
@@ -196,4 +197,11 @@ export const TEST_ENV: SlackEnvelope = {
   channelId: 'C1',
   threadRootTs: '111.222',
   text: 'hello bot',
+  images: [],
+}
+
+export const noopConfigMapClient: ConfigMapClient = {
+  async create() {
+    throw new Error('configMapClient.create not implemented for this test')
+  },
 }

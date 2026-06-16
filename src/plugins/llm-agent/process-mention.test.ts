@@ -6,6 +6,7 @@ import {
   createScriptedThreadSessionStore,
   createStubSlackClient,
   fixedOpencodeClient,
+  noopConfigMapClient,
   TEST_ENV,
 } from '@/plugins/llm-agent/_test-utils'
 import type { ProcessMentionDeps } from '@/plugins/llm-agent/process-mention'
@@ -22,6 +23,7 @@ describe('processMention', () => {
     const slackClient = createStubSlackClient()
     const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient: createScriptedTaskCrClient([
         {
           name: taskName,

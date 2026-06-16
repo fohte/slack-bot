@@ -10,11 +10,22 @@ export const TASK_CR_GROUP = 'kubeopencode.io'
 export const TASK_CR_VERSION = 'v1alpha1'
 export const TASK_CR_PLURAL = 'tasks'
 
-export interface TaskCrContext {
-  readonly name: string
-  readonly mountPath: string
-  readonly text: string
-}
+// kubeopencode ContextType v1alpha1 supports Text|ConfigMap|Git|Runtime|URL.
+// We currently use Text and ConfigMap; ConfigMap is how binary contexts
+// (Slack image attachments) get mounted into the agent workspace as files.
+export type TaskCrContext =
+  | {
+      readonly kind: 'text'
+      readonly name: string
+      readonly mountPath: string
+      readonly text: string
+    }
+  | {
+      readonly kind: 'configMap'
+      readonly name: string
+      readonly mountPath: string
+      readonly configMapName: string
+    }
 
 export interface TaskCrSpec {
   readonly name: string
@@ -50,12 +61,22 @@ export const buildTaskCrManifest = (task: TaskCrSpec): unknown => ({
   spec: {
     agentRef: { name: task.agentName },
     description: task.description,
-    contexts: task.contexts.map((c) => ({
-      name: c.name,
-      type: 'Text',
-      mountPath: c.mountPath,
-      text: c.text,
-    })),
+    contexts: task.contexts.map((c) => {
+      if (c.kind === 'text') {
+        return {
+          name: c.name,
+          type: 'Text',
+          mountPath: c.mountPath,
+          text: c.text,
+        }
+      }
+      return {
+        name: c.name,
+        type: 'ConfigMap',
+        mountPath: c.mountPath,
+        configMap: { name: c.configMapName },
+      }
+    }),
   },
 })
 

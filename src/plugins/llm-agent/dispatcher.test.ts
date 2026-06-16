@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { noopConfigMapClient } from '@/plugins/llm-agent/_test-utils'
 import {
   createTaskDispatcher,
   envelopeFromAccepted,
@@ -195,6 +196,7 @@ describe('envelopeFromAccepted', () => {
       channelId: 'C1',
       threadRootTs: '111.222',
       text: 'hello bot',
+      images: [],
     })
   })
 
@@ -210,6 +212,7 @@ describe('envelopeFromAccepted', () => {
       channelId: 'C1',
       threadRootTs: '111.222',
       text: 'please help',
+      images: [],
     })
   })
 
@@ -225,6 +228,7 @@ describe('envelopeFromAccepted', () => {
       channelId: 'C1',
       threadRootTs: '111.222',
       text: 'hello bot',
+      images: [],
     })
   })
 
@@ -251,6 +255,7 @@ describe('createTaskDispatcher', () => {
   it('sets the initial Preparing bubble before calling taskCrClient.create()', async () => {
     const timeline = createTimeline()
     const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
       taskCrClient: createTaskCrClient({ timeline }),
       opencodeClient: noopOpencodeClient,
       eventLogStore: createEventLogStore(),
@@ -270,6 +275,7 @@ describe('createTaskDispatcher', () => {
   it('builds the Task CR spec from the Slack envelope', async () => {
     const taskCrClient = createTaskCrClient()
     const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
       taskCrClient,
       opencodeClient: noopOpencodeClient,
       eventLogStore: createEventLogStore(),
@@ -288,11 +294,13 @@ describe('createTaskDispatcher', () => {
         description: 'hello bot',
         contexts: [
           {
+            kind: 'text',
             name: 'slack-channel',
             mountPath: 'slack-context/channel',
             text: 'C1',
           },
           {
+            kind: 'text',
             name: 'slack-thread-ts',
             mountPath: 'slack-context/thread-ts',
             text: '111.222',
@@ -305,6 +313,7 @@ describe('createTaskDispatcher', () => {
   it('propagates a taskCrClient.create() failure so the plugin layer can roll back event_log', async () => {
     const failure = new Error('k8s API down')
     const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
       taskCrClient: createTaskCrClient({ createError: failure }),
       opencodeClient: noopOpencodeClient,
       eventLogStore: createEventLogStore(),
@@ -320,6 +329,7 @@ describe('createTaskDispatcher', () => {
   it('returns once Received → Submitted has run, leaving the rest of the flow in the background', async () => {
     const taskCrClient = createTaskCrClient()
     const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
       taskCrClient,
       opencodeClient: noopOpencodeClient,
       eventLogStore: createEventLogStore(),

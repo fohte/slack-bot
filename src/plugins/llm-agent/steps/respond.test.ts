@@ -6,6 +6,7 @@ import {
   createScriptedThreadSessionStore,
   createStubSlackClient,
   fixedOpencodeClient,
+  noopConfigMapClient,
   TEST_ENV,
 } from '@/plugins/llm-agent/_test-utils'
 import type {
@@ -19,6 +20,7 @@ describe('respond', () => {
     const slackClient = createStubSlackClient()
     const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient({
         sessionId: 'ses_xyz',
@@ -65,6 +67,7 @@ describe('respond', () => {
     const slackClient = createStubSlackClient()
     const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient(),
       eventLogStore: createScriptedEventLogStore(),
@@ -105,6 +108,7 @@ describe('respond', () => {
     const eventLogStore = createScriptedEventLogStore()
     const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient({
         sessionId: 'ses_xyz',
@@ -155,6 +159,7 @@ describe('respond', () => {
     })
     const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient({
         sessionId: 'ses_xyz',
