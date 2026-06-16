@@ -13,7 +13,7 @@ importers:
         version: 0.1.0
       '@hono/node-server':
         specifier: 2.0.4
-        version: 2.0.4(hono@4.12.24)
+        version: 2.0.4(hono@4.12.25)
       '@kubernetes/client-node':
         specifier: 1.4.0
         version: 1.4.0
@@ -24,8 +24,8 @@ importers:
         specifier: 0.45.2
         version: 0.45.2(postgres@3.4.9)
       hono:
-        specifier: 4.12.24
-        version: 4.12.24
+        specifier: 4.12.25
+        version: 4.12.25
       pino:
         specifier: 10.3.1
         version: 10.3.1
@@ -2118,8 +2118,8 @@ packages:
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
 
-  hono@4.12.24:
-    resolution: {integrity: sha512-I36D1s+HgQc55KbhEr4iybfxv/9o1zdpw+XEM6dJa91LqQD0HCoSGdxpRJCZE+aavs87j4V3Ls2OJzq8C/U4iw==}
+  hono@4.12.25:
+    resolution: {integrity: sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ==}
     engines: {node: '>=16.9.0'}
 
   hpagent@1.2.0:
@@ -3615,9 +3615,9 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
-  '@hono/node-server@2.0.4(hono@4.12.24)':
+  '@hono/node-server@2.0.4(hono@4.12.25)':
     dependencies:
-      hono: 4.12.24
+      hono: 4.12.25
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -4754,7 +4754,7 @@ snapshots:
 
   help-me@5.0.0: {}
 
-  hono@4.12.24: {}
+  hono@4.12.25: {}
 
   hpagent@1.2.0: {}
 
