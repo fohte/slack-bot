@@ -25,29 +25,6 @@ export const INITIAL_PHASE_STATUS: PhaseStatus = {
   loadingMessages: ['Preparing your task…'],
 }
 
-// The Task CR `status.phase` enum is fixed by the kubeopencode.io CRD:
-//   Pending | Queued | Running | Completed | Failed
-// Only non-terminal phases get a bubble message; terminal phases hand
-// off to the response handler which clears the indicator.
-const PHASE_STATUS_MAP: Readonly<Record<string, PhaseStatus>> = {
-  Pending: INITIAL_PHASE_STATUS,
-  Queued: {
-    status: 'is waiting in queue...',
-    loadingMessages: ['Waiting in queue…'],
-  },
-  Running: {
-    status: 'is working on it...',
-    loadingMessages: ['Working on it…'],
-  },
-}
-
-export const statusForPhase = (
-  phase: string | undefined,
-): PhaseStatus | undefined => {
-  if (phase === undefined) return undefined
-  return PHASE_STATUS_MAP[phase]
-}
-
 export interface AssistantStatusTarget {
   readonly channelId: string
   readonly threadTs: string
