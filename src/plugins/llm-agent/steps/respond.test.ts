@@ -1,0 +1,178 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  createScriptedEventLogStore,
+  createScriptedTaskCrClient,
+  createScriptedThreadSessionStore,
+  createStubSlackClient,
+  fixedOpencodeClient,
+  TEST_ENV,
+} from '@/plugins/llm-agent/_test-utils'
+import type {
+  ProcessMentionDeps,
+  TerminalOutcome,
+} from '@/plugins/llm-agent/process-mention'
+import { respond } from '@/plugins/llm-agent/process-mention'
+
+describe('respond', () => {
+  it('posts the slackified assistant text and upserts the opencode session id on completed', async () => {
+    const slackClient = createStubSlackClient()
+    const threadSessionStore = createScriptedThreadSessionStore()
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: '**bold** answer',
+      }),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore,
+      slackClient,
+    }
+    const outcome: TerminalOutcome = { kind: 'completed' }
+    await respond(TEST_ENV, 'task-1', outcome, deps)
+    expect({
+      slackCalls: slackClient.calls,
+      upserts: threadSessionStore.upserts,
+    }).toEqual({
+      slackCalls: [
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: '​*bold*​ answer',
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          loadingMessages: undefined,
+        },
+      ],
+      upserts: [
+        {
+          slackTeamId: 'T1',
+          slackChannelId: 'C1',
+          threadRootTs: '111.222',
+          opencodeSessionId: 'ses_xyz',
+        },
+      ],
+    })
+  })
+
+  it('posts an escaped failure message and does not upsert thread session on failed', async () => {
+    const slackClient = createStubSlackClient()
+    const threadSessionStore = createScriptedThreadSessionStore()
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore,
+      slackClient,
+    }
+    const outcome: TerminalOutcome = {
+      kind: 'failed',
+      message: '<oops> & died',
+    }
+    await respond(TEST_ENV, 'task-1', outcome, deps)
+    expect({
+      slackCalls: slackClient.calls,
+      upserts: threadSessionStore.upserts,
+    }).toEqual({
+      slackCalls: [
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'Task failed: &lt;oops&gt; &amp; died',
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          loadingMessages: undefined,
+        },
+      ],
+      upserts: [],
+    })
+  })
+
+  it('falls back to the placeholder text when the opencode session yields no assistant message', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore()
+    const threadSessionStore = createScriptedThreadSessionStore()
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: undefined,
+      }),
+      eventLogStore,
+      threadSessionStore,
+      slackClient,
+    }
+    await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
+    expect({
+      slackCalls: slackClient.calls,
+      markedResponded: eventLogStore.markedResponded,
+      upserts: threadSessionStore.upserts,
+    }).toEqual({
+      slackCalls: [
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: '(opencode did not produce an assistant message)',
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          loadingMessages: undefined,
+        },
+      ],
+      markedResponded: ['Ev1'],
+      upserts: [
+        {
+          slackTeamId: 'T1',
+          slackChannelId: 'C1',
+          threadRootTs: '111.222',
+          opencodeSessionId: 'ses_xyz',
+        },
+      ],
+    })
+  })
+
+  it('skips the Slack post and per-task teardown when event_log markResponded reports already-responded', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      alreadyResponded: true,
+    })
+    const threadSessionStore = createScriptedThreadSessionStore()
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: 'answer',
+      }),
+      eventLogStore,
+      threadSessionStore,
+      slackClient,
+    }
+    await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
+    expect({
+      slackCalls: slackClient.calls,
+      markedResponded: eventLogStore.markedResponded,
+      upserts: threadSessionStore.upserts,
+    }).toEqual({
+      slackCalls: [],
+      markedResponded: [],
+      upserts: [],
+    })
+  })
+})
