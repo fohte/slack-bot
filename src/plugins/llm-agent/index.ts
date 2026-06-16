@@ -52,19 +52,25 @@ export {
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
 export type {
-  Phase,
   ProcessMentionDeps,
-  ProcessMentionOptions,
   SlackEnvelope,
+  SubmitTaskResult,
+  TerminalOutcome,
+  WaitForCompletionOptions,
 } from '@/plugins/llm-agent/process-mention'
 export {
-  advance,
-  bubbleFor,
+  bubbleForK8sPhase,
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_SUCCESS_FALLBACK,
   DEFAULT_TASK_CR_AGENT_NAME,
   DEFAULT_TASK_CR_NAMESPACE,
+  PREPARING_BUBBLE,
   processMention,
+  QUEUED_BUBBLE,
+  respond,
+  RUNNING_BUBBLE,
+  submitTask,
+  waitForCompletion,
 } from '@/plugins/llm-agent/process-mention'
 export type {
   TaskCrClient,

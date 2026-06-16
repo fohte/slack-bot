@@ -6,14 +6,19 @@ import type {
 } from '@/plugins/llm-agent/event-log-store'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type {
-  Phase,
   ProcessMentionDeps,
   SlackEnvelope,
+  TerminalOutcome,
 } from '@/plugins/llm-agent/process-mention'
 import {
-  advance,
-  bubbleFor,
+  bubbleForK8sPhase,
+  PREPARING_BUBBLE,
   processMention,
+  QUEUED_BUBBLE,
+  respond,
+  RUNNING_BUBBLE,
+  submitTask,
+  waitForCompletion,
 } from '@/plugins/llm-agent/process-mention'
 import type {
   TaskCrClient,
@@ -207,83 +212,49 @@ const ENV: SlackEnvelope = {
   text: 'hello bot',
 }
 
-describe('bubbleFor', () => {
-  it('maps every Phase kind to the expected bubble identity', () => {
-    const phases: readonly Phase[] = [
-      { kind: 'Received', env: ENV },
-      { kind: 'Submitted', env: ENV, taskName: 'task-1' },
-      { kind: 'Queued', env: ENV, taskName: 'task-1' },
-      { kind: 'Running', env: ENV, taskName: 'task-1' },
-      { kind: 'Completed', env: ENV, taskName: 'task-1' },
-      { kind: 'Failed', env: ENV, taskName: 'task-1', message: undefined },
-    ]
-    const mapping = phases.map((p) => ({
-      kind: p.kind,
-      bubble: bubbleFor(p),
-    }))
-    expect(mapping).toEqual([
-      {
-        kind: 'Received',
-        bubble: {
-          status: 'is thinking...',
-          loadingMessages: ['Preparing your task…'],
-        },
-      },
-      {
-        kind: 'Submitted',
-        bubble: {
-          status: 'is thinking...',
-          loadingMessages: ['Preparing your task…'],
-        },
-      },
-      {
-        kind: 'Queued',
-        bubble: {
-          status: 'is waiting in queue...',
-          loadingMessages: ['Waiting in queue…'],
-        },
-      },
-      {
-        kind: 'Running',
-        bubble: {
-          status: 'is working on it...',
-          loadingMessages: ['Working on it…'],
-        },
-      },
-      { kind: 'Completed', bubble: undefined },
-      { kind: 'Failed', bubble: undefined },
-    ])
-  })
-
-  it('returns the same singleton for Received and Submitted', () => {
-    const received = bubbleFor({ kind: 'Received', env: ENV })
-    const submitted = bubbleFor({ kind: 'Submitted', env: ENV, taskName: 't' })
-    expect(received === submitted).toBe(true)
+describe('bubbleForK8sPhase', () => {
+  it('maps each non-terminal k8s phase to its bubble and everything else to undefined', () => {
+    expect({
+      Pending: bubbleForK8sPhase('Pending'),
+      Queued: bubbleForK8sPhase('Queued'),
+      Running: bubbleForK8sPhase('Running'),
+      Completed: bubbleForK8sPhase('Completed'),
+      Failed: bubbleForK8sPhase('Failed'),
+      Unknown: bubbleForK8sPhase('Cancelled'),
+      Undefined: bubbleForK8sPhase(undefined),
+    }).toEqual({
+      Pending: PREPARING_BUBBLE,
+      Queued: QUEUED_BUBBLE,
+      Running: RUNNING_BUBBLE,
+      Completed: undefined,
+      Failed: undefined,
+      Unknown: undefined,
+      Undefined: undefined,
+    })
   })
 })
 
-describe('advance', () => {
-  it('Received → Submitted creates a Task CR and records its name', async () => {
+describe('submitTask', () => {
+  it('creates a Task CR with the Slack envelope contexts and records the task_name', async () => {
     const taskCrClient = createScriptedTaskCrClient([])
     const eventLogStore = createScriptedEventLogStore()
-    const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
       taskCrClient,
       opencodeClient: fixedOpencodeClient(),
       eventLogStore,
-      threadSessionStore,
+      threadSessionStore: createScriptedThreadSessionStore(),
       slackClient: createStubSlackClient(),
     }
 
-    const next = await advance({ kind: 'Received', env: ENV }, deps)
+    const result = await submitTask(ENV, deps)
 
     const expectedName = taskCrNameForSlackEvent(ENV.eventId)
     expect({
-      next,
+      result,
       creates: taskCrClient.creates,
       marked: eventLogStore.markedTaskNames,
     }).toEqual({
-      next: { kind: 'Submitted', env: ENV, taskName: expectedName },
+      result: { taskName: expectedName },
       creates: [
         {
           name: expectedName,
@@ -308,7 +279,7 @@ describe('advance', () => {
     })
   })
 
-  it('Received → Submitted attaches the opencode session id when a thread is mapped', async () => {
+  it('attaches the opencode session id when a thread is already mapped', async () => {
     const taskCrClient = createScriptedTaskCrClient([])
     const deps: ProcessMentionDeps = {
       taskCrClient,
@@ -319,140 +290,38 @@ describe('advance', () => {
       }),
       slackClient: createStubSlackClient(),
     }
-    await advance({ kind: 'Received', env: ENV }, deps)
-    expect(taskCrClient.creates[0]?.contexts).toEqual([
-      { name: 'slack-channel', mountPath: 'slack-context/channel', text: 'C1' },
+    await submitTask(ENV, deps)
+    const expectedName = taskCrNameForSlackEvent(ENV.eventId)
+    expect(taskCrClient.creates).toEqual([
       {
-        name: 'slack-thread-ts',
-        mountPath: 'slack-context/thread-ts',
-        text: '111.222',
-      },
-      {
-        name: 'opencode-session-id',
-        mountPath: 'slack-context/session-id',
-        text: 'ses_abc',
+        name: expectedName,
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: 'hello bot',
+        contexts: [
+          {
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '111.222',
+          },
+          {
+            name: 'opencode-session-id',
+            mountPath: 'slack-context/session-id',
+            text: 'ses_abc',
+          },
+        ],
       },
     ])
-  })
-
-  it('polls until the Task CR phase differs from the current k8s phase', async () => {
-    const taskName = 'task-1'
-    const taskCrClient = createScriptedTaskCrClient([
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Pending',
-        message: undefined,
-      },
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Pending',
-        message: undefined,
-      },
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Running',
-        message: undefined,
-      },
-    ])
-    const deps: ProcessMentionDeps = {
-      taskCrClient,
-      opencodeClient: fixedOpencodeClient(),
-      eventLogStore: createScriptedEventLogStore(),
-      threadSessionStore: createScriptedThreadSessionStore(),
-      slackClient: createStubSlackClient(),
-      pollIntervalMs: 0,
-      sleep: async () => {},
-    }
-    const next = await advance({ kind: 'Submitted', env: ENV, taskName }, deps)
-    expect({ next, listCount: taskCrClient.listCount() }).toEqual({
-      next: { kind: 'Running', env: ENV, taskName },
-      listCount: 3,
-    })
-  })
-
-  it('keeps sleeping past unknown / undefined phases without busy-looping', async () => {
-    const taskName = 'task-1'
-    const taskCrClient = createScriptedTaskCrClient([
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: undefined,
-        message: undefined,
-      },
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Cancelled',
-        message: undefined,
-      },
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Running',
-        message: undefined,
-      },
-    ])
-    let sleepCount = 0
-    const deps: ProcessMentionDeps = {
-      taskCrClient,
-      opencodeClient: fixedOpencodeClient(),
-      eventLogStore: createScriptedEventLogStore(),
-      threadSessionStore: createScriptedThreadSessionStore(),
-      slackClient: createStubSlackClient(),
-      pollIntervalMs: 0,
-      sleep: async () => {
-        sleepCount += 1
-      },
-    }
-    const next = await advance({ kind: 'Submitted', env: ENV, taskName }, deps)
-    expect({ next, sleepCount }).toEqual({
-      next: { kind: 'Running', env: ENV, taskName },
-      sleepCount: 2,
-    })
-  })
-
-  it('throws when the Task CR is absent from the list result so the background polling loop terminates', async () => {
-    const taskName = 'task-1'
-    const deps: ProcessMentionDeps = {
-      taskCrClient: {
-        async create() {
-          return 'created'
-        },
-        async list() {
-          return []
-        },
-      },
-      opencodeClient: fixedOpencodeClient(),
-      eventLogStore: createScriptedEventLogStore(),
-      threadSessionStore: createScriptedThreadSessionStore(),
-      slackClient: createStubSlackClient(),
-      pollIntervalMs: 0,
-      sleep: async () => {},
-    }
-    await expect(
-      advance({ kind: 'Submitted', env: ENV, taskName }, deps),
-    ).rejects.toThrow(`Task CR ${taskName} not found in namespace kubeopencode`)
-  })
-
-  it('throws when called on a terminal phase', async () => {
-    const deps: ProcessMentionDeps = {
-      taskCrClient: createScriptedTaskCrClient([]),
-      opencodeClient: fixedOpencodeClient(),
-      eventLogStore: createScriptedEventLogStore(),
-      threadSessionStore: createScriptedThreadSessionStore(),
-      slackClient: createStubSlackClient(),
-    }
-    await expect(
-      advance({ kind: 'Completed', env: ENV, taskName: 't' }, deps),
-    ).rejects.toThrow('advance called on terminal phase Completed')
   })
 })
 
-describe('processMention', () => {
-  it('drives a Submitted task through Queued → Running → Completed and posts the slackified reply', async () => {
+describe('waitForCompletion', () => {
+  it('polls until the Task CR reaches Completed and emits a bubble whenever the displayed status changes', async () => {
     const taskName = 'task-1'
     const taskCrClient = createScriptedTaskCrClient([
       {
@@ -475,9 +344,182 @@ describe('processMention', () => {
       },
     ])
     const slackClient = createStubSlackClient()
-    const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
       taskCrClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    }
+
+    const outcome = await waitForCompletion(ENV, taskName, deps, {
+      initialBubble: PREPARING_BUBBLE,
+    })
+
+    expect({
+      outcome,
+      listCount: taskCrClient.listCount(),
+      slackCalls: slackClient.calls,
+    }).toEqual({
+      outcome: { kind: 'completed' },
+      listCount: 3,
+      slackCalls: [
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: QUEUED_BUBBLE.status,
+          loadingMessages: QUEUED_BUBBLE.loadingMessages,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: RUNNING_BUBBLE.status,
+          loadingMessages: RUNNING_BUBBLE.loadingMessages,
+        },
+      ],
+    })
+  })
+
+  it('returns Failed with the cluster message and does not emit a bubble when the Task CR transitions straight to Failed', async () => {
+    const taskName = 'task-1'
+    const slackClient = createStubSlackClient()
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([
+        {
+          name: taskName,
+          namespace: 'kubeopencode',
+          phase: 'Failed',
+          message: 'boom',
+        },
+      ]),
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    }
+    const outcome = await waitForCompletion(ENV, taskName, deps)
+    expect({ outcome, slackCalls: slackClient.calls }).toEqual({
+      outcome: { kind: 'failed', message: 'boom' },
+      slackCalls: [],
+    })
+  })
+
+  it('keeps sleeping past unknown / undefined phases without busy-looping', async () => {
+    const taskName = 'task-1'
+    let sleepCount = 0
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([
+        {
+          name: taskName,
+          namespace: 'kubeopencode',
+          phase: undefined,
+          message: undefined,
+        },
+        {
+          name: taskName,
+          namespace: 'kubeopencode',
+          phase: 'Cancelled',
+          message: undefined,
+        },
+        {
+          name: taskName,
+          namespace: 'kubeopencode',
+          phase: 'Completed',
+          message: undefined,
+        },
+      ]),
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient: createStubSlackClient(),
+      pollIntervalMs: 0,
+      sleep: async () => {
+        sleepCount += 1
+      },
+    }
+    const outcome = await waitForCompletion(ENV, taskName, deps)
+    expect({ outcome, sleepCount }).toEqual({
+      outcome: { kind: 'completed' },
+      sleepCount: 2,
+    })
+  })
+
+  it('throws when the Task CR is absent from the list result so the background poll loop terminates', async () => {
+    const taskName = 'task-1'
+    const deps: ProcessMentionDeps = {
+      taskCrClient: {
+        async create() {
+          return 'created'
+        },
+        async list() {
+          return []
+        },
+      },
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient: createStubSlackClient(),
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    }
+    await expect(waitForCompletion(ENV, taskName, deps)).rejects.toThrow(
+      `Task CR ${taskName} not found in namespace kubeopencode`,
+    )
+  })
+
+  it('does not re-emit the Preparing bubble when the first observed phase is Pending', async () => {
+    const taskName = 'task-1'
+    const taskCrClient = createScriptedTaskCrClient([
+      {
+        name: taskName,
+        namespace: 'kubeopencode',
+        phase: 'Pending',
+        message: undefined,
+      },
+      {
+        name: taskName,
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+    ])
+    const slackClient = createStubSlackClient()
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    }
+    const outcome = await waitForCompletion(ENV, taskName, deps, {
+      initialBubble: PREPARING_BUBBLE,
+    })
+    expect({
+      outcome,
+      slackCalls: slackClient.calls,
+      listCount: taskCrClient.listCount(),
+    }).toEqual({
+      outcome: { kind: 'completed' },
+      slackCalls: [],
+      listCount: 2,
+    })
+  })
+})
+
+describe('respond', () => {
+  it('posts the slackified assistant text and upserts the opencode session id on completed', async () => {
+    const slackClient = createStubSlackClient()
+    const threadSessionStore = createScriptedThreadSessionStore()
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient({
         sessionId: 'ses_xyz',
         assistantText: '**bold** answer',
@@ -485,38 +527,14 @@ describe('processMention', () => {
       eventLogStore: createScriptedEventLogStore(),
       threadSessionStore,
       slackClient,
-      pollIntervalMs: 0,
-      sleep: async () => {},
     }
-
-    await processMention({ kind: 'Submitted', env: ENV, taskName }, deps)
-
+    const outcome: TerminalOutcome = { kind: 'completed' }
+    await respond(ENV, 'task-1', outcome, deps)
     expect({
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
     }).toEqual({
       slackCalls: [
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'is thinking...',
-          loadingMessages: ['Preparing your task…'],
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'is waiting in queue...',
-          loadingMessages: ['Waiting in queue…'],
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'is working on it...',
-          loadingMessages: ['Working on it…'],
-        },
         {
           kind: 'post',
           channel: 'C1',
@@ -543,41 +561,21 @@ describe('processMention', () => {
     })
   })
 
-  it('posts an escaped failure message on Failed and does not upsert thread session', async () => {
-    const taskName = 'task-1'
-    const taskCrClient = createScriptedTaskCrClient([
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Failed',
-        message: '<oops> & died',
-      },
-    ])
+  it('posts an escaped failure message and does not upsert thread session on failed', async () => {
     const slackClient = createStubSlackClient()
     const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
-      taskCrClient,
+      taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient(),
       eventLogStore: createScriptedEventLogStore(),
       threadSessionStore,
       slackClient,
-      pollIntervalMs: 0,
-      sleep: async () => {},
     }
-
-    await processMention(
-      { kind: 'Submitted', env: ENV, taskName },
-      deps,
-      // Pre-set the Preparing bubble (as the dispatcher would have done)
-      // so we only observe transitions past it.
-      {
-        previousBubble: {
-          status: 'is thinking...',
-          loadingMessages: ['Preparing your task…'],
-        },
-      },
-    )
-
+    const outcome: TerminalOutcome = {
+      kind: 'failed',
+      message: '<oops> & died',
+    }
+    await respond(ENV, 'task-1', outcome, deps)
     expect({
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
@@ -603,18 +601,9 @@ describe('processMention', () => {
   })
 
   it('falls back to the placeholder text when the opencode session yields no assistant message', async () => {
-    const taskName = 'task-1'
-    const taskCrClient = createScriptedTaskCrClient([
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Completed',
-        message: undefined,
-      },
-    ])
     const slackClient = createStubSlackClient()
     const deps: ProcessMentionDeps = {
-      taskCrClient,
+      taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient({
         sessionId: 'ses_xyz',
         assistantText: undefined,
@@ -622,17 +611,8 @@ describe('processMention', () => {
       eventLogStore: createScriptedEventLogStore(),
       threadSessionStore: createScriptedThreadSessionStore(),
       slackClient,
-      pollIntervalMs: 0,
-      sleep: async () => {},
     }
-
-    await processMention({ kind: 'Submitted', env: ENV, taskName }, deps, {
-      previousBubble: {
-        status: 'is thinking...',
-        loadingMessages: ['Preparing your task…'],
-      },
-    })
-
+    await respond(ENV, 'task-1', { kind: 'completed' }, deps)
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',
@@ -651,37 +631,118 @@ describe('processMention', () => {
     ])
   })
 
-  it('skips the Slack post when event_log markResponded reports already-responded', async () => {
-    const taskName = 'task-1'
-    const taskCrClient = createScriptedTaskCrClient([
-      {
-        name: taskName,
-        namespace: 'kubeopencode',
-        phase: 'Completed',
-        message: undefined,
-      },
-    ])
+  it('skips the Slack post and per-task teardown when event_log markResponded reports already-responded', async () => {
     const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      alreadyResponded: true,
+    })
+    const threadSessionStore = createScriptedThreadSessionStore()
     const deps: ProcessMentionDeps = {
-      taskCrClient,
+      taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient({
         sessionId: 'ses_xyz',
         assistantText: 'answer',
       }),
-      eventLogStore: createScriptedEventLogStore({ alreadyResponded: true }),
-      threadSessionStore: createScriptedThreadSessionStore(),
+      eventLogStore,
+      threadSessionStore,
+      slackClient,
+    }
+    await respond(ENV, 'task-1', { kind: 'completed' }, deps)
+    expect({
+      slackCalls: slackClient.calls,
+      markedResponded: eventLogStore.markedResponded,
+      upserts: threadSessionStore.upserts,
+    }).toEqual({
+      slackCalls: [],
+      markedResponded: [],
+      upserts: [],
+    })
+  })
+})
+
+describe('processMention', () => {
+  it('drives a submitted task through Queued → Running → Completed and posts the slackified reply', async () => {
+    const taskName = 'task-1'
+    const slackClient = createStubSlackClient()
+    const threadSessionStore = createScriptedThreadSessionStore()
+    const deps: ProcessMentionDeps = {
+      taskCrClient: createScriptedTaskCrClient([
+        {
+          name: taskName,
+          namespace: 'kubeopencode',
+          phase: 'Queued',
+          message: undefined,
+        },
+        {
+          name: taskName,
+          namespace: 'kubeopencode',
+          phase: 'Running',
+          message: undefined,
+        },
+        {
+          name: taskName,
+          namespace: 'kubeopencode',
+          phase: 'Completed',
+          message: undefined,
+        },
+      ]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: '**bold** answer',
+      }),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore,
       slackClient,
       pollIntervalMs: 0,
       sleep: async () => {},
     }
 
-    await processMention({ kind: 'Submitted', env: ENV, taskName }, deps, {
-      previousBubble: {
-        status: 'is thinking...',
-        loadingMessages: ['Preparing your task…'],
-      },
+    await processMention(ENV, taskName, deps, {
+      initialBubble: PREPARING_BUBBLE,
     })
 
-    expect(slackClient.calls).toEqual([])
+    expect({
+      slackCalls: slackClient.calls,
+      upserts: threadSessionStore.upserts,
+    }).toEqual({
+      slackCalls: [
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: QUEUED_BUBBLE.status,
+          loadingMessages: QUEUED_BUBBLE.loadingMessages,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: RUNNING_BUBBLE.status,
+          loadingMessages: RUNNING_BUBBLE.loadingMessages,
+        },
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: '​*bold*​ answer',
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          loadingMessages: undefined,
+        },
+      ],
+      upserts: [
+        {
+          slackTeamId: 'T1',
+          slackChannelId: 'C1',
+          threadRootTs: '111.222',
+          opencodeSessionId: 'ses_xyz',
+        },
+      ],
+    })
   })
 })

@@ -5,11 +5,12 @@ import {
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
+import { processMention } from '@/plugins/llm-agent/process-mention'
 import type {
   ProcessMentionDeps,
   SlackEnvelope,
-} from '@/plugins/llm-agent/process-mention'
-import { advance, processMention } from '@/plugins/llm-agent/process-mention'
+} from '@/plugins/llm-agent/process-mention-deps'
+import { submitTask } from '@/plugins/llm-agent/steps/submit-task'
 
 export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
@@ -102,9 +103,9 @@ export const createTaskDispatcher = (
   return async (accepted) => {
     const env = envelopeFromAccepted(accepted, logger)
     if (env === undefined) return
-    // Set the indicator before create so that a fast-completing Task can
-    // never have its terminal status clear race ahead of our set and leave
-    // a stale indicator sitting in the thread.
+    // Set the indicator before submitTask so a fast-completing Task can
+    // never have its terminal status clear race ahead of our set and
+    // leave a stale indicator sitting in the thread.
     await trySetAssistantStatus({
       slackClient: options.slackClient,
       target: { channelId: env.channelId, threadTs: env.threadRootTs },
@@ -112,14 +113,11 @@ export const createTaskDispatcher = (
       loadingMessages: INITIAL_PHASE_STATUS.loadingMessages,
       logger,
     })
-    // Run Received → Submitted synchronously so a failed create() propagates
-    // out of onAccepted and the plugin layer can roll back the event_log
-    // row (allowing Slack retries to re-deliver the event). Everything
-    // after Submitted runs in the background so the Slack HTTP handler can
-    // ack immediately.
-    const submitted = await advance({ kind: 'Received', env }, options)
-    void processMention(submitted, options, {
-      previousBubble: INITIAL_PHASE_STATUS,
+    // create() failures must reach onAccepted for the event_log rollback;
+    // downstream steps run detached so the Slack HTTP handler can ack.
+    const { taskName } = await submitTask(env, options)
+    void processMention(env, taskName, options, {
+      initialBubble: INITIAL_PHASE_STATUS,
     }).catch((error: unknown) => {
       logger.error(
         {
