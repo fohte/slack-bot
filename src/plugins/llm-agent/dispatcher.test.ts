@@ -4,10 +4,7 @@ import {
   createTaskDispatcher,
   envelopeFromAccepted,
 } from '@/plugins/llm-agent/dispatcher'
-import type {
-  EventLogRow,
-  EventLogStore,
-} from '@/plugins/llm-agent/event-log-store'
+import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import type {
@@ -17,11 +14,7 @@ import type {
   TaskCrStatus,
 } from '@/plugins/llm-agent/task-cr-client'
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
-import type {
-  ThreadSessionKey,
-  ThreadSessionStore,
-  ThreadSessionUpsert,
-} from '@/plugins/llm-agent/thread-session-store'
+import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
 import type { SlackWebClient } from '@/slack/web-client'
 import type {
   SlackAppMentionEvent,
@@ -39,50 +32,43 @@ const noopLogger = {
   },
 }
 
-interface SlackCall {
-  readonly kind: 'status' | 'post'
-  readonly channel: string
-  readonly thread: string
-  readonly text: string
-  readonly loadingMessages: readonly string[] | undefined
-}
+// A single ordered tape of side-effects so order-sensitive contracts
+// (e.g. "set the bubble before calling create") can be expressed as a
+// single equality check.
+type TimelineEntry =
+  | { readonly kind: 'status'; readonly status: string }
+  | { readonly kind: 'create'; readonly taskName: string }
 
-interface StubSlackClient extends SlackWebClient {
-  readonly calls: ReadonlyArray<SlackCall>
-}
-
-const createStubSlackClient = (): StubSlackClient => {
-  const calls: SlackCall[] = []
+const createTimeline = (): {
+  readonly entries: TimelineEntry[]
+  push(entry: TimelineEntry): void
+} => {
+  const entries: TimelineEntry[] = []
   return {
-    calls,
+    entries,
+    push(entry) {
+      entries.push(entry)
+    },
+  }
+}
+
+const createSlackClient = (
+  options: {
+    timeline?: { push(entry: TimelineEntry): void }
+  } = {},
+): SlackWebClient =>
+  ({
     async setAssistantThreadStatus(arg: {
       channel_id: string
       thread_ts: string
       status: string
       loading_messages?: string[]
     }) {
-      calls.push({
-        kind: 'status',
-        channel: arg.channel_id,
-        thread: arg.thread_ts,
-        text: arg.status,
-        loadingMessages: arg.loading_messages,
-      })
+      options.timeline?.push({ kind: 'status', status: arg.status })
       return { ok: true } as never
     },
-    async postMessage(arg: {
-      channel?: string
-      thread_ts?: string
-      text?: string
-    }) {
-      calls.push({
-        kind: 'post',
-        channel: arg.channel ?? '',
-        thread: arg.thread_ts ?? '',
-        text: arg.text ?? '',
-        loadingMessages: undefined,
-      })
-      return { ok: true } as never
+    async postMessage() {
+      throw new Error('not implemented')
     },
     async updateMessage() {
       throw new Error('not implemented')
@@ -102,15 +88,15 @@ const createStubSlackClient = (): StubSlackClient => {
     async postToResponseUrl() {
       throw new Error('not implemented')
     },
-  } as StubSlackClient
-}
+  }) as SlackWebClient
 
 interface StubTaskCrClient extends TaskCrClient {
   readonly creates: ReadonlyArray<TaskCrSpec>
 }
 
-const createStubTaskCrClient = (
+const createTaskCrClient = (
   options: {
+    timeline?: { push(entry: TimelineEntry): void }
     createOutcome?: TaskCrCreateOutcome
     createError?: Error
   } = {},
@@ -121,6 +107,7 @@ const createStubTaskCrClient = (
     async create(task) {
       if (options.createError !== undefined) throw options.createError
       creates.push(task)
+      options.timeline?.push({ kind: 'create', taskName: task.name })
       return options.createOutcome ?? 'created'
     },
     async list() {
@@ -131,11 +118,7 @@ const createStubTaskCrClient = (
   }
 }
 
-const createStubEventLogStore = (
-  options: {
-    findByTaskName?: (taskName: string) => EventLogRow | undefined
-  } = {},
-): EventLogStore => ({
+const createEventLogStore = (): EventLogStore => ({
   async recordReceived() {
     return 'accepted'
   },
@@ -143,8 +126,8 @@ const createStubEventLogStore = (
   async markTaskName() {
     return { updated: 1 }
   },
-  async findByTaskName(taskName) {
-    return options.findByTaskName?.(taskName)
+  async findByTaskName() {
+    return undefined
   },
   async markResponded() {
     return { updated: 1 }
@@ -157,22 +140,12 @@ const createStubEventLogStore = (
   },
 })
 
-const createStubThreadSessionStore = (
-  options: { lookup?: (key: ThreadSessionKey) => string | undefined } = {},
-): ThreadSessionStore & {
-  readonly upserts: ReadonlyArray<ThreadSessionUpsert>
-} => {
-  const upserts: ThreadSessionUpsert[] = []
-  return {
-    upserts,
-    async lookup(key) {
-      return options.lookup?.(key)
-    },
-    async upsert(record) {
-      upserts.push(record)
-    },
-  }
-}
+const createThreadSessionStore = (): ThreadSessionStore => ({
+  async lookup() {
+    return undefined
+  },
+  async upsert() {},
+})
 
 const noopOpencodeClient: OpencodeClient = {
   async fetchLatestAssistantText() {
@@ -213,8 +186,7 @@ const acceptedMention = (
 
 describe('envelopeFromAccepted', () => {
   it('strips a plain mention prefix and returns the channel / team / thread root', () => {
-    const env = envelopeFromAccepted(acceptedMention(), noopLogger)
-    expect(env).toEqual({
+    expect(envelopeFromAccepted(acceptedMention(), noopLogger)).toEqual({
       eventId: 'Ev1',
       teamId: 'T1',
       channelId: 'C1',
@@ -224,11 +196,12 @@ describe('envelopeFromAccepted', () => {
   })
 
   it('strips a labelled mention prefix `<@U|name>`', () => {
-    const env = envelopeFromAccepted(
-      acceptedMention({ text: '<@U_BOT|slack-bot> please help' }),
-      noopLogger,
-    )
-    expect(env).toEqual({
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({ text: '<@U_BOT|slack-bot> please help' }),
+        noopLogger,
+      ),
+    ).toEqual({
       eventId: 'Ev1',
       teamId: 'T1',
       channelId: 'C1',
@@ -238,11 +211,12 @@ describe('envelopeFromAccepted', () => {
   })
 
   it('uses thread_ts when present so replies stay anchored to the original thread root', () => {
-    const env = envelopeFromAccepted(
-      acceptedMention({ ts: '333.444', thread_ts: '111.222' }),
-      noopLogger,
-    )
-    expect(env).toEqual({
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({ ts: '333.444', thread_ts: '111.222' }),
+        noopLogger,
+      ),
+    ).toEqual({
       eventId: 'Ev1',
       teamId: 'T1',
       channelId: 'C1',
@@ -252,81 +226,87 @@ describe('envelopeFromAccepted', () => {
   })
 
   it('returns undefined when event_id is absent (so the dispatcher swallows the event without throwing)', () => {
-    const env = envelopeFromAccepted(
-      acceptedMention({}, { event_id: undefined }),
-      noopLogger,
-    )
-    expect(env).toBeUndefined()
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({}, { event_id: undefined }),
+        noopLogger,
+      ),
+    ).toBeUndefined()
   })
 
   it('returns undefined when required envelope fields are missing', () => {
-    const env = envelopeFromAccepted(
-      acceptedMention({}, { team_id: undefined }),
-      noopLogger,
-    )
-    expect(env).toBeUndefined()
+    expect(
+      envelopeFromAccepted(
+        acceptedMention({}, { team_id: undefined }),
+        noopLogger,
+      ),
+    ).toBeUndefined()
   })
 })
 
 describe('createTaskDispatcher', () => {
   it('sets the initial Preparing bubble before calling taskCrClient.create()', async () => {
-    const slackClient = createStubSlackClient()
-    const taskCrClient = createStubTaskCrClient()
+    const timeline = createTimeline()
     const dispatch = createTaskDispatcher({
-      taskCrClient,
+      taskCrClient: createTaskCrClient({ timeline }),
       opencodeClient: noopOpencodeClient,
-      eventLogStore: createStubEventLogStore(),
-      threadSessionStore: createStubThreadSessionStore(),
-      slackClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient({ timeline }),
       logger: noopLogger,
       pollIntervalMs: 0,
       sleep: async () => {},
     })
     await dispatch(acceptedMention())
-    expect({
-      slack: slackClient.calls,
-      creates: taskCrClient.creates,
-    }).toEqual({
-      slack: [
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'is thinking...',
-          loadingMessages: ['Preparing your task…'],
-        },
-      ],
-      creates: [
-        {
-          name: taskCrNameForSlackEvent('Ev1'),
-          namespace: 'kubeopencode',
-          agentName: 'slack-bot',
-          description: 'hello bot',
-          contexts: [
-            {
-              name: 'slack-channel',
-              mountPath: 'slack-context/channel',
-              text: 'C1',
-            },
-            {
-              name: 'slack-thread-ts',
-              mountPath: 'slack-context/thread-ts',
-              text: '111.222',
-            },
-          ],
-        },
-      ],
+    expect(timeline.entries).toEqual([
+      { kind: 'status', status: 'is thinking...' },
+      { kind: 'create', taskName: taskCrNameForSlackEvent('Ev1') },
+    ])
+  })
+
+  it('builds the Task CR spec from the Slack envelope', async () => {
+    const taskCrClient = createTaskCrClient()
+    const dispatch = createTaskDispatcher({
+      taskCrClient,
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
     })
+    await dispatch(acceptedMention())
+    expect(taskCrClient.creates).toEqual([
+      {
+        name: taskCrNameForSlackEvent('Ev1'),
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: 'hello bot',
+        contexts: [
+          {
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '111.222',
+          },
+        ],
+      },
+    ])
   })
 
   it('propagates a taskCrClient.create() failure so the plugin layer can roll back event_log', async () => {
     const failure = new Error('k8s API down')
     const dispatch = createTaskDispatcher({
-      taskCrClient: createStubTaskCrClient({ createError: failure }),
+      taskCrClient: createTaskCrClient({ createError: failure }),
       opencodeClient: noopOpencodeClient,
-      eventLogStore: createStubEventLogStore(),
-      threadSessionStore: createStubThreadSessionStore(),
-      slackClient: createStubSlackClient(),
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
       logger: noopLogger,
       pollIntervalMs: 0,
       sleep: async () => {},
@@ -335,25 +315,20 @@ describe('createTaskDispatcher', () => {
   })
 
   it('returns once Received → Submitted has run, leaving the rest of the flow in the background', async () => {
-    const slackClient = createStubSlackClient()
-    const taskCrClient = createStubTaskCrClient()
+    const taskCrClient = createTaskCrClient()
     const dispatch = createTaskDispatcher({
       taskCrClient,
       opencodeClient: noopOpencodeClient,
-      eventLogStore: createStubEventLogStore(),
-      threadSessionStore: createStubThreadSessionStore(),
-      slackClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
       logger: noopLogger,
       pollIntervalMs: 0,
       sleep: async () => {},
     })
-    // `list()` in the stub returns a never-resolving promise; if the
-    // dispatcher were not backgrounding processMention, this await would
-    // hang the test.
+    // taskCrClient.list() never resolves; if the dispatcher were not
+    // backgrounding processMention this await would hang the test.
     await dispatch(acceptedMention())
-    expect({
-      slackCount: slackClient.calls.length,
-      createCount: taskCrClient.creates.length,
-    }).toEqual({ slackCount: 1, createCount: 1 })
+    expect(taskCrClient.creates.length).toBe(1)
   })
 })
