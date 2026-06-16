@@ -247,8 +247,16 @@ const waitForPhaseChange = async (
       continue
     }
     const match = tasks.find((t) => t.name === taskName)
+    if (match === undefined) {
+      // A list() succeeded but no CR with this name exists. The only path
+      // that produces this state in normal operation is an operator
+      // deleting the CR; staying in the loop would poll the API server
+      // forever. Throwing surfaces the leak to the dispatcher's catch.
+      throw new Error(
+        `Task CR ${taskName} not found in namespace ${deps.namespace}`,
+      )
+    }
     if (
-      match !== undefined &&
       match.phase !== undefined &&
       match.phase !== currentK8sPhase &&
       KNOWN_K8S_PHASES.has(match.phase)

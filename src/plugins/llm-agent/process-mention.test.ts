@@ -414,6 +414,29 @@ describe('advance', () => {
     })
   })
 
+  it('throws when the Task CR is absent from the list result so the background polling loop terminates', async () => {
+    const taskName = 'task-1'
+    const deps: ProcessMentionDeps = {
+      taskCrClient: {
+        async create() {
+          return 'created'
+        },
+        async list() {
+          return []
+        },
+      },
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient: createStubSlackClient(),
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    }
+    await expect(
+      advance({ kind: 'Submitted', env: ENV, taskName }, deps),
+    ).rejects.toThrow(`Task CR ${taskName} not found in namespace kubeopencode`)
+  })
+
   it('throws when called on a terminal phase', async () => {
     const deps: ProcessMentionDeps = {
       taskCrClient: createScriptedTaskCrClient([]),
