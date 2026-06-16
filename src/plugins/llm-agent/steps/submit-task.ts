@@ -70,7 +70,14 @@ const extForImage = (file: SlackFile): string => {
   const name = file.name ?? file.title ?? ''
   const dot = name.lastIndexOf('.')
   if (dot > 0 && dot < name.length - 1) {
-    return name.slice(dot + 1).toLowerCase()
+    // ConfigMap keys only allow [a-zA-Z0-9_.-]; query strings or other junk
+    // tacked onto the name extension would invalidate the key, so strip
+    // anything outside that alphabet.
+    const ext = name
+      .slice(dot + 1)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+    if (ext.length > 0) return ext
   }
   return 'bin'
 }
@@ -87,7 +94,7 @@ const configMapKeyFor = (file: SlackFile, index: number): string => {
   return `${prefix}-${idPart}.${extForImage(file)}`
 }
 
-const configMapNameForSlackEvent = (taskName: string): string =>
+export const configMapNameForSlackEvent = (taskName: string): string =>
   `${taskName}-images`
 
 interface DownloadedImage {
@@ -109,6 +116,39 @@ const downloadImages = async (
     if (file === undefined) continue
     const url = file.url_private_download ?? file.url_private
     if (typeof url !== 'string' || url.length === 0) continue
+    // Drop oversize attachments via Slack metadata before downloading so we
+    // don't burn bandwidth on bytes we'd reject below.
+    if (typeof file.size === 'number' && file.size > SINGLE_IMAGE_BYTE_CAP) {
+      resolved.logger.warn(
+        {
+          event: 'llm_agent_slack_image_too_large',
+          event_id: env.eventId,
+          slack_file_id: file.id,
+          bytes: file.size,
+          cap: SINGLE_IMAGE_BYTE_CAP,
+          checked_pre_download: true,
+        },
+        'slack image exceeds per-image cap; dropping this attachment',
+      )
+      continue
+    }
+    if (
+      typeof file.size === 'number' &&
+      totalBytes + file.size > TOTAL_IMAGE_BYTE_CAP
+    ) {
+      resolved.logger.warn(
+        {
+          event: 'llm_agent_slack_image_total_cap_reached',
+          event_id: env.eventId,
+          slack_file_id: file.id,
+          total_bytes: totalBytes,
+          cap: TOTAL_IMAGE_BYTE_CAP,
+          checked_pre_download: true,
+        },
+        'slack image would push ConfigMap over total cap; dropping this and any later attachments',
+      )
+      break
+    }
     let bytes: Uint8Array
     try {
       const result = await resolved.slackClient.downloadFile(url)
@@ -259,13 +299,40 @@ export const submitTask = async (
     imageConfigMapName = configMapNameForSlackEvent(taskName)
     await ensureImageConfigMap(resolved, env, imageConfigMapName, downloaded)
   }
-  const outcome = await resolved.taskCrClient.create({
-    name: taskName,
-    namespace: resolved.namespace,
-    agentName: resolved.agentName,
-    description: composeDescription(env.text, env.images.length, downloaded),
-    contexts: buildContexts(env, opencodeSessionId, imageConfigMapName),
-  })
+  let outcome
+  try {
+    outcome = await resolved.taskCrClient.create({
+      name: taskName,
+      namespace: resolved.namespace,
+      agentName: resolved.agentName,
+      description: composeDescription(env.text, env.images.length, downloaded),
+      contexts: buildContexts(env, opencodeSessionId, imageConfigMapName),
+    })
+  } catch (taskCreateError) {
+    if (imageConfigMapName !== undefined) {
+      // Best-effort: the ConfigMap was created above; deleting it here keeps
+      // the namespace clean when Task CR creation fails permanently. A swallowed
+      // delete failure still gets handled by the respond-step cleanup if a
+      // later retry succeeds in creating the Task.
+      try {
+        await resolved.configMapClient.delete({
+          name: imageConfigMapName,
+          namespace: resolved.namespace,
+        })
+      } catch (cleanupError) {
+        resolved.logger.warn(
+          {
+            event: 'llm_agent_orphan_configmap_cleanup_failed',
+            event_id: env.eventId,
+            configmap_name: imageConfigMapName,
+            err: cleanupError,
+          },
+          'failed to delete orphan ConfigMap after Task CR creation failed',
+        )
+      }
+    }
+    throw taskCreateError
+  }
   const { updated } = await resolved.eventLogStore.markTaskName(
     env.eventId,
     taskName,

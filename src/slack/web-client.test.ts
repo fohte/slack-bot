@@ -293,6 +293,26 @@ describe('SlackWebClient', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it('rejects responses whose Content-Length exceeds the OOM guard before buffering', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        new Response('', {
+          status: 200,
+          headers: { 'content-length': String(20 * 1024 * 1024) },
+        }),
+    )
+    const mock = buildMockClient()
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+      fetchImpl,
+    })
+    await expect(
+      client.downloadFile('https://files.slack.com/big.png'),
+    ).rejects.toMatchObject({ name: 'SlackApiError' })
+  })
+
   it('throws SlackApiError when file download returns non-2xx', async () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () => new Response('forbidden', { status: 403 }),

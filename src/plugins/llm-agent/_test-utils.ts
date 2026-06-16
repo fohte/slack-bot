@@ -204,4 +204,7 @@ export const noopConfigMapClient: ConfigMapClient = {
   async create() {
     throw new Error('configMapClient.create not implemented for this test')
   },
+  async delete() {
+    return 'not_found'
+  },
 }

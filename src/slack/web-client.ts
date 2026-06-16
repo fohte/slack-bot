@@ -93,6 +93,10 @@ export const createSlackWebClient = (
 }
 
 const SLACK_FILE_HOST_SUFFIX = '.slack.com'
+// Bound the in-memory buffer for a single download to keep a malicious or
+// runaway Content-Length from OOM-ing the process. Generous enough not to
+// reject ordinary Slack attachments.
+const SLACK_FILE_DOWNLOAD_MAX_BYTES = 10 * 1024 * 1024
 
 const downloadSlackFile = async (
   fetchImpl: typeof fetch,
@@ -132,6 +136,19 @@ const downloadSlackFile = async (
       `slack file download failed with HTTP ${String(response.status)}`,
       { status: response.status },
     )
+  }
+  const contentLengthHeader = response.headers.get('content-length')
+  if (contentLengthHeader !== null) {
+    const contentLength = Number.parseInt(contentLengthHeader, 10)
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > SLACK_FILE_DOWNLOAD_MAX_BYTES
+    ) {
+      throw new SlackApiError(
+        `slack file too large: ${String(contentLength)} bytes (cap ${String(SLACK_FILE_DOWNLOAD_MAX_BYTES)})`,
+        { status: response.status },
+      )
+    }
   }
   let buf: ArrayBuffer
   try {

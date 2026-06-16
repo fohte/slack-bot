@@ -152,6 +152,34 @@ describe('respond', () => {
     })
   })
 
+  it('deletes the image ConfigMap after responding so the namespace stays clean', async () => {
+    const deletes: Array<{ name: string; namespace: string }> = []
+    const slackClient = createStubSlackClient()
+    const deps: ProcessMentionDeps = {
+      configMapClient: {
+        async create() {
+          throw new Error('unused in respond test')
+        },
+        async delete(spec) {
+          deletes.push({ name: spec.name, namespace: spec.namespace })
+          return 'deleted'
+        },
+      },
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: 'answer',
+      }),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+    await respond(TEST_ENV, 'slack-task-1', { kind: 'completed' }, deps)
+    expect(deletes).toEqual([
+      { name: 'slack-task-1-images', namespace: 'kubeopencode' },
+    ])
+  })
+
   it('skips the Slack post and per-task teardown when event_log markResponded reports already-responded', async () => {
     const slackClient = createStubSlackClient()
     const eventLogStore = createScriptedEventLogStore({

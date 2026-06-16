@@ -21,15 +21,28 @@ import type { SlackFile } from '@/types/slack-payloads'
 
 interface RecordingConfigMapClient extends ConfigMapClient {
   readonly creates: readonly ConfigMapSpec[]
+  readonly deletes: ReadonlyArray<{
+    readonly name: string
+    readonly namespace: string
+  }>
 }
 
-const createRecordingConfigMapClient = (): RecordingConfigMapClient => {
+const createRecordingConfigMapClient = (
+  options: { createError?: Error } = {},
+): RecordingConfigMapClient => {
   const creates: ConfigMapSpec[] = []
+  const deletes: Array<{ name: string; namespace: string }> = []
   return {
     creates,
+    deletes,
     async create(spec) {
+      if (options.createError !== undefined) throw options.createError
       creates.push(spec)
       return 'created'
+    },
+    async delete(spec) {
+      deletes.push({ name: spec.name, namespace: spec.namespace })
+      return 'deleted'
     },
   }
 }
@@ -303,6 +316,99 @@ describe('submitTask', () => {
         },
       ],
       contextKinds: ['text', 'text', 'configMap'],
+    })
+  })
+
+  it('drops images that already exceed the per-image cap via Slack metadata without downloading', async () => {
+    const downloadCalls: string[] = []
+    const slackClient: SlackWebClient = {
+      ...createStubSlackClient(),
+      async downloadFile(url: string) {
+        downloadCalls.push(url)
+        return { bytes: new Uint8Array([1, 2, 3]), contentType: 'image/png' }
+      },
+    } as SlackWebClient
+    const taskCrClient = createScriptedTaskCrClient([])
+    const configMapClient = createRecordingConfigMapClient()
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'huge.png',
+        mimetype: 'image/png',
+        size: 10 * 1024 * 1024,
+        url_private: 'https://files.slack.com/huge.png',
+      },
+      {
+        id: 'F2',
+        name: 'ok.png',
+        mimetype: 'image/png',
+        size: 1024,
+        url_private: 'https://files.slack.com/ok.png',
+      },
+    ]
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      configMapClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+
+    await submitTask({ ...TEST_ENV, images }, deps)
+
+    expect(downloadCalls).toEqual(['https://files.slack.com/ok.png'])
+  })
+
+  it('cleans up the orphan ConfigMap when Task CR creation fails', async () => {
+    const taskCreateError = new Error('admission webhook denied')
+    const configMapClient = createRecordingConfigMapClient()
+    const slackClient = createSlackClientWithDownloads(
+      new Map([
+        [
+          'https://files.slack.com/img.png',
+          new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+        ],
+      ]),
+    )
+    const taskCrClient: ConfigMapClient extends never
+      ? never
+      : ProcessMentionDeps['taskCrClient'] = {
+      async create() {
+        throw taskCreateError
+      },
+      async list() {
+        return []
+      },
+    }
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'a.png',
+        mimetype: 'image/png',
+        url_private: 'https://files.slack.com/img.png',
+      },
+    ]
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      configMapClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+
+    await expect(submitTask({ ...TEST_ENV, images }, deps)).rejects.toBe(
+      taskCreateError,
+    )
+
+    const expectedConfigMapName = `${taskCrNameForSlackEvent(TEST_ENV.eventId)}-images`
+    expect({
+      creates: configMapClient.creates.map((c) => c.name),
+      deletes: configMapClient.deletes,
+    }).toEqual({
+      creates: [expectedConfigMapName],
+      deletes: [{ name: expectedConfigMapName, namespace: 'kubeopencode' }],
     })
   })
 

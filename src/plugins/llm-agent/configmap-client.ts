@@ -14,8 +14,16 @@ export interface ConfigMapSpec {
 
 export type ConfigMapCreateOutcome = 'created' | 'already_exists'
 
+export type ConfigMapDeleteOutcome = 'deleted' | 'not_found'
+
+export interface ConfigMapDeleteSpec {
+  readonly name: string
+  readonly namespace: string
+}
+
 export interface ConfigMapClient {
   create(spec: ConfigMapSpec): Promise<ConfigMapCreateOutcome>
+  delete(spec: ConfigMapDeleteSpec): Promise<ConfigMapDeleteOutcome>
 }
 
 const toBase64 = (bytes: Uint8Array): string =>
@@ -70,6 +78,20 @@ export const createKubernetesConfigMapClient = (
       } catch (error) {
         if (error instanceof ApiException && error.code === 409) {
           return 'already_exists'
+        }
+        throw error
+      }
+    },
+    async delete(spec) {
+      try {
+        await api.deleteNamespacedConfigMap({
+          namespace: spec.namespace,
+          name: spec.name,
+        })
+        return 'deleted'
+      } catch (error) {
+        if (error instanceof ApiException && error.code === 404) {
+          return 'not_found'
         }
         throw error
       }

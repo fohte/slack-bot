@@ -10,6 +10,7 @@ import type {
   SlackEnvelope,
 } from '@/plugins/llm-agent/process-mention-deps'
 import { resolveDeps } from '@/plugins/llm-agent/process-mention-deps'
+import { configMapNameForSlackEvent } from '@/plugins/llm-agent/steps/submit-task'
 import type { TerminalOutcome } from '@/plugins/llm-agent/steps/wait-for-completion'
 
 // Slack mrkdwn would otherwise interpret <, >, & inside the unstructured
@@ -226,6 +227,26 @@ export const respond = async (
         'failed to upsert thread_session_map after responding',
       )
     }
+  }
+
+  // Best-effort image ConfigMap cleanup. The Task CR has already reached a
+  // terminal phase so the agent pod no longer needs the mount. 404 means the
+  // Task ran without image attachments, which the delete impl treats as a
+  // no-op.
+  try {
+    await resolved.configMapClient.delete({
+      name: configMapNameForSlackEvent(taskName),
+      namespace: resolved.namespace,
+    })
+  } catch (cleanupError) {
+    resolved.logger.warn(
+      {
+        event: 'llm_agent_image_configmap_cleanup_failed',
+        task_name: taskName,
+        err: cleanupError,
+      },
+      'failed to delete image ConfigMap after responding',
+    )
   }
 
   resolved.logger.info(
