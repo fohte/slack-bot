@@ -76,12 +76,15 @@ const extForImage = (file: SlackFile): string => {
 }
 
 // ConfigMap binaryData keys must be DNS-subdomain-ish: lowercase alnum, dot,
-// hyphen. Falls back to a positional id when the Slack file has neither a
-// usable id nor a sanitisable name.
+// hyphen. The numeric index prefix guarantees uniqueness even if two files
+// share the same id, which Slack does not formally promise.
 const configMapKeyFor = (file: SlackFile, index: number): string => {
-  const id =
-    typeof file.id === 'string' ? file.id : `image-${String(index + 1)}`
-  return `${id.toLowerCase().replace(/[^a-z0-9.-]/g, '-')}.${extForImage(file)}`
+  const idPart =
+    typeof file.id === 'string' && file.id.length > 0
+      ? file.id.toLowerCase().replace(/[^a-z0-9.-]/g, '-')
+      : `image`
+  const prefix = String(index + 1).padStart(2, '0')
+  return `${prefix}-${idPart}.${extForImage(file)}`
 }
 
 const configMapNameForSlackEvent = (taskName: string): string =>
@@ -99,9 +102,8 @@ const downloadImages = async (
 ): Promise<readonly DownloadedImage[]> => {
   const downloaded: DownloadedImage[] = []
   let totalBytes = 0
-  // Sequential: a Slack message can carry up to 10 files, and `downloadFile`
-  // uses raw fetch without retry, so parallel bursts risk 429-ing every image
-  // at once. Stay serial until a real retrying client exists.
+  // Serial download: downloadFile does not retry, so issuing all images in
+  // parallel would 429 the whole batch on a single rate-limit hit.
   for (let index = 0; index < env.images.length; index++) {
     const file = env.images[index]
     if (file === undefined) continue

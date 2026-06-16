@@ -6,7 +6,10 @@ import type {
   EventLogOutcome,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
-import { extractSlackFiles, isImageFile } from '@/plugins/llm-agent/files'
+import {
+  extractSlackFiles,
+  extractSlackImageFiles,
+} from '@/plugins/llm-agent/files'
 import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
 import type { SlackEvent } from '@/types/slack-payloads'
 
@@ -51,7 +54,7 @@ const asOptionalString = (value: unknown): string | undefined =>
 const extractFields = (event: SlackEvent): ExtractedFields => {
   if (event.type !== 'message' && event.type !== 'app_mention') return {}
   const files = extractSlackFiles(event)
-  const imageCount = files.filter(isImageFile).length
+  const imageCount = extractSlackImageFiles(event).length
   return {
     channel: asOptionalString(event.channel),
     user: asOptionalString(event.user),

@@ -196,8 +196,8 @@ describe('submitTask', () => {
     const expectedDescription = [
       'The user attached 2 image file(s) to this Slack message.',
       'They are mounted in the workspace at `slack-images/`. Call the Read tool on each path below to view the image:',
-      '- slack-images/f1.png (originally "screen.png")',
-      '- slack-images/f2.jpg (originally "photo.jpg")',
+      '- slack-images/01-f1.png (originally "screen.png")',
+      '- slack-images/02-f2.jpg (originally "photo.jpg")',
       '',
       'look at these',
     ].join('\n')
@@ -240,8 +240,8 @@ describe('submitTask', () => {
           name: expectedConfigMapName,
           namespace: 'kubeopencode',
           binaryEntries: [
-            { filename: 'f1.png', bytes: pngBytes },
-            { filename: 'f2.jpg', bytes: jpgBytes },
+            { filename: '01-f1.png', bytes: pngBytes },
+            { filename: '02-f2.jpg', bytes: jpgBytes },
           ],
           labels: {
             'slack-bot.fohte.net/slack-event-id': 'Ev1',
@@ -299,7 +299,7 @@ describe('submitTask', () => {
       configMaps: [
         {
           name: `${taskCrNameForSlackEvent('Ev1')}-images`,
-          keys: ['f2.png'],
+          keys: ['02-f2.png'],
         },
       ],
       contextKinds: ['text', 'text', 'configMap'],

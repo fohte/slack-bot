@@ -4,7 +4,7 @@ import {
   INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
-import { extractSlackFiles, isImageFile } from '@/plugins/llm-agent/files'
+import { extractSlackImageFiles } from '@/plugins/llm-agent/files'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import { processMention } from '@/plugins/llm-agent/process-mention'
 import type {
@@ -50,7 +50,7 @@ const extractEventFields = (
     ts: typeof event.ts === 'string' ? event.ts : undefined,
     threadTs: typeof event.thread_ts === 'string' ? event.thread_ts : undefined,
     text: typeof event.text === 'string' ? event.text : undefined,
-    images: extractSlackFiles(event).filter(isImageFile),
+    images: extractSlackImageFiles(event),
   }
 }
 
