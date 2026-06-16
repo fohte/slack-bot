@@ -62,8 +62,6 @@ export type Phase =
       readonly message: string | undefined
     }
 
-// Singletons so that consecutive phases that share copy can be deduped by
-// referential equality in the processMention loop.
 const PREPARING_BUBBLE: PhaseStatus = INITIAL_PHASE_STATUS
 const QUEUED_BUBBLE: PhaseStatus = {
   status: 'is waiting in queue...',
