@@ -79,9 +79,8 @@ const buildSuccessText = async (
       assistantText =
         await resolved.opencodeClient.fetchLatestAssistantText(sessionId)
     } catch (error) {
-      // Don't throw: re-trying every tick when opencode is down would
-      // leave the user with no notification at all. Post the fallback
-      // so they at least learn the Task finished.
+      // fallback to the placeholder so the user still learns the Task
+      // finished even when opencode is unreachable.
       resolved.logger.error(
         {
           event: 'llm_agent_response_opencode_fetch_failed',

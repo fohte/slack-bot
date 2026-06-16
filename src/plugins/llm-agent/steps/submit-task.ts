@@ -37,10 +37,8 @@ const lookupResumeSessionId = async (
   resolved: ResolvedDeps,
   env: SlackEnvelope,
 ): Promise<string | undefined> => {
-  // Mirror the response-side handling: a transient DB outage during
-  // lookup should not abort dispatch (which would roll back event_log
-  // and put Slack into a retry loop while DB recovers). Falling back to
-  // undefined just creates a fresh opencode session.
+  // lookup failure falls through to undefined so the Task starts a fresh
+  // opencode session instead of aborting dispatch.
   try {
     return await resolved.threadSessionStore.lookup({
       slackTeamId: env.teamId,

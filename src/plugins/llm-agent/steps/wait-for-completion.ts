@@ -21,10 +21,6 @@ export const RUNNING_BUBBLE: PhaseStatus = {
   loadingMessages: ['Working on it…'],
 }
 
-// Pending/Queued/Running are the only non-terminal phases that map to a
-// visible bubble. Completed/Failed exit the polling loop before this is
-// consulted; anything else (undefined, an unknown phase string) returns
-// undefined and the polling loop just keeps sleeping.
 export const bubbleForK8sPhase = (
   phase: string | undefined,
 ): PhaseStatus | undefined => {
