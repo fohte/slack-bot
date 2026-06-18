@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseTaskCrItem } from '@/plugins/llm-agent/task-cr-client'
+import {
+  buildTaskCrManifest,
+  parseTaskCrItem,
+} from '@/plugins/llm-agent/task-cr-client'
 
 describe('parseTaskCrItem', () => {
   it('extracts name, phase, and message from a Task CR list item', () => {
@@ -34,5 +37,54 @@ describe('parseTaskCrItem', () => {
     expect(parseTaskCrItem({ metadata: {} }, 'ns')).toBeUndefined()
     expect(parseTaskCrItem(null, 'ns')).toBeUndefined()
     expect(parseTaskCrItem('not-an-object', 'ns')).toBeUndefined()
+  })
+})
+
+describe('buildTaskCrManifest', () => {
+  it('renders text and configMap contexts side by side', () => {
+    expect(
+      buildTaskCrManifest({
+        name: 'slack-abc',
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: 'go',
+        contexts: [
+          {
+            kind: 'text',
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            kind: 'configMap',
+            name: 'slack-images',
+            mountPath: 'slack-images',
+            configMapName: 'slack-abc-images',
+          },
+        ],
+      }),
+    ).toEqual({
+      apiVersion: 'kubeopencode.io/v1alpha1',
+      kind: 'Task',
+      metadata: { name: 'slack-abc', namespace: 'kubeopencode' },
+      spec: {
+        agentRef: { name: 'slack-bot' },
+        description: 'go',
+        contexts: [
+          {
+            name: 'slack-channel',
+            type: 'Text',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            name: 'slack-images',
+            type: 'ConfigMap',
+            mountPath: 'slack-images',
+            configMap: { name: 'slack-abc-images' },
+          },
+        ],
+      },
+    })
   })
 })

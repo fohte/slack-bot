@@ -6,6 +6,7 @@ import {
   createScriptedThreadSessionStore,
   createStubSlackClient,
   fixedOpencodeClient,
+  noopConfigMapClient,
   TEST_ENV,
 } from '@/plugins/llm-agent/_test-utils'
 import type { ProcessMentionDeps } from '@/plugins/llm-agent/process-mention'
@@ -64,6 +65,7 @@ describe('waitForCompletion', () => {
     ])
     const slackClient = createStubSlackClient()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient,
       opencodeClient: fixedOpencodeClient(),
       eventLogStore: createScriptedEventLogStore(),
@@ -115,6 +117,7 @@ describe('waitForCompletion', () => {
     ])
     const slackClient = createStubSlackClient()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient,
       opencodeClient: fixedOpencodeClient(),
       eventLogStore: createScriptedEventLogStore(),
@@ -139,6 +142,7 @@ describe('waitForCompletion', () => {
     const taskName = 'task-1'
     let sleepCount = 0
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient: createScriptedTaskCrClient([
         {
           name: taskName,
@@ -178,6 +182,7 @@ describe('waitForCompletion', () => {
   it('throws when the Task CR is absent from the list result so the background poll loop terminates', async () => {
     const taskName = 'task-1'
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient: {
         async create() {
           return 'created'
@@ -216,6 +221,7 @@ describe('waitForCompletion', () => {
     ])
     const slackClient = createStubSlackClient()
     const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
       taskCrClient,
       opencodeClient: fixedOpencodeClient(),
       eventLogStore: createScriptedEventLogStore(),

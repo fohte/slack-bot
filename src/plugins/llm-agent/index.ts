@@ -10,6 +10,16 @@ export {
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 export type {
+  ConfigMapBinaryEntry,
+  ConfigMapClient,
+  ConfigMapCreateOutcome,
+  ConfigMapSpec,
+} from '@/plugins/llm-agent/configmap-client'
+export {
+  buildConfigMapManifest,
+  createKubernetesConfigMapClient,
+} from '@/plugins/llm-agent/configmap-client'
+export type {
   TaskDispatcher,
   TaskDispatcherOptions,
 } from '@/plugins/llm-agent/dispatcher'

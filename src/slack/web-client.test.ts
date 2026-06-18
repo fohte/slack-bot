@@ -232,4 +232,100 @@ describe('SlackWebClient', () => {
       }),
     ).rejects.toMatchObject({ name: 'SlackApiError', status: 500 })
   })
+
+  it('downloads a Slack file with the bot token as Bearer auth', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        }),
+    )
+    const mock = buildMockClient()
+    const client = createSlackWebClient({
+      botToken: 'xoxb-secret',
+      maxRetries: 0,
+      client: asWebClient(mock),
+      fetchImpl,
+    })
+    const result = await client.downloadFile(
+      'https://files.slack.com/files-pri/T1-F1/image.png',
+    )
+    expect({
+      fetchCalls: fetchImpl.mock.calls.map(([url, init]) => ({
+        url,
+        method: (init as RequestInit | undefined)?.method,
+        auth: (
+          (init as RequestInit | undefined)?.headers as
+            | Record<string, string>
+            | undefined
+        )?.['Authorization'],
+      })),
+      contentType: result.contentType,
+      bytes: Array.from(result.bytes),
+    }).toEqual({
+      fetchCalls: [
+        {
+          url: 'https://files.slack.com/files-pri/T1-F1/image.png',
+          method: 'GET',
+          auth: 'Bearer xoxb-secret',
+        },
+      ],
+      contentType: 'image/png',
+      bytes: [0x89, 0x50, 0x4e, 0x47],
+    })
+  })
+
+  it('refuses to download from a non-Slack host without calling fetch', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response('', { status: 200 }),
+    )
+    const mock = buildMockClient()
+    const client = createSlackWebClient({
+      botToken: 'xoxb-secret',
+      maxRetries: 0,
+      client: asWebClient(mock),
+      fetchImpl,
+    })
+    await expect(
+      client.downloadFile('https://evil.example.com/files/x.png'),
+    ).rejects.toMatchObject({ name: 'SlackApiError' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('rejects responses whose Content-Length exceeds the OOM guard before buffering', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        new Response('', {
+          status: 200,
+          headers: { 'content-length': String(20 * 1024 * 1024) },
+        }),
+    )
+    const mock = buildMockClient()
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+      fetchImpl,
+    })
+    await expect(
+      client.downloadFile('https://files.slack.com/big.png'),
+    ).rejects.toMatchObject({ name: 'SlackApiError' })
+  })
+
+  it('throws SlackApiError when file download returns non-2xx', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response('forbidden', { status: 403 }),
+    )
+    const mock = buildMockClient()
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+      fetchImpl,
+    })
+    await expect(
+      client.downloadFile('https://files.slack.com/files-pri/T1-F1/x.png'),
+    ).rejects.toMatchObject({ name: 'SlackApiError', status: 403 })
+  })
 })

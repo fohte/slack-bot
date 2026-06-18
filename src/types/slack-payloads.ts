@@ -98,6 +98,22 @@ export interface SlackUnknownEvent extends SlackEventBase {
   readonly type: string
 }
 
+// Slack file object on message/app_mention events.
+// Reference: https://docs.slack.dev/reference/objects/file-object
+export interface SlackFile {
+  readonly id?: string
+  readonly name?: string
+  readonly title?: string
+  readonly mimetype?: string
+  readonly filetype?: string
+  readonly size?: number
+  // url_private requires the bot token to download.
+  readonly url_private?: string
+  readonly url_private_download?: string
+  readonly permalink?: string
+  readonly [key: string]: unknown
+}
+
 export interface SlackMessageEvent extends SlackEventBase {
   readonly type: 'message'
   readonly channel?: string
@@ -108,6 +124,7 @@ export interface SlackMessageEvent extends SlackEventBase {
   readonly channel_type?: string
   readonly subtype?: string
   readonly bot_id?: string
+  readonly files?: readonly SlackFile[]
 }
 
 export interface SlackAppMentionEvent extends SlackEventBase {
@@ -118,6 +135,7 @@ export interface SlackAppMentionEvent extends SlackEventBase {
   readonly ts?: string
   readonly thread_ts?: string
   readonly bot_id?: string
+  readonly files?: readonly SlackFile[]
 }
 
 export type SlackEvent =

@@ -36,6 +36,11 @@ export interface ResponseUrlResult {
   readonly raw: unknown
 }
 
+export interface SlackFileDownload {
+  readonly bytes: Uint8Array
+  readonly contentType: string | undefined
+}
+
 export interface SlackWebClient {
   postMessage(arg: ChatPostMessageArguments): Promise<ChatPostMessageResponse>
   updateMessage(arg: ChatUpdateArguments): Promise<ChatUpdateResponse>
@@ -50,6 +55,9 @@ export interface SlackWebClient {
   setAssistantThreadStatus(
     arg: AssistantThreadsSetStatusArguments,
   ): Promise<AssistantThreadsSetStatusResponse>
+  // Host is pinned to *.slack.com so a tampered url_private cannot exfiltrate
+  // the bot token. maxRetries is not honored; caller owns retry on 429/5xx.
+  downloadFile(url: string): Promise<SlackFileDownload>
 }
 
 export interface SlackWebClientOptions {
@@ -80,6 +88,80 @@ export const createSlackWebClient = (
       postToResponseUrl(fetchImpl, url, payload),
     setAssistantThreadStatus: (arg) =>
       callMethod(() => client.assistant.threads.setStatus(arg)),
+    downloadFile: (url) => downloadSlackFile(fetchImpl, options.botToken, url),
+  }
+}
+
+const SLACK_FILE_HOST_SUFFIX = '.slack.com'
+// Bound the in-memory buffer for a single download to keep a malicious or
+// runaway Content-Length from OOM-ing the process. Generous enough not to
+// reject ordinary Slack attachments.
+const SLACK_FILE_DOWNLOAD_MAX_BYTES = 10 * 1024 * 1024
+
+const downloadSlackFile = async (
+  fetchImpl: typeof fetch,
+  botToken: string,
+  url: string,
+): Promise<SlackFileDownload> => {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new SlackApiError(`invalid slack file URL: ${url}`, {})
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    (parsed.hostname !== 'slack.com' &&
+      !parsed.hostname.endsWith(SLACK_FILE_HOST_SUFFIX))
+  ) {
+    throw new SlackApiError(
+      `refusing to download non-Slack URL: ${parsed.hostname}`,
+      {},
+    )
+  }
+  let response: Response
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${botToken}` },
+    })
+  } catch (err) {
+    throw new SlackApiError(
+      `slack file download network error: ${err instanceof Error ? err.message : String(err)}`,
+      {},
+    )
+  }
+  if (!response.ok) {
+    throw new SlackApiError(
+      `slack file download failed with HTTP ${String(response.status)}`,
+      { status: response.status },
+    )
+  }
+  const contentLengthHeader = response.headers.get('content-length')
+  if (contentLengthHeader !== null) {
+    const contentLength = Number.parseInt(contentLengthHeader, 10)
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > SLACK_FILE_DOWNLOAD_MAX_BYTES
+    ) {
+      throw new SlackApiError(
+        `slack file too large: ${String(contentLength)} bytes (cap ${String(SLACK_FILE_DOWNLOAD_MAX_BYTES)})`,
+        { status: response.status },
+      )
+    }
+  }
+  let buf: ArrayBuffer
+  try {
+    buf = await response.arrayBuffer()
+  } catch (err) {
+    throw new SlackApiError(
+      `slack file body read error: ${err instanceof Error ? err.message : String(err)}`,
+      { status: response.status },
+    )
+  }
+  return {
+    bytes: new Uint8Array(buf),
+    contentType: response.headers.get('content-type') ?? undefined,
   }
 }
 
