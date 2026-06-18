@@ -75,8 +75,8 @@ spec:
 
 | `name`                | `type`      | `mountPath`                | Present when                                                     | Source                                       |
 | --------------------- | ----------- | -------------------------- | ---------------------------------------------------------------- | -------------------------------------------- |
-| `slack-channel`       | `Text`      | `slack-context/channel`    | Always                                                           | `submit-task.ts:26-30`                       |
-| `slack-thread-ts`     | `Text`      | `slack-context/thread-ts`  | Always                                                           | `submit-task.ts:31-35`                       |
+| `slack-channel`       | `Text`      | `slack-context/channel`    | Always                                                           | `submit-task.ts:26-31`                       |
+| `slack-thread-ts`     | `Text`      | `slack-context/thread-ts`  | Always                                                           | `submit-task.ts:32-37`                       |
 | `opencode-session-id` | `Text`      | `slack-context/session-id` | The Slack thread has a prior opencode session recorded           | `submit-task.ts:39-46`, `respond.ts:211-219` |
 | `slack-images`        | `ConfigMap` | `slack-images`             | The Slack message has image attachments that fit the size budget | `submit-task.ts:47-54`                       |
 
