@@ -21,6 +21,27 @@ describe('loadConfig', () => {
     expect(config.maxConcurrentTasks).toBe(32)
     expect(config.maxWebApiRetries).toBe(3)
     expect(config.logLevel).toBe('info')
+    expect(config.llmAgent).toEqual({
+      taskCrNamespace: undefined,
+      taskCrAgentName: undefined,
+      opencodeBaseUrl: undefined,
+    })
+  })
+
+  it('reads optional llm-agent env overrides', () => {
+    const config = loadConfig({
+      env: {
+        ...baseEnv,
+        SLACK_BOT_LLM_AGENT_TASK_CR_NAMESPACE: 'my-ns',
+        SLACK_BOT_LLM_AGENT_TASK_CR_AGENT_NAME: 'my-agent',
+        SLACK_BOT_LLM_AGENT_OPENCODE_BASE_URL: 'http://localhost:4096',
+      },
+    })
+    expect(config.llmAgent).toEqual({
+      taskCrNamespace: 'my-ns',
+      taskCrAgentName: 'my-agent',
+      opencodeBaseUrl: 'http://localhost:4096',
+    })
   })
 
   it('throws ConfigLoadError when SLACK_SIGNING_SECRET is missing', () => {
