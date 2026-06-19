@@ -59,7 +59,7 @@ spec:
   description: <prompt text for opencode>
   contexts:
     - name: <string>
-      type: Text | ConfigMap
+      type: <Text | ConfigMap>
       mountPath: <string>
       # Text
       text: <string>
@@ -119,7 +119,7 @@ slack-bot reaches opencode directly over HTTP — not through the operator — t
 ### Connection
 
 - Default base URL: `http://slack-bot.kubeopencode.svc.cluster.local:4096`
-- Implies a `Service` named `slack-bot` in the `kubeopencode` namespace whose target port serves opencode's HTTP API on port `4096`
+- Implies a `Service` named `slack-bot` in the `kubeopencode` namespace exposing port `4096` (which routes to opencode's HTTP API)
 - slack-bot retries each request up to 3 times with a 1000 ms fixed delay between attempts
 
 ### Endpoints consumed
@@ -139,8 +139,8 @@ slack-bot assumes the following objects already exist when it starts dispatching
 
 | Resource                                                        | Name                    | Notes                                                                                              |
 | --------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
-| `Namespace`                                                     | `kubeopencode`          | Hardcoded in slack-bot, not configurable via env var.                                              |
-| `Agent` CR                                                      | `slack-bot`             | Referenced from every Task CR via `spec.agentRef.name`. Also hardcoded.                            |
+| `Namespace`                                                     | `kubeopencode`          | Injected as a plugin dependency with this default; not exposed as a runtime configuration knob.    |
+| `Agent` CR                                                      | `slack-bot`             | Referenced from every Task CR via `spec.agentRef.name`. Same dependency-with-default arrangement.  |
 | opencode `Service`                                              | `slack-bot` (port 4096) | Must front opencode's HTTP API at the default base URL above.                                      |
 | `CustomResourceDefinition` for `tasks.kubeopencode.io` v1alpha1 | —                       | Required for the Task CR create/list calls to succeed. Owned by the kubeopencode operator install. |
 
