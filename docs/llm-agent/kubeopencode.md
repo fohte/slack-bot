@@ -1,24 +1,27 @@
 # llm-agent ↔ kubeopencode contract
 
-The `llm-agent` plugin runs Slack mentions on the [kubeopencode](https://github.com/fohte/infra) operator: it creates a `Task` CR in the cluster, the operator spawns an opencode runner Pod, and the plugin fetches the assistant reply via opencode's HTTP API. This document captures everything the plugin requires from the surrounding kubeopencode deployment so the infra side has a single reference to consult when changing the operator-side chart or the operator itself.
-
-Every claim below names the source symbol (`createTaskDispatcher`, `buildTaskCrManifest`, etc.) instead of line numbers, so a reader can grep `src/plugins/llm-agent/` for the symbol when the doc and the code drift.
+The `llm-agent` plugin runs each Slack mention on the [kubeopencode](https://github.com/fohte/infra) operator: it creates a `Task` CR in the cluster, the operator spawns an opencode runner Pod, and the plugin fetches the assistant reply via opencode's HTTP API. This document is the contract between the two sides — what slack-bot writes / reads, and what the kubeopencode deployment must provide. It does not describe slack-bot's internal structure; that's owned by the source.
 
 ## Topology
 
 ```
 Slack event
-  └─► dispatcher (src/plugins/llm-agent/dispatcher.ts)
-        └─► submitTask (src/plugins/llm-agent/steps/submit-task.ts)
-              ├─► (optional) ConfigMap with Slack images
-              └─► Task CR  ──watch──►  kubeopencode operator
-                                              └─► opencode runner Pod
-                                                     └─► opencode HTTP API
-        └─► waitForCompletion (poll Task CR status.phase)
-        └─► respond (src/plugins/llm-agent/steps/respond.ts)
-              └─► opencode HTTP API (GET /session, /session/{id}/message)
-              └─► Slack chat.postMessage
-              └─► ConfigMap delete (cleanup)
+  │
+  ▼
+slack-bot ──create──► Task CR  ──watch──► kubeopencode operator
+                          │                        │
+                          │                        ▼
+                          │                opencode runner Pod
+                          │                        │
+                          │                        ▼
+                          └◄──poll status── (writes status.phase /
+                                             status.message)
+                                                   │
+                          opencode HTTP API ◄──────┘
+                              ▲
+                              │  GET /session
+                              │  GET /session/{id}/message
+                          slack-bot
 ```
 
 ## Task CR
@@ -32,23 +35,17 @@ Slack event
 | kind    | `Task`               |
 | plural  | `tasks` (namespaced) |
 
-Source: `TASK_CR_GROUP` / `TASK_CR_VERSION` / `TASK_CR_PLURAL` in `src/plugins/llm-agent/task-cr-client.ts`.
-
 ### Name (idempotency key)
 
-Task CR names are derived from the Slack `event_id`:
+Each Slack mention maps to a Task CR whose name is derived from the Slack `event_id`:
 
 ```
 slack-<sha256(event_id)[:16]>
 ```
 
-Source: `taskCrNameForSlackEvent` in `src/plugins/llm-agent/task-cr-client.ts`.
+The Slack `event_id` is hashed to keep names RFC 1123 label-safe. The same `event_id` always maps to the same name, so retried deliveries of the same Slack event converge on a single Task CR. slack-bot treats `AlreadyExists` (HTTP 409) on create as a successful no-op for this reason.
 
-The Slack `event_id` is hashed to keep names RFC 1123 label-safe, and the same event always maps to the same name. The plugin treats HTTP 409 from `createNamespacedCustomObject` as `already_exists` and continues as if the create succeeded, so Slack-side retries of the same delivery converge on a single Task CR rather than creating duplicates.
-
-### Spec (what slack-bot writes)
-
-Built by `buildTaskCrManifest` in `src/plugins/llm-agent/task-cr-client.ts`:
+### Spec written by slack-bot
 
 ```yaml
 apiVersion: kubeopencode.io/v1alpha1
@@ -71,27 +68,27 @@ spec:
         name: <configmap name>
 ```
 
-`spec.contexts` always carries the two Slack-thread anchors, plus the optional session-resume hint and image mount. The exact set is assembled in `buildContexts` in `src/plugins/llm-agent/steps/submit-task.ts`:
+`spec.description` is the prompt. It is the Slack message text after stripping the bot mention prefix, with image-handling hints prepended when the message has image attachments.
+
+`spec.contexts` always carries the two Slack-thread anchors, plus an optional session-resume hint and an optional image mount:
 
 | `name`                | `type`      | `mountPath`                | Present when                                                                |
 | --------------------- | ----------- | -------------------------- | --------------------------------------------------------------------------- |
 | `slack-channel`       | `Text`      | `slack-context/channel`    | Always                                                                      |
 | `slack-thread-ts`     | `Text`      | `slack-context/thread-ts`  | Always                                                                      |
-| `opencode-session-id` | `Text`      | `slack-context/session-id` | The Slack thread already has an opencode session recorded (resumed thread)  |
+| `opencode-session-id` | `Text`      | `slack-context/session-id` | The Slack thread already has a recorded opencode session (resumed thread)   |
 | `slack-images`        | `ConfigMap` | `slack-images`             | The Slack message has image attachments that fit the per-image / total caps |
 
-The `description` field is the prompt: the Slack message text with image-handling hints prepended when attachments are present (`composeDescription` in `src/plugins/llm-agent/steps/submit-task.ts`).
+slack-bot only produces the `Text` and `ConfigMap` variants of `ContextType`; the v1alpha1 `Git`, `Runtime`, and `URL` variants are not used.
 
-`ContextType` only uses the `Text` and `ConfigMap` variants of the kubeopencode v1alpha1 schema; `Git`, `Runtime`, and `URL` are not produced by this plugin.
+### Status read by slack-bot
 
-### Status (what slack-bot reads)
-
-`parseTaskCrItem` in `src/plugins/llm-agent/task-cr-client.ts` reads exactly two fields from the Task CR status subresource:
+slack-bot reads exactly two fields from the status subresource:
 
 - `status.phase` — string
-- `status.message` — string, surfaced verbatim into Slack when `phase == Failed`
+- `status.message` — string, surfaced verbatim into Slack on failure
 
-`waitForCompletion` (`src/plugins/llm-agent/steps/wait-for-completion.ts`) treats phases as follows:
+Phase handling:
 
 | `status.phase` | Behaviour                                                |
 | -------------- | -------------------------------------------------------- |
@@ -102,60 +99,59 @@ The `description` field is the prompt: the Slack message text with image-handlin
 | `Failed`       | Terminal — post `Task failed: <status.message>` to Slack |
 | anything else  | Treated as in-progress; no bubble update                 |
 
-The operator MUST drive the CR to one of `Completed` or `Failed` for the plugin to ever stop polling. The plugin polls via `list` (not `watch`) every `DEFAULT_POLL_INTERVAL_MS` (5000 ms; see `src/plugins/llm-agent/process-mention-deps.ts`). If a Task CR disappears mid-poll, `waitForCompletion` throws and the dispatcher gives up on that Slack event.
+slack-bot polls the Task CR via `list` (not `watch`) on a fixed 5 s interval. The operator MUST eventually drive the CR to `Completed` or `Failed`; otherwise slack-bot polls forever. If the CR disappears mid-poll, slack-bot gives up on that Slack event.
 
 ## Image ConfigMap
 
-When a Slack message has image attachments, the plugin first creates a ConfigMap in the same namespace and references it from `spec.contexts` (see `submitTask` / `ensureImageConfigMap` in `src/plugins/llm-agent/steps/submit-task.ts`).
+When a Slack message has image attachments, slack-bot creates a ConfigMap in the same namespace before the Task CR and references it from `spec.contexts`.
 
-- Name: `<task-cr-name>-images` (`configMapNameForSlackEvent`)
-- Labels: `slack-bot.fohte.net/slack-event-id: <event_id>`
-- Payload: `binaryData` keyed by `<NN>-<slack-file-id>.<ext>`, base64-encoded raw bytes (`buildConfigMapManifest` in `src/plugins/llm-agent/configmap-client.ts`)
-- Size budget: ≤ 500 KiB per image and ≤ 700 KiB total before base64 expansion (see `SINGLE_IMAGE_BYTE_CAP` / `TOTAL_IMAGE_BYTE_CAP` in `submit-task.ts`); over-budget images are dropped pre-create
+- Name: `<task-cr-name>-images`
+- Label: `slack-bot.fohte.net/slack-event-id: <event_id>`
+- Payload: `binaryData` keyed by `<NN>-<slack-file-id>.<ext>`, base64-encoded raw bytes
+- Size budget: ≤ 500 KiB per image and ≤ 700 KiB total before base64 expansion; over-budget images are dropped before create
 
-The ConfigMap is mounted into the opencode runner workspace at `slack-images/` (the `mountPath` of the `slack-images` context). The plugin deletes the ConfigMap on terminal phase; a 404 is treated as a no-op, so the operator does not have to keep the object alive after the runner exits.
+The ConfigMap is mounted into the opencode runner workspace at `slack-images/`. slack-bot deletes it on terminal phase and treats `NotFound` as a no-op, so the operator does not need to keep the object alive after the runner exits.
 
 ## opencode HTTP API
 
-The plugin reaches opencode directly over HTTP — not through the operator — for both the resume-session hint and the final assistant reply.
+slack-bot reaches opencode directly over HTTP — not through the operator — to fetch the final assistant reply.
 
 ### Connection
 
-- Default base URL: `http://slack-bot.kubeopencode.svc.cluster.local:4096` (`DEFAULT_OPENCODE_BASE_URL` in `src/plugins/llm-agent/opencode-client.ts`)
-- Retry: 3 attempts with a 1000 ms fixed delay between attempts (`DEFAULT_OPENCODE_FETCH_ATTEMPTS` / `DEFAULT_OPENCODE_RETRY_DELAY_MS` in the same file)
-
-The default base URL implies a `Service` named `slack-bot` in the `kubeopencode` namespace whose target port serves opencode's HTTP API on port `4096`.
+- Default base URL: `http://slack-bot.kubeopencode.svc.cluster.local:4096`
+- Implies a `Service` named `slack-bot` in the `kubeopencode` namespace whose target port serves opencode's HTTP API on port `4096`
+- slack-bot retries each request up to 3 times with a 1000 ms fixed delay between attempts
 
 ### Endpoints consumed
 
-| Method | Path                           | Used by                                                              | Expectation                                                                                                                                                                                                                                      |
-| ------ | ------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`  | `/session`                     | `findSessionIdByTitle` in `src/plugins/llm-agent/opencode-client.ts` | Returns a JSON array; each entry has `id` (string) and `title` (string). The plugin picks the first entry whose `title` matches a candidate value (see below).                                                                                   |
-| `GET`  | `/session/{sessionId}/message` | `fetchLatestAssistantText` in the same file                          | Returns a JSON array of messages, oldest first; each entry has `info.role` (string) and `parts[]` with `{ type: "text", text: string }`. The plugin walks from the end and returns the joined text parts of the most recent `assistant` message. |
+| Method | Path                           | Expectation                                                                                                                                                                                                                                     |
+| ------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session`                     | Returns a JSON array; each entry has `id` (string) and `title` (string). slack-bot picks the first entry whose `title` matches the candidate value described below.                                                                             |
+| `GET`  | `/session/{sessionId}/message` | Returns a JSON array of messages, oldest first; each entry has `info.role` (string) and `parts[]` with `{ type: "text", text: string }`. slack-bot walks from the end and returns the joined text parts of the most recent `assistant` message. |
 
 ### Session-title convention
 
-On the first Slack mention in a thread, `respond` looks the opencode session up by title using the **Task CR name** as the title (see `resolveSessionId` in `src/plugins/llm-agent/steps/respond.ts`). On later turns it uses the session id remembered in the plugin's own `thread_session_map`. This means the kubeopencode runner / wrapper invoking opencode MUST set the opencode session title to the Task CR name (`metadata.name`) on first run; otherwise the plugin cannot find the session and falls back to a placeholder message.
+On the first Slack mention in a thread, slack-bot looks the opencode session up by title using the **Task CR name** as the title. On later turns it uses the session id it remembered locally on the previous turn. The kubeopencode runner / wrapper that invokes opencode therefore MUST set the opencode session title to the Task CR name (`metadata.name`) on first run; otherwise slack-bot cannot find the session and falls back to a placeholder message.
 
 ## Pre-existing cluster resources
 
-The plugin assumes the following objects already exist when it starts dispatching:
+slack-bot assumes the following objects already exist when it starts dispatching:
 
-| Resource                                                        | Name                    | Notes                                                                                                                             |
-| --------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `Namespace`                                                     | `kubeopencode`          | Hardcoded default (`DEFAULT_TASK_CR_NAMESPACE` in `src/plugins/llm-agent/process-mention-deps.ts`). Not configurable via env var. |
-| `Agent` CR                                                      | `slack-bot`             | Hardcoded default (`DEFAULT_TASK_CR_AGENT_NAME` in the same file). Referenced from every Task CR via `spec.agentRef.name`.        |
-| opencode `Service`                                              | `slack-bot` (port 4096) | Implied by `DEFAULT_OPENCODE_BASE_URL`. The service must front opencode's HTTP API.                                               |
-| `CustomResourceDefinition` for `tasks.kubeopencode.io` v1alpha1 | —                       | Required for the Task CR create/list calls to succeed. Owned by the kubeopencode operator install.                                |
+| Resource                                                        | Name                    | Notes                                                                                              |
+| --------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `Namespace`                                                     | `kubeopencode`          | Hardcoded in slack-bot, not configurable via env var.                                              |
+| `Agent` CR                                                      | `slack-bot`             | Referenced from every Task CR via `spec.agentRef.name`. Also hardcoded.                            |
+| opencode `Service`                                              | `slack-bot` (port 4096) | Must front opencode's HTTP API at the default base URL above.                                      |
+| `CustomResourceDefinition` for `tasks.kubeopencode.io` v1alpha1 | —                       | Required for the Task CR create/list calls to succeed. Owned by the kubeopencode operator install. |
 
 ## RBAC required by the slack-bot Pod
 
-The plugin uses `KubeConfig.loadFromDefault()` in both `task-cr-client.ts` and `configmap-client.ts`, which in-cluster resolves to the Pod's ServiceAccount. That ServiceAccount needs at least the verbs the code calls:
+slack-bot authenticates to the API server with its in-cluster ServiceAccount. The ServiceAccount needs at least:
 
-| API group / resource                 | Verbs              | Used by                                                    |
-| ------------------------------------ | ------------------ | ---------------------------------------------------------- |
-| `kubeopencode.io/tasks` (namespaced) | `create`, `list`   | `createKubernetesTaskCrClient` in `task-cr-client.ts`      |
-| `""/configmaps` (namespaced)         | `create`, `delete` | `createKubernetesConfigMapClient` in `configmap-client.ts` |
+| API group / resource                 | Verbs              |
+| ------------------------------------ | ------------------ |
+| `kubeopencode.io/tasks` (namespaced) | `create`, `list`   |
+| `""/configmaps` (namespaced)         | `create`, `delete` |
 
 All access is scoped to the `kubeopencode` namespace; no cluster-scoped permissions are needed from this plugin.
 
