@@ -1,6 +1,6 @@
 # llm-agent on kubeopencode
 
-The `llm-agent` plugin runs each Slack mention as a Task on the kubeopencode operator and then fetches the assistant reply from the opencode HTTP API. This document captures only the slack-bot-side conventions and assumptions about the surrounding deployment — the Task CR schema, opencode API, and operator behaviour are documented by kubeopencode and opencode upstream, and are not re-stated here.
+The `llm-agent` plugin runs each Slack mention as a Task on the [kubeopencode](https://github.com/kubeopencode/kubeopencode) operator and then fetches the assistant reply from the opencode HTTP API. This document captures only the slack-bot-side conventions and assumptions about the surrounding deployment — the Task CR schema, opencode API, and operator behaviour are documented by kubeopencode and opencode upstream, and are not re-stated here.
 
 ## Flow
 

@@ -162,3 +162,7 @@ Examples: `crawl:start:42`, `blog:retry`, `crawl:modal`.
 ## Logging
 
 The bot emits structured JSON logs to stdout via pino. A redact filter scrubs known secret keys (bot token, signing secret, `authorization`, `*_token`, `*_secret`) so plugins do not have to think about it when logging context. Log level is configured via `LOG_LEVEL`.
+
+## Per-plugin docs
+
+- [`llm-agent` on kubeopencode](docs/llm-agent/kubeopencode.md): conventions and pre-existing resources slack-bot expects from the [kubeopencode](https://github.com/kubeopencode/kubeopencode) operator.
