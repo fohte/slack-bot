@@ -33,12 +33,12 @@ For each Slack mention, slack-bot creates one Task with the following slack-bot-
 
 ### Contexts attached to every Task
 
-| `name`                | Kind      | `mountPath`                | Present when                                                                |
-| --------------------- | --------- | -------------------------- | --------------------------------------------------------------------------- |
-| `slack-channel`       | Text      | `slack-context/channel`    | Always                                                                      |
-| `slack-thread-ts`     | Text      | `slack-context/thread-ts`  | Always                                                                      |
-| `opencode-session-id` | Text      | `slack-context/session-id` | The Slack thread already has a recorded opencode session (resumed thread)   |
-| `slack-images`        | ConfigMap | `slack-images`             | The Slack message has image attachments that fit the per-image / total caps |
+| `name`                | Kind      | `mountPath`                | Present when                                                                                                                                                                   |
+| --------------------- | --------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `slack-channel`       | Text      | `slack-context/channel`    | Always                                                                                                                                                                         |
+| `slack-thread-ts`     | Text      | `slack-context/thread-ts`  | Always                                                                                                                                                                         |
+| `opencode-session-id` | Text      | `slack-context/session-id` | The Slack thread already has a recorded opencode session (resumed thread)                                                                                                      |
+| `slack-images`        | ConfigMap | `slack-images`             | The Slack message has image attachments that fit the per-image / total caps. Mounts at its own root rather than under `slack-context/`, since it's binary, not Slack metadata. |
 
 ## Phase ↔ Slack bubble mapping
 
@@ -53,11 +53,11 @@ slack-bot polls each Task it created and updates the Slack thread's assistant-st
 | `Failed`       | Post `Task failed: <status.message>`, clear the bubble |
 | anything else  | Treated as in-progress; no bubble update               |
 
-The Task MUST eventually reach `Completed` or `Failed`; otherwise slack-bot polls forever. slack-bot polls via `list` on a fixed 5 s interval. If the Task disappears mid-poll, slack-bot gives up on that Slack event.
+slack-bot polls via `list` on a fixed 5 s interval. It has no upper time bound and no per-Task cancellation path, so a Task stuck in a non-terminal phase keeps slack-bot listing the namespace for the lifetime of the slack-bot process. To release a stuck Task, either drive it to `Completed` / `Failed`, or delete the CR — CR disappearance is treated as a give-up signal and slack-bot stops polling that Slack event.
 
 ## opencode session title
 
-slack-bot needs to look an opencode session up by title on the first turn of a Slack thread, so the kubeopencode runner that invokes opencode MUST set the opencode session title to the Task's `metadata.name` on first run. On later turns slack-bot uses the session id it recorded locally, so the title is only critical for first-turn resolution.
+On the first turn of a Slack thread, slack-bot looks up the opencode session by title, using the Task's `metadata.name` as the lookup key. This relies on the kubeopencode runner setting the opencode session title to the Task's `metadata.name` on first run; without that, slack-bot cannot find the session and falls back to a placeholder message. On later turns slack-bot uses the session id it recorded locally, so the title only matters for first-turn resolution.
 
 ## Image ConfigMap
 
@@ -72,19 +72,19 @@ slack-bot deletes the ConfigMap on terminal phase and treats `NotFound` as a no-
 
 ## Pre-existing resources slack-bot expects
 
-| Resource           | Name / location                                                  | Notes                                                                                             |
-| ------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Namespace          | `kubeopencode`                                                   | Injected as a plugin dependency with this default; not exposed as a runtime configuration knob.   |
-| Agent CR           | `slack-bot` in the namespace above                               | Referenced from every Task via `spec.agentRef.name`.                                              |
-| opencode `Service` | `http://slack-bot.kubeopencode.svc.cluster.local:4096` (default) | Fronts opencode's HTTP API. slack-bot retries each call up to 3 times with 1000 ms between tries. |
+| Resource           | Name / location                                                  | Notes                                                                                                                                                                                                                                                    |
+| ------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Namespace          | `kubeopencode`                                                   | Injected as a plugin dependency with this default; not exposed as a runtime configuration knob.                                                                                                                                                          |
+| Agent CR           | `slack-bot` in the namespace above                               | Referenced from every Task via `spec.agentRef.name`.                                                                                                                                                                                                     |
+| opencode `Service` | `http://slack-bot.kubeopencode.svc.cluster.local:4096` (default) | Fronts opencode's HTTP API. The `slack-bot` host segment is the Service name and is unrelated to the Agent CR above — they share the name by coincidence of the deployment layout. slack-bot retries each call up to 3 times with 1000 ms between tries. |
 
 ## RBAC for the slack-bot ServiceAccount
 
 slack-bot authenticates to the API server with its in-cluster ServiceAccount, scoped to the `kubeopencode` namespace:
 
-| API group / resource                 | Verbs              |
-| ------------------------------------ | ------------------ |
-| `kubeopencode.io/tasks` (namespaced) | `create`, `list`   |
-| `""/configmaps` (namespaced)         | `create`, `delete` |
+| API group         | Resource     | Scope      | Verbs              |
+| ----------------- | ------------ | ---------- | ------------------ |
+| `kubeopencode.io` | `tasks`      | namespaced | `create`, `list`   |
+| `""` (core)       | `configmaps` | namespaced | `create`, `delete` |
 
 No cluster-scoped permissions are needed.
