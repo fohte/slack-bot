@@ -32,9 +32,9 @@ describe('loadConfig', () => {
     const config = loadConfig({
       env: {
         ...baseEnv,
-        LLM_AGENT_TASK_CR_NAMESPACE: 'my-ns',
-        LLM_AGENT_TASK_CR_AGENT_NAME: 'my-agent',
-        LLM_AGENT_OPENCODE_BASE_URL: 'http://localhost:4096',
+        SLACK_BOT_LLM_AGENT_TASK_CR_NAMESPACE: 'my-ns',
+        SLACK_BOT_LLM_AGENT_TASK_CR_AGENT_NAME: 'my-agent',
+        SLACK_BOT_LLM_AGENT_OPENCODE_BASE_URL: 'http://localhost:4096',
       },
     })
     expect(config.llmAgent).toEqual({

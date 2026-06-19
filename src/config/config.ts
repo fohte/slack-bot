@@ -61,9 +61,18 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   const logLevel = parseLogLevel(env, 'LOG_LEVEL', DEFAULT_LOG_LEVEL)
 
   const llmAgent: LlmAgentConfig = {
-    taskCrNamespace: optionalString(env, 'LLM_AGENT_TASK_CR_NAMESPACE'),
-    taskCrAgentName: optionalString(env, 'LLM_AGENT_TASK_CR_AGENT_NAME'),
-    opencodeBaseUrl: optionalString(env, 'LLM_AGENT_OPENCODE_BASE_URL'),
+    taskCrNamespace: optionalString(
+      env,
+      'SLACK_BOT_LLM_AGENT_TASK_CR_NAMESPACE',
+    ),
+    taskCrAgentName: optionalString(
+      env,
+      'SLACK_BOT_LLM_AGENT_TASK_CR_AGENT_NAME',
+    ),
+    opencodeBaseUrl: optionalString(
+      env,
+      'SLACK_BOT_LLM_AGENT_OPENCODE_BASE_URL',
+    ),
   }
 
   return {

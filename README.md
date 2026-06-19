@@ -30,9 +30,9 @@ slack-bot is an HTTP-only Request URL receiver for Slack: it does not use Socket
 | `DATABASE_URL`                                | No       | -                                                      | Postgres connection string consumed by `pnpm db:migrate`. Required only for plugins that own a logical DB.     |
 | `CF_ACCESS_<PLUGIN_NAME_UPPER>_CLIENT_ID`     | No       | -                                                      | Cloudflare Access Service Token client ID for the named plugin. Hyphens in the plugin name become underscores. |
 | `CF_ACCESS_<PLUGIN_NAME_UPPER>_CLIENT_SECRET` | No       | -                                                      | Cloudflare Access Service Token client secret for the named plugin. Same naming rule as above.                 |
-| `LLM_AGENT_TASK_CR_NAMESPACE`                 | No       | `kubeopencode`                                         | Kubernetes namespace the `llm-agent` plugin creates Task CRs and image ConfigMaps in.                          |
-| `LLM_AGENT_TASK_CR_AGENT_NAME`                | No       | `slack-bot`                                            | `spec.agentRef.name` set on every Task CR; must match a pre-existing Agent CR in the namespace above.          |
-| `LLM_AGENT_OPENCODE_BASE_URL`                 | No       | `http://slack-bot.kubeopencode.svc.cluster.local:4096` | Base URL for the opencode HTTP API the `llm-agent` plugin polls for assistant replies.                         |
+| `SLACK_BOT_LLM_AGENT_TASK_CR_NAMESPACE`       | No       | `kubeopencode`                                         | Kubernetes namespace the `llm-agent` plugin creates Task CRs and image ConfigMaps in.                          |
+| `SLACK_BOT_LLM_AGENT_TASK_CR_AGENT_NAME`      | No       | `slack-bot`                                            | `spec.agentRef.name` set on every Task CR; must match a pre-existing Agent CR in the namespace above.          |
+| `SLACK_BOT_LLM_AGENT_OPENCODE_BASE_URL`       | No       | `http://slack-bot.kubeopencode.svc.cluster.local:4096` | Base URL for the opencode HTTP API the `llm-agent` plugin polls for assistant replies.                         |
 
 Secrets must not be committed. In production they are injected via a Kubernetes Secret. Locally, place them in `.env`, which is gitignored.
 
