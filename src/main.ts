@@ -100,7 +100,9 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
       ({ config, logger, slackClient, eventLogStore, threadSessionStore }) => {
         const taskCrClient = createKubernetesTaskCrClient()
         const configMapClient = createKubernetesConfigMapClient()
-        const opencodeClient = createOpencodeClient()
+        const opencodeClient = createOpencodeClient({
+          baseUrl: config.llmAgent.opencodeBaseUrl,
+        })
         const onAccepted = createTaskDispatcher({
           taskCrClient,
           configMapClient,
@@ -109,6 +111,8 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
           eventLogStore,
           slackClient,
           logger,
+          namespace: config.llmAgent.taskCrNamespace,
+          agentName: config.llmAgent.taskCrAgentName,
         })
         return createLlmAgentPlugin({
           logger,

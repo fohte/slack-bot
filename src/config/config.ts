@@ -9,6 +9,12 @@ export interface ServiceTokenPair {
   readonly clientSecret: string
 }
 
+export interface LlmAgentConfig {
+  readonly taskCrNamespace: string | undefined
+  readonly taskCrAgentName: string | undefined
+  readonly opencodeBaseUrl: string | undefined
+}
+
 export interface Config {
   readonly slackSigningSecret: string
   readonly slackBotToken: string
@@ -18,6 +24,7 @@ export interface Config {
   readonly maxConcurrentTasks: number
   readonly maxWebApiRetries: number
   readonly logLevel: LogLevel
+  readonly llmAgent: LlmAgentConfig
   serviceTokenFor(pluginName: string): ServiceTokenPair | undefined
 }
 
@@ -53,6 +60,12 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   )
   const logLevel = parseLogLevel(env, 'LOG_LEVEL', DEFAULT_LOG_LEVEL)
 
+  const llmAgent: LlmAgentConfig = {
+    taskCrNamespace: optionalString(env, 'LLM_AGENT_TASK_CR_NAMESPACE'),
+    taskCrAgentName: optionalString(env, 'LLM_AGENT_TASK_CR_AGENT_NAME'),
+    opencodeBaseUrl: optionalString(env, 'LLM_AGENT_OPENCODE_BASE_URL'),
+  }
+
   return {
     slackSigningSecret,
     slackBotToken,
@@ -62,8 +75,18 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     maxConcurrentTasks,
     maxWebApiRetries,
     logLevel,
+    llmAgent,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }
+}
+
+const optionalString = (
+  env: NodeJS.ProcessEnv,
+  key: string,
+): string | undefined => {
+  const raw = env[key]
+  if (raw === undefined || raw === '') return undefined
+  return raw
 }
 
 const requireEnv = (env: NodeJS.ProcessEnv, key: string): string => {
