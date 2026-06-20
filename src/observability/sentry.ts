@@ -27,39 +27,42 @@ export const initSentry = (env: ObservabilityEnv): NodeClient | undefined => {
     environment: env.SENTRY_ENVIRONMENT,
     release: env.SENTRY_RELEASE,
     skipOpenTelemetrySetup: true,
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- redactor keeps the ErrorEvent shape
-    beforeSend: (event: ErrorEvent) => redactEvent(event) as ErrorEvent,
+    beforeSend: (event: ErrorEvent) => redactEvent(event),
     ignoreErrors: [...NOISE_PATTERNS],
   })
 }
 
-export const redactEvent = (event: unknown): unknown => {
+export const redactEvent = <T extends object>(event: T): T => {
   if (!isRecord(event)) return event
   const visited = new WeakMap<object, Record<string, unknown>>()
-  const cloned: Record<string, unknown> = { ...event }
+  const cloned: T = Object.assign({}, event)
 
-  const request = cloned['request']
+  const request: unknown = Reflect.get(cloned, 'request')
   if (isRecord(request)) {
-    const headers = request['headers']
+    const headers: unknown = Reflect.get(request, 'headers')
     if (isRecord(headers)) {
-      cloned['request'] = {
+      Reflect.set(cloned, 'request', {
         ...request,
         headers: redactAuthorization(headers),
-      }
+      })
     }
   }
-  const contexts = cloned['contexts']
+  const contexts: unknown = Reflect.get(cloned, 'contexts')
   if (isRecord(contexts)) {
-    cloned['contexts'] = redactContainer(contexts, visited)
+    Reflect.set(cloned, 'contexts', redactContainer(contexts, visited))
   }
-  const extra = cloned['extra']
+  const extra: unknown = Reflect.get(cloned, 'extra')
   if (isRecord(extra)) {
-    cloned['extra'] = redactContainer(extra, visited)
+    Reflect.set(cloned, 'extra', redactContainer(extra, visited))
   }
-  const breadcrumbs = cloned['breadcrumbs']
+  const breadcrumbs: unknown = Reflect.get(cloned, 'breadcrumbs')
   if (Array.isArray(breadcrumbs)) {
-    cloned['breadcrumbs'] = (breadcrumbs as unknown[]).map((entry): unknown =>
-      isRecord(entry) ? redactContainer(entry, visited) : entry,
+    Reflect.set(
+      cloned,
+      'breadcrumbs',
+      (breadcrumbs as unknown[]).map((entry): unknown =>
+        isRecord(entry) ? redactContainer(entry, visited) : entry,
+      ),
     )
   }
   return cloned
