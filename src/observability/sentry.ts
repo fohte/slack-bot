@@ -27,50 +27,51 @@ export const initSentry = (env: ObservabilityEnv): NodeClient | undefined => {
     environment: env.SENTRY_ENVIRONMENT,
     release: env.SENTRY_RELEASE,
     skipOpenTelemetrySetup: true,
-    beforeSend: (event: ErrorEvent) => redactEvent(event),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- redactor keeps the ErrorEvent shape
+    beforeSend: (event: ErrorEvent) => redactEvent(event) as ErrorEvent,
     ignoreErrors: [...NOISE_PATTERNS],
   })
 }
 
-export const redactEvent = <T>(event: T): T => {
-  let cloned: T
-  try {
-    cloned = structuredClone(event)
-  } catch {
-    cloned = event
-  }
-  applyRedactions(cloned)
-  return cloned
-}
+export const redactEvent = (event: unknown): unknown => {
+  if (!isRecord(event)) return event
+  const visited = new WeakMap<object, Record<string, unknown>>()
+  const cloned: Record<string, unknown> = { ...event }
 
-const applyRedactions = (event: unknown): void => {
-  if (!isRecord(event)) return
-
-  const request = event['request']
+  const request = cloned['request']
   if (isRecord(request)) {
     const headers = request['headers']
     if (isRecord(headers)) {
-      request['headers'] = redactAuthorization(headers)
+      cloned['request'] = {
+        ...request,
+        headers: redactAuthorization(headers),
+      }
     }
   }
-  const contexts = event['contexts']
+  const contexts = cloned['contexts']
   if (isRecord(contexts)) {
-    event['contexts'] = redactContainer(contexts)
+    cloned['contexts'] = redactContainer(contexts, visited)
   }
-  const extra = event['extra']
+  const extra = cloned['extra']
   if (isRecord(extra)) {
-    event['extra'] = redactContainer(extra)
+    cloned['extra'] = redactContainer(extra, visited)
   }
-  const breadcrumbs = event['breadcrumbs']
+  const breadcrumbs = cloned['breadcrumbs']
   if (Array.isArray(breadcrumbs)) {
-    event['breadcrumbs'] = (breadcrumbs as unknown[]).map((entry): unknown =>
-      isRecord(entry) ? redactContainer(entry) : entry,
+    cloned['breadcrumbs'] = (breadcrumbs as unknown[]).map((entry): unknown =>
+      isRecord(entry) ? redactContainer(entry, visited) : entry,
     )
   }
+  return cloned
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
+// Only plain objects are traversed — class instances (Date / RegExp / Error /
+// logger handles) would lose their prototype if shallow-copied into `{}`.
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) return false
+  const proto: unknown = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
 
 export interface CaptureGoUsageLimitContext {
   readonly retryAfter?: number | undefined
@@ -103,24 +104,34 @@ const redactAuthorization = (
 
 const redactContainer = (
   container: Record<string, unknown>,
+  visited: WeakMap<object, Record<string, unknown>>,
 ): Record<string, unknown> => {
+  const cached = visited.get(container)
+  if (cached) return cached
+
   const next: Record<string, unknown> = {}
+  visited.set(container, next)
+
   for (const [key, value] of Object.entries(container)) {
-    next[key] = redactValue(key, value)
+    next[key] = redactValue(key, value, visited)
   }
   return next
 }
 
-const redactValue = (key: string, value: unknown): unknown => {
+const redactValue = (
+  key: string,
+  value: unknown,
+  visited: WeakMap<object, Record<string, unknown>>,
+): unknown => {
   if (SECRET_KEY_PATTERN.test(key)) return REDACTED
   if (SLACK_MESSAGE_KEY_PATTERN.test(key) && typeof value === 'string') {
     return truncate(value)
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => redactValue(key, entry))
+    return value.map((entry) => redactValue(key, entry, visited))
   }
   if (isRecord(value)) {
-    return redactContainer(value)
+    return redactContainer(value, visited)
   }
   return value
 }
