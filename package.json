@@ -40,7 +40,6 @@
     "@hono/node-server": "2.0.4",
     "@kubernetes/client-node": "1.4.0",
     "@sentry/node": "10.57.0",
-    "@sentry/opentelemetry": "10.57.0",
     "@slack/web-api": "7.16.0",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.25",
