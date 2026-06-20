@@ -39,6 +39,7 @@
     "@fohte/blog-publisher-contract": "0.1.0",
     "@hono/node-server": "2.0.4",
     "@kubernetes/client-node": "1.4.0",
+    "@sentry/node": "10.57.0",
     "@slack/web-api": "7.16.0",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.25",
