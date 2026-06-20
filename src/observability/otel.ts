@@ -5,6 +5,7 @@ import type { Resource } from '@opentelemetry/resources'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { NodeSDK } from '@opentelemetry/sdk-node'
 import type { Sampler, SpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 
 export const DEFAULT_SERVICE_NAME = 'slack-bot'
@@ -25,9 +26,8 @@ export interface OtelOptions {
 }
 
 export const isOtelConfigured = (env: ObservabilityEnv): boolean => {
-  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
-  const headers = env.OTEL_EXPORTER_OTLP_HEADERS?.trim()
-  return Boolean(endpoint) && Boolean(headers)
+  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() ?? ''
+  return endpoint.length > 0
 }
 
 // Parses OTEL_RESOURCE_ATTRIBUTES / OTEL_EXPORTER_OTLP_HEADERS format
@@ -91,14 +91,20 @@ export const createNodeSdk = (options: OtelOptions): NodeSDK => {
   const traceExporter = createOtlpTraceExporter(env)
   const resource = buildResource(env)
   const instrumentations = getNodeAutoInstrumentations()
+  // Supplying `spanProcessors` to NodeSDK replaces the default
+  // BatchSpanProcessor(traceExporter) instead of appending to it, so prepend
+  // it manually whenever the caller wires in extra processors (e.g. Sentry).
+  const hasExtraProcessors =
+    spanProcessors !== undefined && spanProcessors.length > 0
+  const mergedSpanProcessors = hasExtraProcessors
+    ? [new BatchSpanProcessor(traceExporter), ...spanProcessors]
+    : undefined
   return new NodeSDK({
     resource,
     traceExporter,
     instrumentations,
     ...(sampler ? { sampler } : {}),
-    ...(spanProcessors && spanProcessors.length > 0
-      ? { spanProcessors: [...spanProcessors] }
-      : {}),
+    ...(mergedSpanProcessors ? { spanProcessors: mergedSpanProcessors } : {}),
     ...(propagator ? { textMapPropagator: propagator } : {}),
     ...(contextManager ? { contextManager } : {}),
   })

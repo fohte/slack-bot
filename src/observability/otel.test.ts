@@ -1,6 +1,7 @@
 import type { ContextManager, TextMapPropagator } from '@opentelemetry/api'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto'
 import type { Sampler, SpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -28,7 +29,7 @@ vi.mock('@opentelemetry/auto-instrumentations-node', () => ({
 }))
 
 describe('isOtelConfigured', () => {
-  it('is true only when both endpoint and headers are present', () => {
+  it('is true when the endpoint is set, regardless of headers', () => {
     expect({
       bothPresent: isOtelConfigured({
         OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp.example/',
@@ -41,16 +42,15 @@ describe('isOtelConfigured', () => {
         OTEL_EXPORTER_OTLP_HEADERS: 'Authorization=Basic abc',
       }),
       none: isOtelConfigured({}),
-      emptyStrings: isOtelConfigured({
+      emptyEndpoint: isOtelConfigured({
         OTEL_EXPORTER_OTLP_ENDPOINT: '   ',
-        OTEL_EXPORTER_OTLP_HEADERS: '',
       }),
     }).toEqual({
       bothPresent: true,
-      endpointOnly: false,
+      endpointOnly: true,
       headersOnly: false,
       none: false,
-      emptyStrings: false,
+      emptyEndpoint: false,
     })
   })
 })
@@ -167,13 +167,17 @@ describe('createNodeSdk', () => {
     const resource = config['resource'] as {
       attributes: Record<string, unknown>
     }
+    const passedSpanProcessors = config['spanProcessors'] as SpanProcessor[]
 
     expect({
       traceExporterIsOtlp: config['traceExporter'] instanceof OTLPTraceExporter,
       resourceAttributes: resource.attributes,
       instrumentations: config['instrumentations'],
       sampler: config['sampler'],
-      spanProcessors: config['spanProcessors'],
+      spanProcessorsLayout: [
+        passedSpanProcessors[0] instanceof BatchSpanProcessor,
+        passedSpanProcessors[1],
+      ],
       textMapPropagator: config['textMapPropagator'],
       contextManager: config['contextManager'],
       autoInstrumentationsCalled:
@@ -186,7 +190,7 @@ describe('createNodeSdk', () => {
       },
       instrumentations: [hoisted.autoInstrumentationSentinel],
       sampler,
-      spanProcessors: [spanProcessor],
+      spanProcessorsLayout: [true, spanProcessor],
       textMapPropagator: propagator,
       contextManager,
       autoInstrumentationsCalled: 1,
