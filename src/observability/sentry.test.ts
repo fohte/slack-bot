@@ -98,6 +98,12 @@ describe('redactEvent', () => {
         access_token: 'xoxb-lower',
         otherTags: ['ok'],
       },
+      breadcrumbs: [
+        {
+          category: 'http',
+          data: { Authorization: 'Bearer x', url: 'https://api/' },
+        },
+      ],
     }
 
     expect(redactEvent(input)).toEqual({
@@ -123,6 +129,12 @@ describe('redactEvent', () => {
         access_token: '[REDACTED]',
         otherTags: ['ok'],
       },
+      breadcrumbs: [
+        {
+          category: 'http',
+          data: { Authorization: '[REDACTED]', url: 'https://api/' },
+        },
+      ],
     })
   })
 

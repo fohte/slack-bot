@@ -14,7 +14,7 @@ export const NOISE_PATTERNS: ReadonlyArray<string | RegExp> = [
 
 const REDACTED = '[REDACTED]'
 const SLACK_MESSAGE_MAX_LENGTH = 200
-const SECRET_KEY_PATTERN = /token|dsn|api[_-]?key/i
+const SECRET_KEY_PATTERN = /token|dsn|api[_-]?key|authorization|cookie/i
 const SLACK_MESSAGE_KEY_PATTERN = /^(slack_)?message(_text|_body)?$/i
 
 export const isSentryConfigured = (env: ObservabilityEnv): boolean =>
@@ -33,7 +33,12 @@ export const initSentry = (env: ObservabilityEnv): NodeClient | undefined => {
 }
 
 export const redactEvent = <T>(event: T): T => {
-  const cloned = structuredClone(event)
+  let cloned: T
+  try {
+    cloned = structuredClone(event)
+  } catch {
+    cloned = event
+  }
   applyRedactions(cloned)
   return cloned
 }
@@ -55,6 +60,12 @@ const applyRedactions = (event: unknown): void => {
   const extra = event['extra']
   if (isRecord(extra)) {
     event['extra'] = redactContainer(extra)
+  }
+  const breadcrumbs = event['breadcrumbs']
+  if (Array.isArray(breadcrumbs)) {
+    event['breadcrumbs'] = (breadcrumbs as unknown[]).map((entry): unknown =>
+      isRecord(entry) ? redactContainer(entry) : entry,
+    )
   }
 }
 
