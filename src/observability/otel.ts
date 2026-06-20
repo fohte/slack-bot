@@ -8,7 +8,7 @@ import type { Sampler, SpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 
-export const DEFAULT_SERVICE_NAME = 'slack-bot'
+const DEFAULT_SERVICE_NAME = 'slack-bot'
 
 export interface ObservabilityEnv {
   readonly OTEL_EXPORTER_OTLP_ENDPOINT?: string | undefined
@@ -57,7 +57,7 @@ const parseKeyValueList = (raw: string | undefined): Record<string, string> => {
   return out
 }
 
-export const buildResourceAttributes = (
+const buildResourceAttributes = (
   env: ObservabilityEnv,
 ): Record<string, string> => {
   const extra = parseKeyValueList(env.OTEL_RESOURCE_ATTRIBUTES)
@@ -72,12 +72,10 @@ export const buildResourceAttributes = (
   return { ...extra, [ATTR_SERVICE_NAME]: serviceName }
 }
 
-export const buildResource = (env: ObservabilityEnv): Resource =>
+const buildResource = (env: ObservabilityEnv): Resource =>
   resourceFromAttributes(buildResourceAttributes(env))
 
-export const createOtlpTraceExporter = (
-  env: ObservabilityEnv,
-): OTLPTraceExporter => {
+const createOtlpTraceExporter = (env: ObservabilityEnv): OTLPTraceExporter => {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() ?? ''
   const headers = parseKeyValueList(env.OTEL_EXPORTER_OTLP_HEADERS)
   return new OTLPTraceExporter({

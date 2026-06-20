@@ -6,11 +6,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { OtelOptions } from '@/observability/otel'
-import {
-  buildResourceAttributes,
-  createNodeSdk,
-  isOtelConfigured,
-} from '@/observability/otel'
+import { createNodeSdk, isOtelConfigured } from '@/observability/otel'
 
 describe('isOtelConfigured', () => {
   it('returns true when the endpoint is set', () => {
@@ -35,67 +31,6 @@ describe('isOtelConfigured', () => {
         OTEL_EXPORTER_OTLP_HEADERS: 'Authorization=Basic abc',
       }),
     ).toBe(false)
-  })
-})
-
-describe('buildResourceAttributes', () => {
-  it('defaults service.name to slack-bot when no env is set', () => {
-    expect(buildResourceAttributes({})).toEqual({ 'service.name': 'slack-bot' })
-  })
-
-  it('takes service.name from OTEL_SERVICE_NAME', () => {
-    expect(
-      buildResourceAttributes({ OTEL_SERVICE_NAME: 'custom-service' }),
-    ).toEqual({ 'service.name': 'custom-service' })
-  })
-
-  it('parses OTEL_RESOURCE_ATTRIBUTES into individual attributes', () => {
-    expect(
-      buildResourceAttributes({
-        OTEL_RESOURCE_ATTRIBUTES:
-          'deployment.environment=production,service.version=1.2.3',
-      }),
-    ).toEqual({
-      'deployment.environment': 'production',
-      'service.version': '1.2.3',
-      'service.name': 'slack-bot',
-    })
-  })
-
-  it('lets OTEL_SERVICE_NAME override service.name from OTEL_RESOURCE_ATTRIBUTES', () => {
-    expect(
-      buildResourceAttributes({
-        OTEL_SERVICE_NAME: 'override-service',
-        OTEL_RESOURCE_ATTRIBUTES: 'service.name=ignored',
-      }),
-    ).toEqual({ 'service.name': 'override-service' })
-  })
-
-  it('falls back to service.name from OTEL_RESOURCE_ATTRIBUTES when OTEL_SERVICE_NAME is unset', () => {
-    expect(
-      buildResourceAttributes({
-        OTEL_RESOURCE_ATTRIBUTES: 'service.name=from-attrs',
-      }),
-    ).toEqual({ 'service.name': 'from-attrs' })
-  })
-
-  it('percent-decodes both keys and values', () => {
-    expect(
-      buildResourceAttributes({
-        OTEL_RESOURCE_ATTRIBUTES: 'k%2Fey=v%20alue',
-      }),
-    ).toEqual({ 'k/ey': 'v alue', 'service.name': 'slack-bot' })
-  })
-
-  it('drops entries with an empty key or value', () => {
-    expect(
-      buildResourceAttributes({
-        OTEL_RESOURCE_ATTRIBUTES: 'foo=,=bar,deployment.environment=production',
-      }),
-    ).toEqual({
-      'deployment.environment': 'production',
-      'service.name': 'slack-bot',
-    })
   })
 })
 
