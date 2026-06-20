@@ -100,6 +100,14 @@ describe('buildResourceAttributes', () => {
     ).toEqual({ 'service.name': 'from-attrs' })
   })
 
+  it('percent-decodes both keys and values', () => {
+    expect(
+      buildResourceAttributes({
+        OTEL_RESOURCE_ATTRIBUTES: 'k%2Fey=v%20alue',
+      }),
+    ).toEqual({ 'k/ey': 'v alue', 'service.name': 'slack-bot' })
+  })
+
   it('drops entries with empty key or value', () => {
     expect(
       buildResourceAttributes({

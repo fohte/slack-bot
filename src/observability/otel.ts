@@ -16,9 +16,6 @@ export interface ObservabilityEnv {
   readonly OTEL_RESOURCE_ATTRIBUTES?: string | undefined
 }
 
-// Pass-through overrides for NodeSDK fields. Intended injection point for
-// `@sentry/opentelemetry`'s SentrySampler / SentrySpanProcessor /
-// SentryPropagator / SentryContextManager, wired in a later task.
 export interface OtelOptions {
   readonly env: ObservabilityEnv
   readonly sampler?: Sampler | undefined
@@ -34,23 +31,28 @@ export const isOtelConfigured = (env: ObservabilityEnv): boolean => {
 }
 
 // Parses OTEL_RESOURCE_ATTRIBUTES / OTEL_EXPORTER_OTLP_HEADERS format
-// (`key1=value1,key2=value2`). Values are URL-decoded per OTel spec. Entries
-// with an empty key or value are dropped so callers don't accidentally emit
-// blank resource attributes or auth headers.
+// (`key1=value1,key2=value2`). Both keys and values are percent-decoded per
+// the OTel spec's W3C Baggage encoding. Entries with an empty key or value
+// are dropped so callers don't accidentally emit blank resource attributes
+// or auth headers.
+const safeDecode = (raw: string): string => {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
 const parseKeyValueList = (raw: string | undefined): Record<string, string> => {
   if (raw === undefined || raw.length === 0) return {}
   const out: Record<string, string> = {}
   for (const pair of raw.split(',')) {
     const eq = pair.indexOf('=')
     if (eq < 0) continue
-    const key = pair.slice(0, eq).trim()
-    const value = pair.slice(eq + 1).trim()
+    const key = safeDecode(pair.slice(0, eq).trim())
+    const value = safeDecode(pair.slice(eq + 1).trim())
     if (key.length === 0 || value.length === 0) continue
-    try {
-      out[key] = decodeURIComponent(value)
-    } catch {
-      out[key] = value
-    }
+    out[key] = value
   }
   return out
 }
