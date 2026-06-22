@@ -49,7 +49,7 @@
     "@opentelemetry/semantic-conventions": "1.41.1",
     "@sentry/node": "10.57.0",
     "@sentry/opentelemetry": "10.58.0",
-    "@slack/web-api": "7.16.0",
+    "@slack/web-api": "7.17.0",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.25",
     "pino": "10.3.1",
