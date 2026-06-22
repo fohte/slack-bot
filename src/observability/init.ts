@@ -31,17 +31,18 @@ export const initObservability = (
   const otel = isOtelConfigured(env)
   const sentry = isSentryConfigured(env)
 
+  let sentryStarted = false
+  let otelSdk: ReturnType<typeof createNodeSdk> | undefined
+
   try {
-    let sentryStarted = false
     if (sentry) {
       initSentry(env)
       sentryStarted = true
     }
 
-    // Sentry needs to know about the active OTel span to attach the same
-    // trace_id to its error events; we share the propagator and context
-    // manager only when both SDKs are active.
-    const otelSdk = otel
+    // Hand OTel the Sentry propagator and context manager so Sentry's
+    // autocapture inherits the trace_id from the active OTel span.
+    otelSdk = otel
       ? createNodeSdk({
           env,
           ...(sentry
@@ -92,6 +93,10 @@ export const initObservability = (
       },
       'failed to initialize observability',
     )
+    void Promise.allSettled([
+      otelSdk ? otelSdk.shutdown() : Promise.resolve(),
+      sentryStarted ? Sentry.close() : Promise.resolve(),
+    ])
     return noopHandle
   }
 }
