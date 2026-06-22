@@ -1,5 +1,5 @@
 import type { Attributes, Counter } from '@opentelemetry/api'
-import { metrics, SpanStatusCode, trace } from '@opentelemetry/api'
+import { context, metrics, SpanStatusCode, trace } from '@opentelemetry/api'
 
 const INSTRUMENTATION_NAME = 'slack-bot'
 const SPAN_NAME = 'opencode.message'
@@ -19,8 +19,7 @@ export interface ClassifiedOpencodeResponse {
   readonly assistantCount: number
 }
 
-// Thrown by the opencode client when a 429 reaches the wrapper. The wrapper
-// reads `retryAfter` to populate `http.retry_after` on the span.
+// Thrown by the opencode client when a 429 reaches the wrapper.
 export class GoUsageLimitError extends Error {
   override readonly name = 'GoUsageLimitError'
   readonly retryAfter: number | undefined
@@ -59,6 +58,10 @@ const pickPrimaryModel = (models: readonly string[]): string => {
   return UNKNOWN_MODEL
 }
 
+// `models` is expected to align 1:1 with assistant messages. When the response
+// returns fewer model IDs than messages (or none at all), the remaining
+// messages are charged to `unknown` so the counter total still equals
+// assistantCount.
 const incrementMessagesPerModel = (
   models: readonly string[],
   assistantCount: number,
@@ -66,12 +69,12 @@ const incrementMessagesPerModel = (
 ): void => {
   if (assistantCount <= 0) return
   const counter = getMessagesCounter()
-  if (models.length === 0) {
-    counter.add(assistantCount, { model: UNKNOWN_MODEL, status })
-    return
-  }
-  for (const model of models) {
-    const labelModel = model.length > 0 ? model : UNKNOWN_MODEL
+  for (let i = 0; i < assistantCount; i++) {
+    const candidate = models[i]
+    const labelModel =
+      typeof candidate === 'string' && candidate.length > 0
+        ? candidate
+        : UNKNOWN_MODEL
     counter.add(1, { model: labelModel, status })
   }
 }
@@ -97,6 +100,9 @@ export const recordRateLimited = (input: {
       ? input.model
       : UNKNOWN_MODEL
   getMessagesCounter().add(1, { model, status: 'rate_limited' })
+  if (typeof input.retryAfter === 'number') {
+    trace.getActiveSpan()?.setAttribute('http.retry_after', input.retryAfter)
+  }
 }
 
 export async function wrapOpencodeCall<T>(
@@ -111,8 +117,9 @@ export async function wrapOpencodeCall<T>(
       'opencode.operation': ctx.operation,
     },
   })
+  const spanContext = trace.setSpan(context.active(), span)
   try {
-    const result = await fn()
+    const result = await context.with(spanContext, fn)
     const classified = classifyResponse(result)
     const model = pickPrimaryModel(classified.models)
     span.setAttributes({
