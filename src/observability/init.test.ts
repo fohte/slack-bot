@@ -6,7 +6,6 @@ interface Captured {
   sdkStartCount: number
   sdkShutdownCount: number
   sentryCloseCount: number
-  validateCount: number
   loggerInfoCalls: unknown[]
   loggerWarnCalls: unknown[]
   signalHandlers: Record<string, Array<() => void>>
@@ -18,7 +17,6 @@ const captured: Captured = {
   sdkStartCount: 0,
   sdkShutdownCount: 0,
   sentryCloseCount: 0,
-  validateCount: 0,
   loggerInfoCalls: [],
   loggerWarnCalls: [],
   signalHandlers: {},
@@ -65,10 +63,6 @@ class FakeSentryPropagator {
 
 vi.mock('@sentry/node', () => ({
   SentryContextManager: FakeSentryContextManager,
-  validateOpenTelemetrySetup: () => {
-    captured.validateCount += 1
-    return true
-  },
   close: async () => {
     captured.sentryCloseCount += 1
     return true
@@ -103,7 +97,6 @@ const resetCaptured = (): void => {
   captured.sdkStartCount = 0
   captured.sdkShutdownCount = 0
   captured.sentryCloseCount = 0
-  captured.validateCount = 0
   captured.loggerInfoCalls = []
   captured.loggerWarnCalls = []
   captured.signalHandlers = {}
@@ -146,7 +139,6 @@ describe('initObservability', () => {
         (captured.createNodeSdkCalls[0] as { contextManager?: unknown })
           .contextManager !== undefined,
       sdkStartCount: captured.sdkStartCount,
-      validateCount: captured.validateCount,
       sdkShutdownCount: captured.sdkShutdownCount,
       sentryCloseCount: captured.sentryCloseCount,
       loggerInfoCalls: captured.loggerInfoCalls,
@@ -158,7 +150,6 @@ describe('initObservability', () => {
       sdkHasPropagator: true,
       sdkHasContextManager: true,
       sdkStartCount: 1,
-      validateCount: 1,
       sdkShutdownCount: 1,
       sentryCloseCount: 1,
       loggerInfoCalls: [
@@ -184,7 +175,6 @@ describe('initObservability', () => {
       initSentryCount: captured.initSentryCalls.length,
       createNodeSdkCount: captured.createNodeSdkCalls.length,
       sdkStartCount: captured.sdkStartCount,
-      validateCount: captured.validateCount,
       sdkShutdownCount: captured.sdkShutdownCount,
       sentryCloseCount: captured.sentryCloseCount,
       loggerInfoCalls: captured.loggerInfoCalls,
@@ -194,7 +184,6 @@ describe('initObservability', () => {
       initSentryCount: 1,
       createNodeSdkCount: 0,
       sdkStartCount: 0,
-      validateCount: 0,
       sdkShutdownCount: 0,
       sentryCloseCount: 1,
       loggerInfoCalls: [
@@ -230,7 +219,6 @@ describe('initObservability', () => {
         (captured.createNodeSdkCalls[0] as { contextManager?: unknown })
           .contextManager !== undefined,
       sdkStartCount: captured.sdkStartCount,
-      validateCount: captured.validateCount,
       sdkShutdownCount: captured.sdkShutdownCount,
       sentryCloseCount: captured.sentryCloseCount,
       loggerInfoCalls: captured.loggerInfoCalls,
@@ -242,7 +230,6 @@ describe('initObservability', () => {
       sdkHasPropagator: false,
       sdkHasContextManager: false,
       sdkStartCount: 1,
-      validateCount: 0,
       sdkShutdownCount: 1,
       sentryCloseCount: 0,
       loggerInfoCalls: [
@@ -268,7 +255,6 @@ describe('initObservability', () => {
       initSentryCount: captured.initSentryCalls.length,
       createNodeSdkCount: captured.createNodeSdkCalls.length,
       sdkStartCount: captured.sdkStartCount,
-      validateCount: captured.validateCount,
       sdkShutdownCount: captured.sdkShutdownCount,
       sentryCloseCount: captured.sentryCloseCount,
       loggerInfoCalls: captured.loggerInfoCalls,
@@ -278,7 +264,6 @@ describe('initObservability', () => {
       initSentryCount: 0,
       createNodeSdkCount: 0,
       sdkStartCount: 0,
-      validateCount: 0,
       sdkShutdownCount: 0,
       sentryCloseCount: 0,
       loggerInfoCalls: [

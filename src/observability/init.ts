@@ -55,10 +55,6 @@ export const initObservability = (
       : undefined
     otelSdk?.start()
 
-    if (otel && sentry) {
-      Sentry.validateOpenTelemetrySetup()
-    }
-
     logger.info(
       { event: 'observability_initialized', otel, sentry },
       'observability initialized',
@@ -78,8 +74,14 @@ export const initObservability = (
       return shutdownPromise
     }
 
-    const onSignal = (): void => {
-      void shutdown()
+    // Registering a custom listener for SIGTERM/SIGINT suppresses Node's
+    // default termination, so re-send the signal after shutdown completes —
+    // the `once` listener has already removed itself, so the second delivery
+    // triggers the default behavior.
+    const onSignal = (signal: NodeJS.Signals): void => {
+      void shutdown().then(() => {
+        process.kill(process.pid, signal)
+      })
     }
     process.once('SIGTERM', onSignal)
     process.once('SIGINT', onSignal)
