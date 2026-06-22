@@ -30,26 +30,37 @@ export class GoUsageLimitError extends Error {
   }
 }
 
-const getMessagesCounter = (): Counter =>
-  metrics
+// Defer instrument creation until first use. `metrics.getMeter(...)` returns a
+// `ProxyMeter` whose `createCounter` binds the instrument to whatever delegate
+// is registered at that moment; calling it before the OTel SDK starts pins
+// the counter to a noop forever.
+let messagesCounter: Counter | undefined
+let callsCounter: Counter | undefined
+
+const getMessagesCounter = (): Counter => {
+  messagesCounter ??= metrics
     .getMeter(INSTRUMENTATION_NAME)
     .createCounter('opencode.messages.count', {
       description:
         'opencode assistant messages observed, partitioned by model and status',
       unit: '1',
     })
+  return messagesCounter
+}
 
-const getCallsCounter = (): Counter =>
-  metrics.getMeter(INSTRUMENTATION_NAME).createCounter('opencode.calls.count', {
-    description:
-      'opencode HTTP calls, partitioned by operation, status, and HTTP status code',
-    unit: '1',
-  })
+const getCallsCounter = (): Counter => {
+  callsCounter ??= metrics
+    .getMeter(INSTRUMENTATION_NAME)
+    .createCounter('opencode.calls.count', {
+      description:
+        'opencode HTTP calls, partitioned by operation, status, and HTTP status code',
+      unit: '1',
+    })
+  return callsCounter
+}
 
-const isGoUsageLimitError = (
-  err: unknown,
-): err is { name: string; retryAfter?: number; message?: string } =>
-  err instanceof Error && err.name === 'GoUsageLimitError'
+const isGoUsageLimitError = (err: unknown): err is GoUsageLimitError =>
+  err instanceof GoUsageLimitError
 
 const pickPrimaryModel = (models: readonly string[]): string => {
   for (const m of models) {
@@ -68,14 +79,18 @@ const incrementMessagesPerModel = (
   status: OpencodeStatus,
 ): void => {
   if (assistantCount <= 0) return
-  const counter = getMessagesCounter()
+  const counts = new Map<string, number>()
   for (let i = 0; i < assistantCount; i++) {
     const candidate = models[i]
     const labelModel =
       typeof candidate === 'string' && candidate.length > 0
         ? candidate
         : UNKNOWN_MODEL
-    counter.add(1, { model: labelModel, status })
+    counts.set(labelModel, (counts.get(labelModel) ?? 0) + 1)
+  }
+  const counter = getMessagesCounter()
+  for (const [model, count] of counts) {
+    counter.add(count, { model, status })
   }
 }
 

@@ -11,13 +11,24 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  GoUsageLimitError,
-  recordRateLimited,
-  wrapOpencodeCall,
-} from '@/observability/counters'
+import type * as Counters from '@/observability/counters'
+
+// Counters lazily cache the OTel instruments on first use. Each test resets
+// modules and re-imports so the lazy cache picks up the test-local provider
+// instead of a stale (or noop) instrument from a prior test.
+let GoUsageLimitError: typeof Counters.GoUsageLimitError
+let recordRateLimited: typeof Counters.recordRateLimited
+let wrapOpencodeCall: typeof Counters.wrapOpencodeCall
+
+const importCounters = async (): Promise<void> => {
+  vi.resetModules()
+  const mod = await import('@/observability/counters')
+  GoUsageLimitError = mod.GoUsageLimitError
+  recordRateLimited = mod.recordRateLimited
+  wrapOpencodeCall = mod.wrapOpencodeCall
+}
 
 interface MetricRow {
   readonly name: string
@@ -100,8 +111,9 @@ const collect = async (): Promise<Snapshot> => {
 }
 
 describe('wrapOpencodeCall', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setupObservability()
+    await importCounters()
   })
   afterEach(async () => {
     await teardownObservability()
@@ -308,9 +320,10 @@ describe('wrapOpencodeCall', () => {
 })
 
 describe('wrapOpencodeCall without observability initialized', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     trace.disable()
     metrics.disable()
+    await importCounters()
   })
 
   it('runs as a no-op and returns the wrapped result', async () => {
