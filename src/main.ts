@@ -1,3 +1,5 @@
+import '@/bootstrap'
+
 import { serve } from '@hono/node-server'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
