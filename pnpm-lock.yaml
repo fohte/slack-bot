@@ -51,8 +51,8 @@ importers:
         specifier: 10.58.0
         version: 10.58.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.8.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.41.1)
       '@slack/web-api':
-        specifier: 7.16.0
-        version: 7.16.0
+        specifier: 7.17.0
+        version: 7.17.0
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9)
@@ -1820,8 +1820,8 @@ packages:
     resolution: {integrity: sha512-I8vmSjNYWsaxuWPx6dz4yeh0h7vRBWbgAMK14LEmblbZ404BtrPbXs6jDPx4cYgGf8msDGF4A9opLZBu21FViQ==}
     engines: {node: '>= 12.13.0', npm: '>= 6.12.0'}
 
-  '@slack/web-api@7.16.0':
-    resolution: {integrity: sha512-68SAV77uuGKuhyyaRytX8UijVnqSLsTSKslGXw17cjQYXn+jtNl7gbaEjHgC5x2rhCuFdahBrEC2VCLppbzReg==}
+  '@slack/web-api@7.17.0':
+    resolution: {integrity: sha512-jejr34a8B4L5AS713wOAx1LAqNkW16HVMDEa6sYBvFDc/llUBl8hXaiI4BwF+Al+Sug19Vn2O7iokTVIhVvZ1Q==}
     engines: {node: '>= 18', npm: '>= 8.6.0'}
 
   '@standard-schema/spec@1.1.0':
@@ -5547,15 +5547,15 @@ snapshots:
 
   '@slack/logger@4.0.1':
     dependencies:
-      '@types/node': 24.12.4
+      '@types/node': 24.13.1
 
   '@slack/types@2.21.1': {}
 
-  '@slack/web-api@7.16.0':
+  '@slack/web-api@7.17.0':
     dependencies:
       '@slack/logger': 4.0.1
       '@slack/types': 2.21.1
-      '@types/node': 24.12.4
+      '@types/node': 24.13.1
       '@types/retry': 0.12.0
       axios: 1.17.0
       eventemitter3: 5.0.4
