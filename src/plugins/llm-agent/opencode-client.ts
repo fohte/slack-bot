@@ -68,9 +68,10 @@ const parseRetryAfter = (raw: string | null): number | undefined => {
   if (raw === null) return undefined
   const trimmed = raw.trim()
   if (trimmed === '') return undefined
-  const asNumber = Number(trimmed)
-  if (Number.isFinite(asNumber) && asNumber >= 0) {
-    return Math.floor(asNumber)
+  // RFC 7231 §7.1.3: delay-seconds is `1*DIGIT`, so accept only non-negative
+  // decimal integers — Number() would also let through `0x1a`, `1e2`, `1.5`.
+  if (/^\d+$/.test(trimmed)) {
+    return parseInt(trimmed, 10)
   }
   const asDate = Date.parse(trimmed)
   if (!Number.isNaN(asDate)) {
