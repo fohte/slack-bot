@@ -281,52 +281,46 @@ describe('createOpencodeClient', () => {
       maxAttempts: 1,
     })
 
-    const result = await client.fetchLatestAssistantText('sess_abc')
-
-    expect({
-      result,
-      captureCalls: captureSpy.mock.calls.length,
-      snapshot: await collect(),
-    }).toEqual({
-      result: 'Hello world',
-      captureCalls: 0,
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_abc',
-              'opencode.operation': 'fetch_messages',
-              'opencode.model': 'opencode-go/claude-sonnet-4-6',
-              'opencode.status': 'success',
-              'opencode.assistant_count': 1,
-              'http.status_code': 200,
-            },
-            statusCode: SpanStatusCode.UNSET,
+    expect(await client.fetchLatestAssistantText('sess_abc')).toBe(
+      'Hello world',
+    )
+    expect(captureSpy).not.toHaveBeenCalled()
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_abc',
+            'opencode.operation': 'fetch_messages',
+            'opencode.model': 'opencode-go/claude-sonnet-4-6',
+            'opencode.status': 'success',
+            'opencode.assistant_count': 1,
+            'http.status_code': 200,
           },
-        ],
-        messages: [
-          {
-            name: 'opencode.messages.count',
-            attributes: {
-              model: 'opencode-go/claude-sonnet-4-6',
-              status: 'success',
-            },
-            value: 1,
+          statusCode: SpanStatusCode.UNSET,
+        },
+      ],
+      messages: [
+        {
+          name: 'opencode.messages.count',
+          attributes: {
+            model: 'opencode-go/claude-sonnet-4-6',
+            status: 'success',
           },
-        ],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'fetch_messages',
-              status: 'success',
-              http_status_code: 200,
-            },
-            value: 1,
+          value: 1,
+        },
+      ],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'fetch_messages',
+            status: 'success',
+            http_status_code: 200,
           },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -342,56 +336,42 @@ describe('createOpencodeClient', () => {
       sleepImpl: noopSleep,
     })
 
-    let thrown: unknown
-    try {
-      await client.fetchLatestAssistantText('sess_abc')
-    } catch (e) {
-      thrown = e
-    }
-
-    const captureCalls = captureSpy.mock.calls.map(([err, ctx]) => ({
-      errorName: (err as Error).name,
-      retryAfter: ctx?.retryAfter,
-    }))
-
-    expect({
-      thrownName: (thrown as Error).name,
-      thrownRetryAfter: (thrown as { retryAfter?: number }).retryAfter,
-      captureCalls,
-      snapshot: await collect(),
-    }).toEqual({
-      thrownName: 'GoUsageLimitError',
-      thrownRetryAfter: 42,
-      captureCalls: [{ errorName: 'GoUsageLimitError', retryAfter: 42 }],
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_abc',
-              'opencode.operation': 'fetch_messages',
-              'opencode.model': 'unknown',
-              'opencode.status': 'rate_limited',
-              'http.status_code': 429,
-              'http.retry_after': 42,
-              'error.type': 'GoUsageLimitError',
-            },
-            statusCode: SpanStatusCode.ERROR,
+    await expect(
+      client.fetchLatestAssistantText('sess_abc'),
+    ).rejects.toMatchObject({
+      name: 'GoUsageLimitError',
+      retryAfter: 42,
+    })
+    expect(captureSpy).toHaveBeenCalledTimes(1)
+    expect(captureSpy.mock.calls[0]?.[1]).toEqual({ retryAfter: 42 })
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_abc',
+            'opencode.operation': 'fetch_messages',
+            'opencode.model': 'unknown',
+            'opencode.status': 'rate_limited',
+            'http.status_code': 429,
+            'http.retry_after': 42,
+            'error.type': 'GoUsageLimitError',
           },
-        ],
-        messages: [],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'fetch_messages',
-              status: 'rate_limited',
-              http_status_code: 429,
-            },
-            value: 1,
+          statusCode: SpanStatusCode.ERROR,
+        },
+      ],
+      messages: [],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'fetch_messages',
+            status: 'rate_limited',
+            http_status_code: 429,
           },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -404,49 +384,37 @@ describe('createOpencodeClient', () => {
       sleepImpl: noopSleep,
     })
 
-    let thrown: unknown
-    try {
-      await client.fetchLatestAssistantText('sess_abc')
-    } catch (e) {
-      thrown = e
-    }
-
-    expect({
-      thrownMessage: (thrown as Error).message,
-      captureCalls: captureSpy.mock.calls.length,
-      snapshot: await collect(),
-    }).toEqual({
-      thrownMessage:
-        'opencode GET /session/sess_abc/message failed with HTTP 500',
-      captureCalls: 0,
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_abc',
-              'opencode.operation': 'fetch_messages',
-              'opencode.model': 'unknown',
-              'opencode.status': 'error',
-            },
-            statusCode: SpanStatusCode.ERROR,
+    await expect(client.fetchLatestAssistantText('sess_abc')).rejects.toThrow(
+      'opencode GET /session/sess_abc/message failed with HTTP 500',
+    )
+    expect(captureSpy).not.toHaveBeenCalled()
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_abc',
+            'opencode.operation': 'fetch_messages',
+            'opencode.model': 'unknown',
+            'opencode.status': 'error',
           },
-        ],
-        messages: [
-          {
-            name: 'opencode.messages.count',
-            attributes: { model: 'unknown', status: 'error' },
-            value: 1,
-          },
-        ],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: { operation: 'fetch_messages', status: 'error' },
-            value: 1,
-          },
-        ],
-      },
+          statusCode: SpanStatusCode.ERROR,
+        },
+      ],
+      messages: [
+        {
+          name: 'opencode.messages.count',
+          attributes: { model: 'unknown', status: 'error' },
+          value: 1,
+        },
+      ],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: { operation: 'fetch_messages', status: 'error' },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -474,54 +442,45 @@ describe('createOpencodeClient', () => {
       sleepImpl: noopSleep,
     })
 
-    const result = await client.fetchLatestAssistantText('sess_abc')
-
-    expect({
-      result,
-      fetchCalls: calls,
-      captureCalls: captureSpy.mock.calls.length,
-      snapshot: await collect(),
-    }).toEqual({
-      result: 'OK',
-      fetchCalls: 2,
-      captureCalls: 0,
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_abc',
-              'opencode.operation': 'fetch_messages',
-              'opencode.model': 'opencode-go/claude-sonnet-4-6',
-              'opencode.status': 'success',
-              'opencode.assistant_count': 1,
-              'http.status_code': 200,
-            },
-            statusCode: SpanStatusCode.UNSET,
+    expect(await client.fetchLatestAssistantText('sess_abc')).toBe('OK')
+    expect(calls).toBe(2)
+    expect(captureSpy).not.toHaveBeenCalled()
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_abc',
+            'opencode.operation': 'fetch_messages',
+            'opencode.model': 'opencode-go/claude-sonnet-4-6',
+            'opencode.status': 'success',
+            'opencode.assistant_count': 1,
+            'http.status_code': 200,
           },
-        ],
-        messages: [
-          {
-            name: 'opencode.messages.count',
-            attributes: {
-              model: 'opencode-go/claude-sonnet-4-6',
-              status: 'success',
-            },
-            value: 1,
+          statusCode: SpanStatusCode.UNSET,
+        },
+      ],
+      messages: [
+        {
+          name: 'opencode.messages.count',
+          attributes: {
+            model: 'opencode-go/claude-sonnet-4-6',
+            status: 'success',
           },
-        ],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'fetch_messages',
-              status: 'success',
-              http_status_code: 200,
-            },
-            value: 1,
+          value: 1,
+        },
+      ],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'fetch_messages',
+            status: 'success',
+            http_status_code: 200,
           },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -531,43 +490,35 @@ describe('createOpencodeClient', () => {
       maxAttempts: 1,
     })
 
-    const result = await client.findSessionIdByTitle('slack-target')
-
-    expect({
-      result,
-      captureCalls: captureSpy.mock.calls.length,
-      snapshot: await collect(),
-    }).toEqual({
-      result: 'ses_x',
-      captureCalls: 0,
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'unknown',
-              'opencode.operation': 'find_session',
-              'opencode.model': 'unknown',
-              'opencode.status': 'success',
-              'opencode.assistant_count': 0,
-              'http.status_code': 200,
-            },
-            statusCode: SpanStatusCode.UNSET,
+    expect(await client.findSessionIdByTitle('slack-target')).toBe('ses_x')
+    expect(captureSpy).not.toHaveBeenCalled()
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'unknown',
+            'opencode.operation': 'find_session',
+            'opencode.model': 'unknown',
+            'opencode.status': 'success',
+            'opencode.assistant_count': 0,
+            'http.status_code': 200,
           },
-        ],
-        messages: [],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'find_session',
-              status: 'success',
-              http_status_code: 200,
-            },
-            value: 1,
+          statusCode: SpanStatusCode.UNSET,
+        },
+      ],
+      messages: [],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'find_session',
+            status: 'success',
+            http_status_code: 200,
           },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -583,56 +534,42 @@ describe('createOpencodeClient', () => {
       sleepImpl: noopSleep,
     })
 
-    let thrown: unknown
-    try {
-      await client.findSessionIdByTitle('slack-target')
-    } catch (e) {
-      thrown = e
-    }
-
-    const captureCalls = captureSpy.mock.calls.map(([err, ctx]) => ({
-      errorName: (err as Error).name,
-      retryAfter: ctx?.retryAfter,
-    }))
-
-    expect({
-      thrownName: (thrown as Error).name,
-      thrownRetryAfter: (thrown as { retryAfter?: number }).retryAfter,
-      captureCalls,
-      snapshot: await collect(),
-    }).toEqual({
-      thrownName: 'GoUsageLimitError',
-      thrownRetryAfter: 7,
-      captureCalls: [{ errorName: 'GoUsageLimitError', retryAfter: 7 }],
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'unknown',
-              'opencode.operation': 'find_session',
-              'opencode.model': 'unknown',
-              'opencode.status': 'rate_limited',
-              'http.status_code': 429,
-              'http.retry_after': 7,
-              'error.type': 'GoUsageLimitError',
-            },
-            statusCode: SpanStatusCode.ERROR,
+    await expect(
+      client.findSessionIdByTitle('slack-target'),
+    ).rejects.toMatchObject({
+      name: 'GoUsageLimitError',
+      retryAfter: 7,
+    })
+    expect(captureSpy).toHaveBeenCalledTimes(1)
+    expect(captureSpy.mock.calls[0]?.[1]).toEqual({ retryAfter: 7 })
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'unknown',
+            'opencode.operation': 'find_session',
+            'opencode.model': 'unknown',
+            'opencode.status': 'rate_limited',
+            'http.status_code': 429,
+            'http.retry_after': 7,
+            'error.type': 'GoUsageLimitError',
           },
-        ],
-        messages: [],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'find_session',
-              status: 'rate_limited',
-              http_status_code: 429,
-            },
-            value: 1,
+          statusCode: SpanStatusCode.ERROR,
+        },
+      ],
+      messages: [],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'find_session',
+            status: 'rate_limited',
+            http_status_code: 429,
           },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 })
