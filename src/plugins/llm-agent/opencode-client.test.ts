@@ -284,7 +284,7 @@ describe('createOpencodeClient', () => {
     expect(await client.fetchLatestAssistantText('sess_abc')).toBe(
       'Hello world',
     )
-    expect(captureSpy).not.toHaveBeenCalled()
+    expect(captureSpy.mock.calls).toEqual([])
     expect(await collect()).toEqual({
       spans: [
         {
@@ -336,14 +336,16 @@ describe('createOpencodeClient', () => {
       sleepImpl: noopSleep,
     })
 
-    await expect(
-      client.fetchLatestAssistantText('sess_abc'),
-    ).rejects.toMatchObject({
-      name: 'GoUsageLimitError',
-      retryAfter: 42,
-    })
-    expect(captureSpy).toHaveBeenCalledTimes(1)
-    expect(captureSpy.mock.calls[0]?.[1]).toEqual({ retryAfter: 42 })
+    const thrown = await client
+      .fetchLatestAssistantText('sess_abc')
+      .catch((e: unknown) => e)
+    expect({
+      name: (thrown as Error).name,
+      retryAfter: (thrown as { retryAfter?: number }).retryAfter,
+    }).toEqual({ name: 'GoUsageLimitError', retryAfter: 42 })
+    expect(
+      captureSpy.mock.calls.map(([err, ctx]) => [(err as Error).name, ctx]),
+    ).toEqual([['GoUsageLimitError', { retryAfter: 42 }]])
     expect(await collect()).toEqual({
       spans: [
         {
@@ -384,10 +386,13 @@ describe('createOpencodeClient', () => {
       sleepImpl: noopSleep,
     })
 
-    await expect(client.fetchLatestAssistantText('sess_abc')).rejects.toThrow(
+    const thrown = await client
+      .fetchLatestAssistantText('sess_abc')
+      .catch((e: unknown) => e)
+    expect((thrown as Error).message).toBe(
       'opencode GET /session/sess_abc/message failed with HTTP 500',
     )
-    expect(captureSpy).not.toHaveBeenCalled()
+    expect(captureSpy.mock.calls).toEqual([])
     expect(await collect()).toEqual({
       spans: [
         {
@@ -444,7 +449,7 @@ describe('createOpencodeClient', () => {
 
     expect(await client.fetchLatestAssistantText('sess_abc')).toBe('OK')
     expect(calls).toBe(2)
-    expect(captureSpy).not.toHaveBeenCalled()
+    expect(captureSpy.mock.calls).toEqual([])
     expect(await collect()).toEqual({
       spans: [
         {
@@ -491,7 +496,7 @@ describe('createOpencodeClient', () => {
     })
 
     expect(await client.findSessionIdByTitle('slack-target')).toBe('ses_x')
-    expect(captureSpy).not.toHaveBeenCalled()
+    expect(captureSpy.mock.calls).toEqual([])
     expect(await collect()).toEqual({
       spans: [
         {
@@ -534,14 +539,16 @@ describe('createOpencodeClient', () => {
       sleepImpl: noopSleep,
     })
 
-    await expect(
-      client.findSessionIdByTitle('slack-target'),
-    ).rejects.toMatchObject({
-      name: 'GoUsageLimitError',
-      retryAfter: 7,
-    })
-    expect(captureSpy).toHaveBeenCalledTimes(1)
-    expect(captureSpy.mock.calls[0]?.[1]).toEqual({ retryAfter: 7 })
+    const thrown = await client
+      .findSessionIdByTitle('slack-target')
+      .catch((e: unknown) => e)
+    expect({
+      name: (thrown as Error).name,
+      retryAfter: (thrown as { retryAfter?: number }).retryAfter,
+    }).toEqual({ name: 'GoUsageLimitError', retryAfter: 7 })
+    expect(
+      captureSpy.mock.calls.map(([err, ctx]) => [(err as Error).name, ctx]),
+    ).toEqual([['GoUsageLimitError', { retryAfter: 7 }]])
     expect(await collect()).toEqual({
       spans: [
         {
