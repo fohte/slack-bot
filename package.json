@@ -22,6 +22,8 @@
     "@commitlint/cli": "21.0.2",
     "@eslint/eslintrc": "3.3.5",
     "@fohte/eslint-config": "0.3.4",
+    "@opentelemetry/context-async-hooks": "2.8.0",
+    "@opentelemetry/core": "2.8.0",
     "@tsconfig/node-lts": "24.0.0",
     "@tsconfig/strictest": "2.0.8",
     "@types/node": "24.13.2",

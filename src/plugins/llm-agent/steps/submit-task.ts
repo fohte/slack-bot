@@ -1,3 +1,5 @@
+import { context, propagation } from '@opentelemetry/api'
+
 import type { ConfigMapBinaryEntry } from '@/plugins/llm-agent/configmap-client'
 import type {
   ProcessMentionDeps,
@@ -51,6 +53,21 @@ const buildContexts = (
       mountPath: SLACK_IMAGES_MOUNT_PATH,
       configMapName: imageConfigMapName,
     })
+  }
+  // Inject the active OTel context so the Task Pod's wrapper script can bridge
+  // it to opencode's trace via W3C Span Links.
+  const carrier: Record<string, string> = {}
+  propagation.inject(context.active(), carrier)
+  for (const name of ['traceparent', 'tracestate'] as const) {
+    const text = carrier[name]
+    if (text !== undefined && text.length > 0) {
+      contexts.push({
+        kind: 'text',
+        name,
+        mountPath: `slack-context/${name}`,
+        text,
+      })
+    }
   }
   return contexts
 }
