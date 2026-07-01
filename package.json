@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@fohte/blog-publisher-contract": "0.1.0",
-    "@fohte/service-kit": "0.1.1",
+    "@fohte/service-kit": "0.1.2",
     "@hono/node-server": "2.0.4",
     "@kubernetes/client-node": "1.4.0",
     "@opentelemetry/api": "1.9.1",
