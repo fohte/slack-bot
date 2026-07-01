@@ -1,3 +1,5 @@
+import { SpanStatusCode, trace } from '@opentelemetry/api'
+
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import {
@@ -13,6 +15,9 @@ import type {
 } from '@/plugins/llm-agent/process-mention-deps'
 import { submitTask } from '@/plugins/llm-agent/steps/submit-task'
 import type { SlackFile } from '@/types/slack-payloads'
+
+const TRACER_NAME = 'slack-bot'
+const DISPATCH_SPAN_NAME = 'slack.mention.handle'
 
 export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
@@ -106,33 +111,56 @@ export const createTaskDispatcher = (
   options: TaskDispatcherOptions,
 ): TaskDispatcher => {
   const logger = options.logger ?? noopLogger
+  const tracer = trace.getTracer(TRACER_NAME)
   return async (accepted) => {
     const env = envelopeFromAccepted(accepted, logger)
     if (env === undefined) return
-    // Set the indicator before submitTask so a fast-completing Task can
-    // never have its terminal status clear race ahead of our set and
-    // leave a stale indicator sitting in the thread.
-    await trySetAssistantStatus({
-      slackClient: options.slackClient,
-      target: { channelId: env.channelId, threadTs: env.threadRootTs },
-      status: INITIAL_PHASE_STATUS.status,
-      loadingMessages: INITIAL_PHASE_STATUS.loadingMessages,
-      logger,
-    })
-    // create() failures must reach onAccepted for the event_log rollback;
-    // downstream steps run detached so the Slack HTTP handler can ack.
-    const { taskName } = await submitTask(env, options)
-    void processMention(env, taskName, options, {
-      initialBubble: INITIAL_PHASE_STATUS,
-    }).catch((error: unknown) => {
-      logger.error(
-        {
-          event: 'llm_agent_process_mention_failed',
-          event_id: env.eventId,
-          err: error,
+    await tracer.startActiveSpan(
+      DISPATCH_SPAN_NAME,
+      {
+        attributes: {
+          'slack.channel': env.channelId,
+          'slack.thread_ts': env.threadRootTs,
+          'slack.event_id': env.eventId,
         },
-        'llm-agent processMention failed',
-      )
-    })
+      },
+      async (span) => {
+        try {
+          // Set the indicator before submitTask so a fast-completing Task can
+          // never have its terminal status clear race ahead of our set and
+          // leave a stale indicator sitting in the thread.
+          await trySetAssistantStatus({
+            slackClient: options.slackClient,
+            target: { channelId: env.channelId, threadTs: env.threadRootTs },
+            status: INITIAL_PHASE_STATUS.status,
+            loadingMessages: INITIAL_PHASE_STATUS.loadingMessages,
+            logger,
+          })
+          // create() failures must reach onAccepted for the event_log rollback;
+          // downstream steps run detached so the Slack HTTP handler can ack.
+          const { taskName } = await submitTask(env, options)
+          void processMention(env, taskName, options, {
+            initialBubble: INITIAL_PHASE_STATUS,
+          }).catch((error: unknown) => {
+            logger.error(
+              {
+                event: 'llm_agent_process_mention_failed',
+                event_id: env.eventId,
+                err: error,
+              },
+              'llm-agent processMention failed',
+            )
+          })
+        } catch (err) {
+          span.recordException(
+            err instanceof Error ? err : { message: String(err) },
+          )
+          span.setStatus({ code: SpanStatusCode.ERROR })
+          throw err
+        } finally {
+          span.end()
+        }
+      },
+    )
   }
 }
