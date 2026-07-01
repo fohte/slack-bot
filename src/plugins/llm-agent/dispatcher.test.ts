@@ -1,4 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { context, propagation, trace } from '@opentelemetry/api'
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
+import { W3CTraceContextPropagator } from '@opentelemetry/core'
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { noopConfigMapClient } from '@/plugins/llm-agent/_test-utils'
 import {
@@ -343,5 +351,144 @@ describe('createTaskDispatcher', () => {
     // backgrounding processMention this await would hang the test.
     await dispatch(acceptedMention())
     expect(taskCrClient.creates.length).toBe(1)
+  })
+})
+
+describe('createTaskDispatcher OTel span', () => {
+  let spanExporter: InMemorySpanExporter
+  let tracerProvider: BasicTracerProvider
+  let contextManager: AsyncLocalStorageContextManager
+
+  beforeEach(() => {
+    spanExporter = new InMemorySpanExporter()
+    tracerProvider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+    })
+    trace.setGlobalTracerProvider(tracerProvider)
+    propagation.setGlobalPropagator(new W3CTraceContextPropagator())
+    contextManager = new AsyncLocalStorageContextManager()
+    contextManager.enable()
+    context.setGlobalContextManager(contextManager)
+  })
+
+  afterEach(async () => {
+    await tracerProvider.shutdown()
+    trace.disable()
+    propagation.disable()
+    context.disable()
+    contextManager.disable()
+  })
+
+  it('wraps the dispatch in a slack.mention.handle span carrying Slack ID attributes', async () => {
+    const taskCrClient = createTaskCrClient()
+    const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
+      taskCrClient,
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    })
+    await dispatch(acceptedMention())
+    const spans = spanExporter.getFinishedSpans()
+    expect(
+      spans.map((s) => ({
+        name: s.name,
+        attributes: s.attributes,
+        statusCode: s.status.code,
+      })),
+    ).toEqual([
+      {
+        name: 'slack.mention.handle',
+        attributes: {
+          'slack.channel': 'C1',
+          'slack.thread_ts': '111.222',
+          'slack.event_id': 'Ev1',
+        },
+        statusCode: 0,
+      },
+    ])
+  })
+
+  it('calls submitTask under the active span so its traceparent lands in the Task CR contexts', async () => {
+    const taskCrClient = createTaskCrClient()
+    const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
+      taskCrClient,
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    })
+    await dispatch(acceptedMention())
+    const [span] = spanExporter.getFinishedSpans()
+    const spanCtx = span?.spanContext()
+    const expectedTraceparent = `00-${spanCtx?.traceId ?? ''}-${spanCtx?.spanId ?? ''}-01`
+    expect(taskCrClient.creates).toEqual([
+      {
+        name: taskCrNameForSlackEvent('Ev1'),
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: 'hello bot',
+        contexts: [
+          {
+            kind: 'text',
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            kind: 'text',
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '111.222',
+          },
+          {
+            kind: 'text',
+            name: 'traceparent',
+            mountPath: 'slack-context/traceparent',
+            text: expectedTraceparent,
+          },
+        ],
+      },
+    ])
+  })
+
+  it('records the exception on the span and rethrows when submitTask fails', async () => {
+    const failure = new Error('k8s API down')
+    const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
+      taskCrClient: createTaskCrClient({ createError: failure }),
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient: createSlackClient(),
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    })
+    await expect(dispatch(acceptedMention())).rejects.toBe(failure)
+    const spans = spanExporter.getFinishedSpans()
+    expect(
+      spans.map((s) => ({
+        name: s.name,
+        statusCode: s.status.code,
+        exceptionMessages: s.events
+          .filter((e) => e.name === 'exception')
+          .map((e) => e.attributes?.['exception.message']),
+      })),
+    ).toEqual([
+      {
+        name: 'slack.mention.handle',
+        statusCode: 2,
+        exceptionMessages: ['k8s API down'],
+      },
+    ])
   })
 })
