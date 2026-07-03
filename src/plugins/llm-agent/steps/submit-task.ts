@@ -33,7 +33,9 @@ const logTraceparentInjectDebug = (
     // getGlobalPropagator is not part of the public API; reach into the internal
     // getter so we can log which propagator is actually installed.
     type PropagatorProbe = {
-      _getGlobalPropagator?: () => { constructor: { name: string } } | undefined
+      _getGlobalPropagator?: () =>
+        | { constructor?: { name: string } }
+        | undefined
     }
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- probing the internal getter is the only way to identify the installed propagator
     const probe = propagation as unknown as PropagatorProbe
@@ -49,10 +51,13 @@ const logTraceparentInjectDebug = (
             | undefined
         }
       | undefined
-    const opts: Record<string, unknown> | undefined =
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Sentry.NodeClientOptions is opaque; narrowing to a probe-only shape
-      Sentry.getClient()?.getOptions() as Record<string, unknown> | undefined
-    if (opts !== undefined) {
+    const opts: Record<string, unknown> | null | undefined =
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Sentry.NodeClientOptions is opaque; narrowing to a probe-only shape; keeps null in the shape so the runtime null guard below still narrows
+      Sentry.getClient()?.getOptions() as
+        | Record<string, unknown>
+        | null
+        | undefined
+    if (opts !== undefined && opts !== null) {
       const targets = opts['tracePropagationTargets']
       sentryOptions = {
         propagateTraceparent: opts['propagateTraceparent'],
@@ -68,7 +73,7 @@ const logTraceparentInjectDebug = (
         event: 'llm_agent_debug_traceparent_inject',
         event_id: env.eventId,
         propagator: {
-          constructor: propagatorInternal?.constructor.name,
+          constructor: propagatorInternal?.constructor?.name,
           fields: propagation.fields(),
         },
         active_span:
