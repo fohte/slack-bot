@@ -21,71 +21,82 @@ const SINGLE_IMAGE_BYTE_CAP = 500 * 1024
 const TOTAL_IMAGE_BYTE_CAP = 700 * 1024
 
 // TODO(revert): temporary probe to diagnose why traceparent is not injected.
+// A probe failure must never break Task creation, so every read is guarded.
 const logTraceparentInjectDebug = (
   resolved: ResolvedDeps,
   env: SlackEnvelope,
-  carrier: Record<string, string>,
 ): void => {
-  const activeSpanCtx = trace.getSpan(context.active())?.spanContext()
-  // getGlobalPropagator is not part of the public API; reach into the internal
-  // getter so we can log which propagator is actually installed.
-  type PropagatorProbe = {
-    _getGlobalPropagator?: () => { constructor: { name: string } } | undefined
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- probing the internal getter is the only way to identify the installed propagator
-  const probe = propagation as unknown as PropagatorProbe
-  const propagatorInternal = probe._getGlobalPropagator?.()
-  let sentryOptions:
-    | {
-        propagateTraceparent: unknown
-        tracePropagationTargets: unknown
-      }
-    | undefined
   try {
+    const carrier: Record<string, string> = {}
+    propagation.inject(context.active(), carrier)
+    const activeSpanCtx = trace.getSpan(context.active())?.spanContext()
+    // getGlobalPropagator is not part of the public API; reach into the internal
+    // getter so we can log which propagator is actually installed.
+    type PropagatorProbe = {
+      _getGlobalPropagator?: () => { constructor: { name: string } } | undefined
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- probing the internal getter is the only way to identify the installed propagator
+    const probe = propagation as unknown as PropagatorProbe
+    const propagatorInternal = probe._getGlobalPropagator?.()
+    let sentryOptions:
+      | {
+          propagateTraceparent: unknown
+          // tracePropagationTargets can be a URL / regex list; log shape only,
+          // not values, to avoid leaking outbound targets into log storage.
+          tracePropagationTargets:
+            | { kind: 'array'; length: number }
+            | string
+            | undefined
+        }
+      | undefined
     const opts: Record<string, unknown> | undefined =
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Sentry.NodeClientOptions is opaque; narrowing to a probe-only shape
       Sentry.getClient()?.getOptions() as Record<string, unknown> | undefined
     if (opts !== undefined) {
+      const targets = opts['tracePropagationTargets']
       sentryOptions = {
         propagateTraceparent: opts['propagateTraceparent'],
-        tracePropagationTargets: opts['tracePropagationTargets'],
+        tracePropagationTargets: Array.isArray(targets)
+          ? { kind: 'array', length: targets.length }
+          : targets === undefined
+            ? undefined
+            : typeof targets,
       }
     }
+    resolved.logger.info(
+      {
+        event: 'llm_agent_debug_traceparent_inject',
+        event_id: env.eventId,
+        propagator: {
+          constructor: propagatorInternal?.constructor.name,
+          fields: propagation.fields(),
+        },
+        active_span:
+          activeSpanCtx === undefined
+            ? undefined
+            : {
+                trace_id: activeSpanCtx.traceId,
+                span_id: activeSpanCtx.spanId,
+                trace_flags: activeSpanCtx.traceFlags,
+                is_remote: activeSpanCtx.isRemote,
+              },
+        carrier,
+        sentry_options: sentryOptions,
+      },
+      'debug: traceparent inject state',
+    )
   } catch (err) {
     resolved.logger.warn(
-      { event: 'llm_agent_debug_sentry_options_failed', err },
-      'debug: failed to read Sentry client options',
+      { event: 'llm_agent_debug_traceparent_inject_failed', err },
+      'debug: traceparent inject probe failed',
     )
   }
-  resolved.logger.info(
-    {
-      event: 'llm_agent_debug_traceparent_inject',
-      event_id: env.eventId,
-      propagator: {
-        constructor: propagatorInternal?.constructor.name,
-        fields: propagation.fields(),
-      },
-      active_span:
-        activeSpanCtx === undefined
-          ? undefined
-          : {
-              trace_id: activeSpanCtx.traceId,
-              span_id: activeSpanCtx.spanId,
-              trace_flags: activeSpanCtx.traceFlags,
-              is_remote: activeSpanCtx.isRemote,
-            },
-      carrier,
-      sentry_options: sentryOptions,
-    },
-    'debug: traceparent inject state',
-  )
 }
 
 const buildContexts = (
   env: SlackEnvelope,
   opencodeSessionId: string | undefined,
   imageConfigMapName: string | undefined,
-  onCarrierInjected?: (carrier: Record<string, string>) => void,
 ): TaskCrContext[] => {
   const contexts: TaskCrContext[] = [
     {
@@ -121,7 +132,6 @@ const buildContexts = (
   // it to opencode's trace via W3C Span Links.
   const carrier: Record<string, string> = {}
   propagation.inject(context.active(), carrier)
-  onCarrierInjected?.(carrier)
   for (const name of ['traceparent', 'tracestate'] as const) {
     const text = carrier[name]
     if (text !== undefined && text.length > 0) {
@@ -380,6 +390,8 @@ export const submitTask = async (
     imageConfigMapName = configMapNameForSlackEvent(taskName)
     await ensureImageConfigMap(resolved, env, imageConfigMapName, downloaded)
   }
+  // TODO(revert): remove together with logTraceparentInjectDebug.
+  logTraceparentInjectDebug(resolved, env)
   let outcome
   try {
     outcome = await resolved.taskCrClient.create({
@@ -387,15 +399,7 @@ export const submitTask = async (
       namespace: resolved.namespace,
       agentName: resolved.agentName,
       description: composeDescription(env.text, env.images.length, downloaded),
-      contexts: buildContexts(
-        env,
-        opencodeSessionId,
-        imageConfigMapName,
-        // TODO(revert): remove together with logTraceparentInjectDebug.
-        (carrier) => {
-          logTraceparentInjectDebug(resolved, env, carrier)
-        },
-      ),
+      contexts: buildContexts(env, opencodeSessionId, imageConfigMapName),
     })
   } catch (taskCreateError) {
     if (imageConfigMapName !== undefined) {
