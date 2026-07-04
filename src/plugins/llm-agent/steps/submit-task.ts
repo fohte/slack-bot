@@ -243,11 +243,11 @@ const describeImagesForAgent = (
 ): string => {
   const lines = downloaded.map((d) => {
     const displayName = d.file.name ?? d.file.title ?? d.key
-    return `- ${SLACK_IMAGES_MOUNT_PATH}/${d.key} (originally "${displayName}")`
+    return `- ${displayName}`
   })
   return [
     `The user attached ${String(downloaded.length)} image file(s) to this Slack message.`,
-    `They are mounted in the workspace at \`${SLACK_IMAGES_MOUNT_PATH}/\`. Call the Read tool on each path below to view the image:`,
+    'They are included directly in this conversation as image attachments, so you can view their contents without calling any tool. Original filenames, in attachment order:',
     ...lines,
   ].join('\n')
 }
