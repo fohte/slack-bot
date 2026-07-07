@@ -172,7 +172,7 @@ describe('submitTask', () => {
     })
   })
 
-  it('downloads attached images, mounts them via a ConfigMap context, and prepends a Read-tool prompt block', async () => {
+  it('downloads attached images, mounts them via a ConfigMap context, and prepends an image-attachment description block', async () => {
     const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
     const jpgBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
     const slackClient = createSlackClientWithDownloads(
@@ -216,9 +216,9 @@ describe('submitTask', () => {
     const expectedConfigMapName = `${expectedTaskName}-images`
     const expectedDescription = [
       'The user attached 2 image file(s) to this Slack message.',
-      'They are mounted in the workspace at `slack-images/`. Call the Read tool on each path below to view the image:',
-      '- slack-images/01-f1.png (originally "screen.png")',
-      '- slack-images/02-f2.jpg (originally "photo.jpg")',
+      'They are included directly in this conversation as image attachments, so you can view their contents without calling any tool. Original filenames, in attachment order:',
+      '- screen.png',
+      '- photo.jpg',
       '',
       'look at these',
     ].join('\n')
