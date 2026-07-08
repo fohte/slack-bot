@@ -136,6 +136,42 @@ describe('respond', () => {
     ])
   })
 
+  it('truncates on a Unicode code point boundary so a surrogate pair at the cut point stays intact', async () => {
+    const slackClient = createStubSlackClient()
+    const longText = `${'a'.repeat(11_998)}😀${'a'.repeat(10)}`
+    const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: longText,
+      }),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+    await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
+    const truncatedBlockText = `${'a'.repeat(11_998)}😀…`
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: longText,
+        blocks: [{ type: 'markdown', text: truncatedBlockText }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+  })
+
   it('posts an escaped failure message and does not upsert thread session on failed', async () => {
     const slackClient = createStubSlackClient()
     const threadSessionStore = createScriptedThreadSessionStore()

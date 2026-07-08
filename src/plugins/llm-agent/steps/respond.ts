@@ -81,10 +81,14 @@ interface SlackMarkdownBlock {
 // https://docs.slack.dev/reference/block-kit/blocks/markdown-block
 const MARKDOWN_BLOCK_TEXT_LIMIT = 12_000
 
-const truncateForMarkdownBlock = (text: string): string =>
-  text.length > MARKDOWN_BLOCK_TEXT_LIMIT
-    ? `${text.slice(0, MARKDOWN_BLOCK_TEXT_LIMIT - 1)}…`
+// Array.from splits on Unicode code points rather than UTF-16 code units,
+// so slicing here can't land inside a surrogate pair (e.g. an emoji).
+const truncateForMarkdownBlock = (text: string): string => {
+  const chars = Array.from(text)
+  return chars.length > MARKDOWN_BLOCK_TEXT_LIMIT
+    ? `${chars.slice(0, MARKDOWN_BLOCK_TEXT_LIMIT - 1).join('')}…`
     : text
+}
 
 interface SuccessResponse {
   readonly text: string
