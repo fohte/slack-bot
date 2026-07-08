@@ -298,7 +298,7 @@ describe('SlackWebClient', () => {
       async () =>
         new Response('', {
           status: 200,
-          headers: { 'content-length': String(20 * 1024 * 1024) },
+          headers: { 'content-length': String(40 * 1024 * 1024) },
         }),
     )
     const mock = buildMockClient()

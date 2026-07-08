@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   createScriptedEventLogStore,
+  createScriptedImageResizer,
   createScriptedTaskCrClient,
   createScriptedThreadSessionStore,
   createStubSlackClient,
@@ -327,7 +328,9 @@ describe('submitTask', () => {
     })
   })
 
-  it('drops images that already exceed the per-image cap via Slack metadata without downloading', async () => {
+  it('still downloads images whose declared Slack size metadata exceeds the per-image cap', async () => {
+    // Slack's reported file.size is metadata the resize path can salvage, so
+    // it must not gate the download the way it used to.
     const downloadCalls: string[] = []
     const slackClient: SlackWebClient = {
       ...createStubSlackClient(),
@@ -346,13 +349,6 @@ describe('submitTask', () => {
         size: 10 * 1024 * 1024,
         url_private: 'https://files.slack.com/huge.png',
       },
-      {
-        id: 'F2',
-        name: 'ok.png',
-        mimetype: 'image/png',
-        size: 1024,
-        url_private: 'https://files.slack.com/ok.png',
-      },
     ]
     const deps: ProcessMentionDeps = {
       taskCrClient,
@@ -365,7 +361,96 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    expect(downloadCalls).toEqual(['https://files.slack.com/ok.png'])
+    expect(downloadCalls).toEqual(['https://files.slack.com/huge.png'])
+  })
+
+  it('resizes a downloaded image that exceeds the per-image cap and uses the resized bytes', async () => {
+    const bigBytes = new Uint8Array(600 * 1024).fill(7)
+    const resizedBytes = new Uint8Array([9, 9, 9, 9])
+    const slackClient = createSlackClientWithDownloads(
+      new Map([['https://files.slack.com/img-1.png', bigBytes]]),
+    )
+    const taskCrClient = createScriptedTaskCrClient([])
+    const configMapClient = createRecordingConfigMapClient()
+    const imageResizer = createScriptedImageResizer(() => ({
+      bytes: resizedBytes,
+      ext: 'jpg',
+    }))
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'photo.png',
+        mimetype: 'image/png',
+        url_private: 'https://files.slack.com/img-1.png',
+      },
+    ]
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      configMapClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+      imageResizer,
+    }
+
+    await submitTask({ ...TEST_ENV, images }, deps)
+
+    const expectedConfigMapName = `${taskCrNameForSlackEvent('Ev1')}-images`
+    expect({
+      resizerCalls: imageResizer.calls,
+      configMaps: configMapClient.creates,
+    }).toEqual({
+      resizerCalls: [{ maxBytes: 500 * 1024 }],
+      configMaps: [
+        {
+          name: expectedConfigMapName,
+          namespace: 'kubeopencode',
+          binaryEntries: [{ filename: '01-f1.jpg', bytes: resizedBytes }],
+          labels: {
+            'slack-bot.fohte.net/slack-event-id': 'Ev1',
+          },
+        },
+      ],
+    })
+  })
+
+  it('drops an image when it cannot be resized under the cap', async () => {
+    const bigBytes = new Uint8Array(600 * 1024).fill(7)
+    const slackClient = createSlackClientWithDownloads(
+      new Map([['https://files.slack.com/img-1.png', bigBytes]]),
+    )
+    const taskCrClient = createScriptedTaskCrClient([])
+    const configMapClient = createRecordingConfigMapClient()
+    const imageResizer = createScriptedImageResizer(() => undefined)
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'photo.png',
+        mimetype: 'image/png',
+        url_private: 'https://files.slack.com/img-1.png',
+      },
+    ]
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      configMapClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+      imageResizer,
+    }
+
+    await submitTask({ ...TEST_ENV, images }, deps)
+
+    expect({
+      configMaps: configMapClient.creates,
+      description: taskCrClient.creates[0]?.description,
+    }).toEqual({
+      configMaps: [],
+      description:
+        "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
+    })
   })
 
   it('cleans up the orphan ConfigMap when Task CR creation fails', async () => {
@@ -562,7 +647,7 @@ describe('submitTask', () => {
       configMaps: [],
       contextKinds: ['text', 'text'],
       description:
-        "Note: 1 attached image(s) could not be loaded (download failed or exceeded the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
+        "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
     })
   })
 })
