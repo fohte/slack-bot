@@ -91,6 +91,14 @@ interface GateDecision {
   readonly reason: GateReason
 }
 
+// Subtypes whose top-level `text`/`files` fields carry the actual
+// user-visible message and can go through the same gating logic as a plain
+// message. `file_share` is a normal message with an attached file. All
+// other subtypes (message_changed, message_deleted, channel_join, ...)
+// carry user-visible text in a nested field and Slack does not emit a
+// paired app_mention even when the edited body mentions the bot.
+const SUPPORTED_MESSAGE_SUBTYPES = new Set(['file_share'])
+
 const decideForMessage = async (
   event: SlackEvent,
   fields: ExtractedFields,
@@ -98,11 +106,11 @@ const decideForMessage = async (
   threadSessionStore: ThreadSessionStore,
   teamId: string | undefined,
 ): Promise<GateDecision> => {
-  // Non-default message subtypes (message_changed, message_deleted,
-  // channel_join, ...) carry user-visible text in a nested field and Slack
-  // does not emit a paired app_mention even when the edited body mentions
-  // the bot.
-  if (event.type === 'message' && event.subtype !== undefined) {
+  if (
+    event.type === 'message' &&
+    typeof event.subtype === 'string' &&
+    !SUPPORTED_MESSAGE_SUBTYPES.has(event.subtype)
+  ) {
     return { accept: false, reason: 'unsupported_message_subtype' }
   }
 
