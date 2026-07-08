@@ -20,6 +20,9 @@ interface MockWebClient {
       setStatus: ReturnType<typeof vi.fn>
     }
   }
+  files: {
+    info: ReturnType<typeof vi.fn>
+  }
 }
 
 const buildMockClient = (): MockWebClient => ({
@@ -37,6 +40,9 @@ const buildMockClient = (): MockWebClient => ({
     threads: {
       setStatus: vi.fn(),
     },
+  },
+  files: {
+    info: vi.fn(),
   },
 })
 
@@ -327,5 +333,69 @@ describe('SlackWebClient', () => {
     await expect(
       client.downloadFile('https://files.slack.com/files-pri/T1-F1/x.png'),
     ).rejects.toMatchObject({ name: 'SlackApiError', status: 403 })
+  })
+
+  it('maps files.info result to a SlackFile', async () => {
+    const mock = buildMockClient()
+    mock.files.info.mockResolvedValue({
+      ok: true,
+      file: {
+        id: 'F123',
+        name: 'lunch.jpg',
+        title: 'lunch',
+        mimetype: 'image/jpeg',
+        filetype: 'jpg',
+        size: 1234,
+        url_private: 'https://files.slack.com/files-pri/T1-F123/lunch.jpg',
+        url_private_download:
+          'https://files.slack.com/files-pri/T1-F123/download/lunch.jpg',
+        permalink: 'https://team.slack.com/files/U1/F123/lunch.jpg',
+        channels: ['C1'],
+        groups: ['G1'],
+        ims: [],
+      },
+    })
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+    })
+    const result = await client.getFileInfo('F123')
+    expect({ result, calls: mock.files.info.mock.calls }).toEqual({
+      result: {
+        id: 'F123',
+        name: 'lunch.jpg',
+        title: 'lunch',
+        mimetype: 'image/jpeg',
+        filetype: 'jpg',
+        size: 1234,
+        url_private: 'https://files.slack.com/files-pri/T1-F123/lunch.jpg',
+        url_private_download:
+          'https://files.slack.com/files-pri/T1-F123/download/lunch.jpg',
+        permalink: 'https://team.slack.com/files/U1/F123/lunch.jpg',
+        channels: ['C1'],
+        groups: ['G1'],
+        ims: [],
+      },
+      calls: [[{ file: 'F123' }]],
+    })
+  })
+
+  it('rethrows files.info failures as SlackApiError', async () => {
+    const mock = buildMockClient()
+    const slackErr = new Error('platform error') as Error & {
+      data: { error: string }
+    }
+    slackErr.data = { error: 'file_not_found' }
+    mock.files.info.mockRejectedValue(slackErr)
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+    })
+    await expect(client.getFileInfo('F123')).rejects.toMatchObject({
+      name: 'SlackApiError',
+      slackError: 'file_not_found',
+    })
   })
 })

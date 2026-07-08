@@ -14,6 +14,7 @@ const buildMockClient = () => ({
     .mockResolvedValue({ channelId: undefined, messageTs: undefined, raw: '' }),
   setAssistantThreadStatus: vi.fn(),
   downloadFile: vi.fn(),
+  getFileInfo: vi.fn(),
 })
 
 describe('InteractionContext', () => {

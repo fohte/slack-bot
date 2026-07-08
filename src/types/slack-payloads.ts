@@ -101,16 +101,21 @@ export interface SlackUnknownEvent extends SlackEventBase {
 // Slack file object on message/app_mention events.
 // Reference: https://docs.slack.dev/reference/objects/file-object
 export interface SlackFile {
-  readonly id?: string
-  readonly name?: string
-  readonly title?: string
-  readonly mimetype?: string
-  readonly filetype?: string
-  readonly size?: number
+  readonly id?: string | undefined
+  readonly name?: string | undefined
+  readonly title?: string | undefined
+  readonly mimetype?: string | undefined
+  readonly filetype?: string | undefined
+  readonly size?: number | undefined
   // url_private requires the bot token to download.
-  readonly url_private?: string
-  readonly url_private_download?: string
-  readonly permalink?: string
+  readonly url_private?: string | undefined
+  readonly url_private_download?: string | undefined
+  readonly permalink?: string | undefined
+  // Channels/groups/DMs this file has been shared into; used to scope an
+  // inline file-ID reference (see files.ts) to the channel it was sent from.
+  readonly channels?: readonly string[] | undefined
+  readonly groups?: readonly string[] | undefined
+  readonly ims?: readonly string[] | undefined
   readonly [key: string]: unknown
 }
 
