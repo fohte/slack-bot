@@ -1,5 +1,5 @@
 {
-  "id": "1ef50821-88b1-4fb2-af66-8e2f156360f1",
+  "id": "29ab87a4-6c7f-43b4-87a1-70ba5b4a0a94",
   "prevId": "c9139695-d8e0-4f33-b53f-34f5ccd180b5",
   "version": "7",
   "dialect": "postgresql",
@@ -85,6 +85,12 @@
             },
             {
               "expression": "message_ts",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "slack_team_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -53,6 +53,7 @@ export const eventLog = pgTable(
     index('event_log_message_lookup_idx').on(
       table.slackChannelId,
       table.messageTs,
+      table.slackTeamId,
     ),
   ],
 )

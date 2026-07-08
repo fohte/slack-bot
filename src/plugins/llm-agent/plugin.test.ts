@@ -52,6 +52,7 @@ interface InMemoryEventLogStore extends EventLogStore {
 const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
   const seen = new Set<string>()
   const records: EventLogRecord[] = []
+  const dispatchedTaskNames = new Set<string>()
   return {
     records,
     async recordReceived(record): Promise<EventLogOutcome> {
@@ -62,10 +63,12 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
     },
     async deleteReceived(slackEventId): Promise<void> {
       seen.delete(slackEventId)
+      dispatchedTaskNames.delete(slackEventId)
       const index = records.findIndex((r) => r.slackEventId === slackEventId)
       if (index >= 0) records.splice(index, 1)
     },
-    async markTaskName(): Promise<{ updated: number }> {
+    async markTaskName(slackEventId): Promise<{ updated: number }> {
+      dispatchedTaskNames.add(slackEventId)
       return { updated: 1 }
     },
     async findByTaskName() {
@@ -91,7 +94,8 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
           r.slackEventId !== excludeSlackEventId &&
           r.slackTeamId === slackTeamId &&
           r.slackChannelId === slackChannelId &&
-          r.messageTs === messageTs,
+          r.messageTs === messageTs &&
+          dispatchedTaskNames.has(r.slackEventId),
       )
     },
   }
@@ -145,6 +149,27 @@ const buildMessageEnvelope = (
     text: 'hello',
     ts: '1700000000.000100',
     channel_type: 'im',
+    ...overrides,
+  }
+  return {
+    type: 'event_callback',
+    team_id: 'T123',
+    event,
+    event_id: eventId,
+    event_time: 1700000000,
+  }
+}
+
+const buildAppMentionEnvelope = (
+  eventId: string,
+  overrides: Partial<SlackAppMentionEvent> = {},
+): SlackEventCallback => {
+  const event: SlackAppMentionEvent = {
+    type: 'app_mention',
+    channel: 'C123',
+    user: 'U123',
+    text: '<@U_BOT> hi',
+    ts: '1700000000.000100',
     ...overrides,
   }
   return {
@@ -456,19 +481,9 @@ describe('createLlmAgentPlugin', () => {
     const plugin = createLlmAgentPlugin(
       buildPluginOptions({ eventLogStore, onAccepted }),
     )
-    const envelope: SlackEventCallback = {
-      type: 'event_callback',
-      team_id: 'T123',
-      event: {
-        type: 'app_mention',
-        channel: 'C123',
-        user: 'U123',
-        text: '<@U_BOT> hi',
-        ts: '1700000001.000200',
-      },
-      event_id: 'Ev-mention',
-      event_time: 1700000001,
-    }
+    const envelope = buildAppMentionEnvelope('Ev-mention', {
+      ts: '1700000001.000200',
+    })
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
@@ -522,19 +537,7 @@ describe('createLlmAgentPlugin', () => {
       channel_type: 'channel',
       text: '<@U_BOT> hi',
     })
-    const appMentionEnvelope: SlackEventCallback = {
-      type: 'event_callback',
-      team_id: 'T123',
-      event: {
-        type: 'app_mention',
-        channel: 'C123',
-        user: 'U123',
-        text: '<@U_BOT> hi',
-        ts: '1700000000.000100',
-      },
-      event_id: 'Ev-dup-mention',
-      event_time: 1700000000,
-    }
+    const appMentionEnvelope = buildAppMentionEnvelope('Ev-dup-mention')
 
     await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
     await plugin.onEvent?.(
@@ -729,23 +732,24 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect(eventLogStore.records).toEqual([
-      {
-        slackEventId: 'Ev-img-msg',
-        slackTeamId: 'T123',
-        slackChannelId: 'C123',
-        threadRootTs: '1700000000.000100',
-        messageTs: '1700000000.000100',
-      },
-    ])
-    expect(onAccepted).toHaveBeenCalledTimes(1)
-    expect(onAccepted.mock.calls[0]?.[0]).toEqual({
-      ctx: { envelope },
-      event: envelope.event,
+    expect({
+      records: eventLogStore.records,
+      onAccepted: onAccepted.mock.calls.map(([event]) => event),
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-img-msg',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000100',
+          messageTs: '1700000000.000100',
+        },
+      ],
+      onAccepted: [{ ctx: { envelope }, event: envelope.event }],
     })
   })
 
-  it('rejects app_mention as duplicate once its file_share sibling has already been accepted', async () => {
+  it('rejects app_mention as duplicate once its file_share sibling has a dispatched task', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
     const plugin = createLlmAgentPlugin(
@@ -758,21 +762,13 @@ describe('createLlmAgentPlugin', () => {
       text: '<@U_BOT> hi',
       files: [{ id: 'F1', mimetype: 'image/png' }],
     })
-    const appMentionEnvelope: SlackEventCallback = {
-      type: 'event_callback',
-      team_id: 'T123',
-      event: {
-        type: 'app_mention',
-        channel: 'C123',
-        user: 'U123',
-        text: '<@U_BOT> hi',
-        ts: '1700000000.000100',
-      },
-      event_id: 'Ev-img-mention-second',
-      event_time: 1700000000,
-    }
+    const appMentionEnvelope = buildAppMentionEnvelope('Ev-img-mention-second')
 
     await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
+    // Simulates submitTask's real markTaskName call once the sibling's Task
+    // CR is actually created — hasAcceptedSibling requires this, not just an
+    // accepted event_log row (see plugin.ts's decideForAppMention).
+    await eventLogStore.markTaskName('Ev-img-msg-first', 'slack-abc123')
     await plugin.onEvent?.(
       { envelope: appMentionEnvelope },
       appMentionEnvelope.event,
@@ -795,26 +791,14 @@ describe('createLlmAgentPlugin', () => {
     })
   })
 
-  it('still accepts a later file_share message after its app_mention sibling already dispatched, since dropping the attachment would be worse than a duplicate task', async () => {
+  it('still accepts a later file_share message when its app_mention sibling was accepted first', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
     const plugin = createLlmAgentPlugin(
       buildPluginOptions({ eventLogStore, onAccepted }),
     )
 
-    const appMentionEnvelope: SlackEventCallback = {
-      type: 'event_callback',
-      team_id: 'T123',
-      event: {
-        type: 'app_mention',
-        channel: 'C123',
-        user: 'U123',
-        text: '<@U_BOT> hi',
-        ts: '1700000000.000100',
-      },
-      event_id: 'Ev-mention-first',
-      event_time: 1700000000,
-    }
+    const appMentionEnvelope = buildAppMentionEnvelope('Ev-mention-first')
     const messageEnvelope = buildMessageEnvelope('Ev-img-msg-second', {
       channel_type: 'channel',
       subtype: 'file_share',

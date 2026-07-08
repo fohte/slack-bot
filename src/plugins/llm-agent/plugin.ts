@@ -180,10 +180,12 @@ const decideForAppMention = async (
   ) {
     // Slack gives no ordering guarantee between an app_mention and its
     // paired message delivery, so this only catches the case where the
-    // file_share message (see decideForMessage) was recorded first. If
-    // app_mention wins the race instead, both get accepted; that residual
-    // duplicate dispatch is preferred over silently dropping the
-    // attachment, which is what the paired message alone can carry.
+    // file_share message's Task (see decideForMessage) has already been
+    // dispatched; if app_mention wins the race instead, both get accepted.
+    // hasAcceptedSibling requires the sibling's Task to actually be
+    // dispatched (not just gated as accepted), so a sibling whose dispatch
+    // fails and gets rolled back doesn't leave this app_mention deferring
+    // to a Task that never ran.
     const hasSibling = await eventLogStore.hasAcceptedSibling({
       slackTeamId: teamId,
       slackChannelId: fields.channel,
