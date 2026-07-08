@@ -649,4 +649,45 @@ describe('createLlmAgentPlugin', () => {
       onAcceptedCalls: 0,
     })
   })
+
+  it('accepts file_share subtype messages when the thread already has an opencode session', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const threadSessionStore = createStubThreadSessionStore([
+      [
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000050',
+        },
+        'ses_abcdef',
+      ],
+    ])
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, threadSessionStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-file-thread-hit', {
+      channel_type: 'channel',
+      subtype: 'file_share',
+      text: 'this is what I had for lunch',
+      thread_ts: '1700000000.000050',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-file-thread-hit',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000050',
+        },
+      ],
+      onAcceptedCalls: 1,
+    })
+  })
 })

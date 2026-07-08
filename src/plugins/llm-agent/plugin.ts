@@ -91,6 +91,11 @@ interface GateDecision {
   readonly reason: GateReason
 }
 
+// `file_share` carries the actual message in the same top-level
+// `text`/`files` fields as a plain message, so it can go through the same
+// gating logic below.
+const SUPPORTED_MESSAGE_SUBTYPES = new Set(['file_share'])
+
 const decideForMessage = async (
   event: SlackEvent,
   fields: ExtractedFields,
@@ -98,11 +103,22 @@ const decideForMessage = async (
   threadSessionStore: ThreadSessionStore,
   teamId: string | undefined,
 ): Promise<GateDecision> => {
-  // Non-default message subtypes (message_changed, message_deleted,
-  // channel_join, ...) carry user-visible text in a nested field and Slack
-  // does not emit a paired app_mention even when the edited body mentions
-  // the bot.
-  if (event.type === 'message' && event.subtype !== undefined) {
+  // Other subtypes (message_changed, message_deleted, channel_join, ...)
+  // carry user-visible text in a nested field and Slack does not emit a
+  // paired app_mention even when the edited body mentions the bot.
+  //
+  // `event.subtype` narrows to `{} | null` (not `string`) under
+  // `!== undefined` because `SlackUnknownEvent`'s index signature keeps
+  // `unknown` in the union for the `type === 'message'` branch; the
+  // `typeof` check both satisfies the compiler and keeps a non-string
+  // subtype (which Slack never actually sends) rejected rather than
+  // silently let through.
+  if (
+    event.type === 'message' &&
+    event.subtype !== undefined &&
+    (typeof event.subtype !== 'string' ||
+      !SUPPORTED_MESSAGE_SUBTYPES.has(event.subtype))
+  ) {
     return { accept: false, reason: 'unsupported_message_subtype' }
   }
 
