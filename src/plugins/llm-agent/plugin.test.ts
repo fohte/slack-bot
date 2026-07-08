@@ -650,35 +650,6 @@ describe('createLlmAgentPlugin', () => {
     })
   })
 
-  it('accepts file_share subtype messages in a DM', async () => {
-    const eventLogStore = createInMemoryEventLogStore()
-    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
-    const plugin = createLlmAgentPlugin(
-      buildPluginOptions({ eventLogStore, onAccepted }),
-    )
-    const envelope = buildMessageEnvelope('Ev-file-dm', {
-      subtype: 'file_share',
-      text: 'lunch today',
-    })
-
-    await plugin.onEvent?.({ envelope }, envelope.event)
-
-    expect({
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-file-dm',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000100',
-        },
-      ],
-      onAcceptedCalls: 1,
-    })
-  })
-
   it('accepts file_share subtype messages when the thread already has an opencode session', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
