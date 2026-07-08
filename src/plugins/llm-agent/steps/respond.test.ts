@@ -136,7 +136,7 @@ describe('respond', () => {
     ])
   })
 
-  it('truncates on a Unicode code point boundary so a surrogate pair at the cut point stays intact', async () => {
+  it('drops a surrogate pair straddling the cut point instead of splitting it', async () => {
     const slackClient = createStubSlackClient()
     const longText = `${'a'.repeat(11_998)}😀${'a'.repeat(10)}`
     const deps: ProcessMentionDeps = {
@@ -151,7 +151,7 @@ describe('respond', () => {
       slackClient,
     }
     await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
-    const truncatedBlockText = `${'a'.repeat(11_998)}😀…`
+    const truncatedBlockText = `${'a'.repeat(11_998)}…`
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',

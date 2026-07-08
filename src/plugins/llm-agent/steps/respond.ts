@@ -81,13 +81,21 @@ interface SlackMarkdownBlock {
 // https://docs.slack.dev/reference/block-kit/blocks/markdown-block
 const MARKDOWN_BLOCK_TEXT_LIMIT = 12_000
 
-// Array.from splits on Unicode code points rather than UTF-16 code units,
-// so slicing here can't land inside a surrogate pair (e.g. an emoji).
+// Slicing on MARKDOWN_BLOCK_TEXT_LIMIT alone can land between the two
+// UTF-16 units of a surrogate pair (e.g. an emoji), leaving a lone
+// surrogate. Back the cut off by one more unit when that would happen,
+// dropping the whole character instead of splitting it.
+const isSurrogatePairAt = (text: string, lowSurrogateIndex: number): boolean =>
+  text.charCodeAt(lowSurrogateIndex - 1) >= 0xd800 &&
+  text.charCodeAt(lowSurrogateIndex - 1) <= 0xdbff &&
+  text.charCodeAt(lowSurrogateIndex) >= 0xdc00 &&
+  text.charCodeAt(lowSurrogateIndex) <= 0xdfff
+
 const truncateForMarkdownBlock = (text: string): string => {
-  const chars = Array.from(text)
-  return chars.length > MARKDOWN_BLOCK_TEXT_LIMIT
-    ? `${chars.slice(0, MARKDOWN_BLOCK_TEXT_LIMIT - 1).join('')}…`
-    : text
+  if (text.length <= MARKDOWN_BLOCK_TEXT_LIMIT) return text
+  const cutoff = MARKDOWN_BLOCK_TEXT_LIMIT - 1
+  const end = isSurrogatePairAt(text, cutoff) ? cutoff - 1 : cutoff
+  return `${text.slice(0, end)}…`
 }
 
 interface SuccessResponse {
