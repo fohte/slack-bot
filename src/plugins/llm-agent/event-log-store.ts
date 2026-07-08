@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, lt, ne } from 'drizzle-orm'
+import { and, eq, lt, ne } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
 import { eventLog } from '@/db/schema'
@@ -40,12 +40,9 @@ export interface EventLogStore {
   markResponded(slackEventId: string): Promise<{ updated: number }>
   unmarkResponded(slackEventId: string): Promise<{ updated: number }>
   pruneOlderThan(cutoff: Date): Promise<number>
-  // True when another event describes the same physical Slack message
-  // (same team+channel+messageTs) and has a Task already dispatched
-  // (taskName set). Used to detect the `message`/`app_mention` pair Slack
-  // sends for a single mention. Requiring a dispatched sibling — not just
-  // an accepted row — means a sibling whose dispatch failed and got rolled
-  // back can't cause this event to defer to a Task that never ran.
+  // True when another already-accepted event describes the same physical
+  // Slack message (same team+channel+messageTs). Used to detect the
+  // `message`/`app_mention` pair Slack sends for a single mention.
   hasAcceptedSibling(query: AcceptedSiblingQuery): Promise<boolean>
 }
 
@@ -155,7 +152,6 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
           eq(eventLog.slackChannelId, slackChannelId),
           eq(eventLog.messageTs, messageTs),
           ne(eventLog.slackEventId, excludeSlackEventId),
-          isNotNull(eventLog.taskName),
         ),
       )
       .limit(1)

@@ -52,7 +52,6 @@ interface InMemoryEventLogStore extends EventLogStore {
 const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
   const seen = new Set<string>()
   const records: EventLogRecord[] = []
-  const dispatchedTaskNames = new Set<string>()
   return {
     records,
     async recordReceived(record): Promise<EventLogOutcome> {
@@ -63,12 +62,10 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
     },
     async deleteReceived(slackEventId): Promise<void> {
       seen.delete(slackEventId)
-      dispatchedTaskNames.delete(slackEventId)
       const index = records.findIndex((r) => r.slackEventId === slackEventId)
       if (index >= 0) records.splice(index, 1)
     },
-    async markTaskName(slackEventId): Promise<{ updated: number }> {
-      dispatchedTaskNames.add(slackEventId)
+    async markTaskName(): Promise<{ updated: number }> {
       return { updated: 1 }
     },
     async findByTaskName() {
@@ -94,8 +91,7 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
           r.slackEventId !== excludeSlackEventId &&
           r.slackTeamId === slackTeamId &&
           r.slackChannelId === slackChannelId &&
-          r.messageTs === messageTs &&
-          dispatchedTaskNames.has(r.slackEventId),
+          r.messageTs === messageTs,
       )
     },
   }
@@ -749,7 +745,7 @@ describe('createLlmAgentPlugin', () => {
     })
   })
 
-  it('rejects app_mention as duplicate once its file_share sibling has a dispatched task', async () => {
+  it('rejects app_mention as duplicate once its file_share sibling has been accepted', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
     const plugin = createLlmAgentPlugin(
@@ -765,10 +761,6 @@ describe('createLlmAgentPlugin', () => {
     const appMentionEnvelope = buildAppMentionEnvelope('Ev-img-mention-second')
 
     await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
-    // Simulates submitTask's real markTaskName call once the sibling's Task
-    // CR is actually created — hasAcceptedSibling requires this, not just an
-    // accepted event_log row (see plugin.ts's decideForAppMention).
-    await eventLogStore.markTaskName('Ev-img-msg-first', 'slack-abc123')
     await plugin.onEvent?.(
       { envelope: appMentionEnvelope },
       appMentionEnvelope.event,
