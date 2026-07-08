@@ -81,7 +81,9 @@ type GateReason =
   | 'app_mention'
   | 'dm'
   | 'thread_continuation'
+  | 'mention_with_attachment'
   | 'duplicate_of_app_mention'
+  | 'duplicate_of_message'
   | 'no_mention_no_thread_session'
   | 'unsupported_message_subtype'
   | 'unsupported_event'
@@ -124,6 +126,20 @@ const decideForMessage = async (
 
   if (fields.channel_type === 'im') return { accept: true, reason: 'dm' }
 
+  // `app_mention` payloads never carry Slack's `files` array (see
+  // docs.slack.dev/reference/events/app_mention), so a file_share message is
+  // the only delivery able to carry the attachment. Accept it outright
+  // rather than deferring to the paired app_mention; decideForAppMention
+  // below rejects that other delivery once this row is recorded.
+  if (
+    event.type === 'message' &&
+    event.subtype === 'file_share' &&
+    fields.text !== undefined &&
+    mentionPattern.test(fields.text)
+  ) {
+    return { accept: true, reason: 'mention_with_attachment' }
+  }
+
   // A channel message that mentions the bot is also delivered as a separate
   // `app_mention` event; let that delivery handle it.
   if (fields.text !== undefined && mentionPattern.test(fields.text)) {
@@ -149,6 +165,32 @@ const decideForMessage = async (
   }
 
   return { accept: false, reason: 'no_mention_no_thread_session' }
+}
+
+const decideForAppMention = async (
+  fields: ExtractedFields,
+  eventLogStore: EventLogStore,
+  eventId: string,
+  teamId: string | undefined,
+): Promise<GateDecision> => {
+  if (
+    teamId !== undefined &&
+    fields.channel !== undefined &&
+    fields.ts !== undefined
+  ) {
+    // Slack gives no ordering guarantee between an app_mention and its
+    // paired message delivery, so this only catches the case where the
+    // file_share message has already been accepted; if app_mention wins
+    // the race instead, both get accepted.
+    const hasSibling = await eventLogStore.hasAcceptedSibling({
+      slackTeamId: teamId,
+      slackChannelId: fields.channel,
+      messageTs: fields.ts,
+      excludeSlackEventId: eventId,
+    })
+    if (hasSibling) return { accept: false, reason: 'duplicate_of_message' }
+  }
+  return { accept: true, reason: 'app_mention' }
 }
 
 export const createLlmAgentPlugin = (
@@ -183,7 +225,12 @@ export const createLlmAgentPlugin = (
 
       let decision: GateDecision
       if (event.type === 'app_mention') {
-        decision = { accept: true, reason: 'app_mention' }
+        decision = await decideForAppMention(
+          fields,
+          eventLogStore,
+          eventId,
+          ctx.envelope.team_id,
+        )
       } else if (event.type === 'message') {
         decision = await decideForMessage(
           event,
@@ -220,6 +267,7 @@ export const createLlmAgentPlugin = (
           slackTeamId: ctx.envelope.team_id,
           slackChannelId: fields.channel,
           threadRootTs,
+          messageTs: fields.ts,
         })
       } catch (error) {
         logger.error(
