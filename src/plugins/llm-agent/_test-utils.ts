@@ -159,6 +159,9 @@ export const createScriptedEventLogStore = (
     async pruneOlderThan() {
       return 0
     },
+    async hasAcceptedSibling() {
+      return false
+    },
   }
 }
 

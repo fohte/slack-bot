@@ -17,6 +17,7 @@ const createStore = (
   markResponded: vi.fn(async () => ({ updated: 0 })),
   unmarkResponded: vi.fn(async () => ({ updated: 0 })),
   pruneOlderThan: vi.fn(pruneImpl),
+  hasAcceptedSibling: vi.fn(async () => false),
 })
 
 describe('startEventLogRetention', () => {
