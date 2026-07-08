@@ -80,6 +80,20 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
     async pruneOlderThan(): Promise<number> {
       return 0
     },
+    async hasAcceptedSibling({
+      slackTeamId,
+      slackChannelId,
+      messageTs,
+      excludeSlackEventId,
+    }): Promise<boolean> {
+      return records.some(
+        (r) =>
+          r.slackEventId !== excludeSlackEventId &&
+          r.slackTeamId === slackTeamId &&
+          r.slackChannelId === slackChannelId &&
+          r.messageTs === messageTs,
+      )
+    },
   }
 }
 
@@ -253,6 +267,7 @@ describe('createLlmAgentPlugin', () => {
         slackTeamId: 'T123',
         slackChannelId: 'C123',
         threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
       },
     ])
     expect(onAccepted).toHaveBeenCalledTimes(1)
@@ -275,6 +290,7 @@ describe('createLlmAgentPlugin', () => {
         slackTeamId: 'T123',
         slackChannelId: 'C123',
         threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
       },
     ])
   })
@@ -296,6 +312,7 @@ describe('createLlmAgentPlugin', () => {
         slackTeamId: 'T123',
         slackChannelId: 'C123',
         threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
       },
     ])
     expect(onAccepted).toHaveBeenCalledTimes(1)
@@ -351,6 +368,7 @@ describe('createLlmAgentPlugin', () => {
         slackTeamId: 'T123',
         slackChannelId: 'C123',
         threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
       },
     ])
     expect(onAccepted).toHaveBeenCalledTimes(2)
@@ -425,6 +443,7 @@ describe('createLlmAgentPlugin', () => {
           slackTeamId: 'T123',
           slackChannelId: 'C123',
           threadRootTs: '1700000000.000100',
+          messageTs: '1700000000.000100',
         },
       ],
       onAcceptedCalls: 1,
@@ -463,6 +482,7 @@ describe('createLlmAgentPlugin', () => {
           slackTeamId: 'T123',
           slackChannelId: 'C123',
           threadRootTs: '1700000001.000200',
+          messageTs: '1700000001.000200',
         },
       ],
       onAcceptedCalls: 1,
@@ -532,6 +552,7 @@ describe('createLlmAgentPlugin', () => {
           slackTeamId: 'T123',
           slackChannelId: 'C123',
           threadRootTs: '1700000000.000100',
+          messageTs: '1700000000.000100',
         },
       ],
       onAcceptedCalls: 1,
@@ -572,6 +593,7 @@ describe('createLlmAgentPlugin', () => {
           slackTeamId: 'T123',
           slackChannelId: 'C123',
           threadRootTs: '1700000000.000050',
+          messageTs: '1700000000.000100',
         },
       ],
       onAcceptedCalls: 1,
@@ -685,9 +707,148 @@ describe('createLlmAgentPlugin', () => {
           slackTeamId: 'T123',
           slackChannelId: 'C123',
           threadRootTs: '1700000000.000050',
+          messageTs: '1700000000.000100',
         },
       ],
       onAcceptedCalls: 1,
+    })
+  })
+
+  it('accepts a channel message that mentions the bot when it carries a file_share attachment', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-img-msg', {
+      channel_type: 'channel',
+      subtype: 'file_share',
+      text: '<@U_BOT> this is what I had for lunch',
+      files: [{ id: 'F1', mimetype: 'image/png' }],
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-img-msg',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted).toHaveBeenCalledTimes(1)
+    expect(onAccepted.mock.calls[0]?.[0]).toEqual({
+      ctx: { envelope },
+      event: envelope.event,
+    })
+  })
+
+  it('rejects app_mention as duplicate once its file_share sibling has already been accepted', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+
+    const messageEnvelope = buildMessageEnvelope('Ev-img-msg-first', {
+      channel_type: 'channel',
+      subtype: 'file_share',
+      text: '<@U_BOT> hi',
+      files: [{ id: 'F1', mimetype: 'image/png' }],
+    })
+    const appMentionEnvelope: SlackEventCallback = {
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'app_mention',
+        channel: 'C123',
+        user: 'U123',
+        text: '<@U_BOT> hi',
+        ts: '1700000000.000100',
+      },
+      event_id: 'Ev-img-mention-second',
+      event_time: 1700000000,
+    }
+
+    await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
+    await plugin.onEvent?.(
+      { envelope: appMentionEnvelope },
+      appMentionEnvelope.event,
+    )
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-img-msg-first',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000100',
+          messageTs: '1700000000.000100',
+        },
+      ],
+      onAcceptedCalls: 1,
+    })
+  })
+
+  it('still accepts a later file_share message after its app_mention sibling already dispatched, since dropping the attachment would be worse than a duplicate task', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, onAccepted }),
+    )
+
+    const appMentionEnvelope: SlackEventCallback = {
+      type: 'event_callback',
+      team_id: 'T123',
+      event: {
+        type: 'app_mention',
+        channel: 'C123',
+        user: 'U123',
+        text: '<@U_BOT> hi',
+        ts: '1700000000.000100',
+      },
+      event_id: 'Ev-mention-first',
+      event_time: 1700000000,
+    }
+    const messageEnvelope = buildMessageEnvelope('Ev-img-msg-second', {
+      channel_type: 'channel',
+      subtype: 'file_share',
+      text: '<@U_BOT> hi',
+      files: [{ id: 'F1', mimetype: 'image/png' }],
+    })
+
+    await plugin.onEvent?.(
+      { envelope: appMentionEnvelope },
+      appMentionEnvelope.event,
+    )
+    await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
+
+    expect({
+      records: eventLogStore.records,
+      onAcceptedCalls: onAccepted.mock.calls.length,
+    }).toEqual({
+      records: [
+        {
+          slackEventId: 'Ev-mention-first',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000100',
+          messageTs: '1700000000.000100',
+        },
+        {
+          slackEventId: 'Ev-img-msg-second',
+          slackTeamId: 'T123',
+          slackChannelId: 'C123',
+          threadRootTs: '1700000000.000100',
+          messageTs: '1700000000.000100',
+        },
+      ],
+      onAcceptedCalls: 2,
     })
   })
 })

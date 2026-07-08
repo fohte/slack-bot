@@ -10,6 +10,7 @@ export interface EventLogRecord {
   readonly slackTeamId?: string | undefined
   readonly slackChannelId?: string | undefined
   readonly threadRootTs?: string | undefined
+  readonly messageTs?: string | undefined
 }
 
 export interface EventLogRow {
@@ -19,6 +20,13 @@ export interface EventLogRow {
   readonly slackChannelId: string | undefined
   readonly threadRootTs: string | undefined
   readonly taskName: string | undefined
+}
+
+export interface AcceptedSiblingQuery {
+  readonly slackTeamId: string
+  readonly slackChannelId: string
+  readonly messageTs: string
+  readonly excludeSlackEventId: string
 }
 
 export interface EventLogStore {
@@ -32,6 +40,10 @@ export interface EventLogStore {
   markResponded(slackEventId: string): Promise<{ updated: number }>
   unmarkResponded(slackEventId: string): Promise<{ updated: number }>
   pruneOlderThan(cutoff: Date): Promise<number>
+  // True when another already-accepted event describes the same physical
+  // Slack message (same team+channel+messageTs). Used to detect the
+  // `message`/`app_mention` pair Slack sends for a single mention.
+  hasAcceptedSibling(query: AcceptedSiblingQuery): Promise<boolean>
 }
 
 const normalize = (value: string | null): string | undefined =>
@@ -47,6 +59,7 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
         slackTeamId: record.slackTeamId ?? null,
         slackChannelId: record.slackChannelId ?? null,
         threadRootTs: record.threadRootTs ?? null,
+        messageTs: record.messageTs ?? null,
       })
       .onConflictDoNothing({ target: eventLog.slackEventId })
       .returning({ slackEventId: eventLog.slackEventId })
@@ -123,5 +136,25 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
       .where(lt(eventLog.receivedAt, cutoff))
       .returning({ slackEventId: eventLog.slackEventId })
     return deleted.length
+  },
+  async hasAcceptedSibling({
+    slackTeamId,
+    slackChannelId,
+    messageTs,
+    excludeSlackEventId,
+  }) {
+    const rows = await db
+      .select({ slackEventId: eventLog.slackEventId })
+      .from(eventLog)
+      .where(
+        and(
+          eq(eventLog.slackTeamId, slackTeamId),
+          eq(eventLog.slackChannelId, slackChannelId),
+          eq(eventLog.messageTs, messageTs),
+          ne(eventLog.slackEventId, excludeSlackEventId),
+        ),
+      )
+      .limit(1)
+    return rows.length > 0
   },
 })

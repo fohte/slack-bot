@@ -28,6 +28,7 @@ import type { SlackWebClient } from '@/slack/web-client'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
+  SlackMessageEvent,
 } from '@/types/slack-payloads'
 
 const noopLogger = {
@@ -150,6 +151,9 @@ const createEventLogStore = (): EventLogStore => ({
   async pruneOlderThan() {
     return 0
   },
+  async hasAcceptedSibling() {
+    return false
+  },
 })
 
 const createThreadSessionStore = (): ThreadSessionStore => ({
@@ -256,6 +260,38 @@ describe('envelopeFromAccepted', () => {
         noopLogger,
       ),
     ).toBeUndefined()
+  })
+
+  it('extracts image files and strips the mention prefix from an accepted file_share message event', () => {
+    const event: SlackMessageEvent = {
+      type: 'message',
+      subtype: 'file_share',
+      user: 'U_USER',
+      text: '<@U_BOT> this is what I had for lunch',
+      ts: '111.222',
+      channel: 'C1',
+      files: [
+        { id: 'F1', mimetype: 'image/png' },
+        { id: 'F2', mimetype: 'text/plain' },
+      ],
+    }
+    const envelope = {
+      type: 'event_callback',
+      team_id: 'T1',
+      event,
+      event_id: 'Ev1',
+      event_time: 1,
+    } as unknown as SlackEventCallback
+    const accepted: LlmAgentAcceptedEvent = { ctx: { envelope }, event }
+
+    expect(envelopeFromAccepted(accepted, noopLogger)).toEqual({
+      eventId: 'Ev1',
+      teamId: 'T1',
+      channelId: 'C1',
+      threadRootTs: '111.222',
+      text: 'this is what I had for lunch',
+      images: [{ id: 'F1', mimetype: 'image/png' }],
+    })
   })
 })
 
