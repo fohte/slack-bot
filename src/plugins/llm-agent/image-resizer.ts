@@ -5,29 +5,35 @@ export interface ResizedImage {
   readonly ext: string
 }
 
+export type ResizeFailureReason = 'undecodable' | 'animated' | 'still_too_large'
+
+export type ResizeOutcome =
+  | ({ readonly ok: true } & ResizedImage)
+  | { readonly ok: false; readonly reason: ResizeFailureReason }
+
 export interface ImageResizer {
-  // Returns undefined when the image cannot be brought under maxBytes
-  // (corrupt input, animated image, or still too large at the smallest
-  // attempted size).
-  resize(bytes: Uint8Array, maxBytes: number): Promise<ResizedImage | undefined>
+  resize(bytes: Uint8Array, maxBytes: number): Promise<ResizeOutcome>
 }
 
-// Attempts run largest/highest-quality first. sharp's `withoutEnlargement`
-// means a width larger than the source is a no-op, so early attempts still
-// shrink small-dimension-but-high-quality sources via the quality step alone.
-const RESIZE_ATTEMPTS: ReadonlyArray<{
+// sharp's own decompression-bomb guard (`limitInputPixels`) defaults to
+// ~268 megapixels, far larger than any smartphone photo this resizer needs
+// to handle. A tighter ceiling here bounds the transient decode buffer for
+// an oversized/adversarial attachment before any resize work starts.
+const MAX_DECODE_PIXELS = 60_000_000
+
+// Grouped by width so each tier decodes and resizes the source once, then
+// re-encodes at each quality via a cheap `.clone()` — quality doesn't affect
+// decode/resize cost, so trying every quality per width is nearly free once
+// the pixels are already resized.
+const RESIZE_TIERS: ReadonlyArray<{
   readonly width: number
-  readonly quality: number
+  readonly qualities: readonly number[]
 }> = [
-  { width: 2048, quality: 82 },
-  { width: 2048, quality: 60 },
-  { width: 1600, quality: 70 },
-  { width: 1600, quality: 50 },
-  { width: 1200, quality: 60 },
-  { width: 1200, quality: 40 },
-  { width: 800, quality: 55 },
-  { width: 800, quality: 35 },
-  { width: 500, quality: 40 },
+  { width: 2048, qualities: [82, 60] },
+  { width: 1600, qualities: [70, 50] },
+  { width: 1200, qualities: [60, 40] },
+  { width: 800, qualities: [55, 35] },
+  { width: 500, qualities: [40] },
 ]
 
 const RESIZED_EXT = 'jpg'
@@ -38,31 +44,36 @@ export const createSharpImageResizer = (): ImageResizer => ({
     try {
       metadata = await sharp(bytes).metadata()
     } catch {
-      return undefined
+      return { ok: false, reason: 'undecodable' }
     }
     // Re-encoding an animated image as a single JPEG frame would silently
     // drop the animation, so leave those to the caller's fallback path
     // instead.
-    if ((metadata.pages ?? 1) > 1) return undefined
+    if ((metadata.pages ?? 1) > 1) return { ok: false, reason: 'animated' }
+    if (metadata.width * metadata.height > MAX_DECODE_PIXELS) {
+      return { ok: false, reason: 'still_too_large' }
+    }
 
-    for (const attempt of RESIZE_ATTEMPTS) {
-      try {
-        const out = await sharp(bytes)
-          .rotate()
-          .resize({
-            width: attempt.width,
-            fit: 'inside',
-            withoutEnlargement: true,
-          })
-          .jpeg({ quality: attempt.quality, mozjpeg: true })
-          .toBuffer()
-        if (out.byteLength <= maxBytes) {
-          return { bytes: new Uint8Array(out), ext: RESIZED_EXT }
+    for (const tier of RESIZE_TIERS) {
+      const resized = sharp(bytes).rotate().resize({
+        width: tier.width,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      for (const quality of tier.qualities) {
+        try {
+          const out = await resized
+            .clone()
+            .jpeg({ quality, mozjpeg: true })
+            .toBuffer()
+          if (out.byteLength <= maxBytes) {
+            return { ok: true, bytes: new Uint8Array(out), ext: RESIZED_EXT }
+          }
+        } catch {
+          return { ok: false, reason: 'undecodable' }
         }
-      } catch {
-        return undefined
       }
     }
-    return undefined
+    return { ok: false, reason: 'still_too_large' }
   },
 })

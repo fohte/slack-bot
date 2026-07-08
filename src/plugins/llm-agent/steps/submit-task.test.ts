@@ -330,7 +330,7 @@ describe('submitTask', () => {
 
   it('still downloads images whose declared Slack size metadata exceeds the per-image cap', async () => {
     // Slack's reported file.size is metadata the resize path can salvage, so
-    // it must not gate the download the way it used to.
+    // it must not gate the download.
     const downloadCalls: string[] = []
     const slackClient: SlackWebClient = {
       ...createStubSlackClient(),
@@ -373,6 +373,7 @@ describe('submitTask', () => {
     const taskCrClient = createScriptedTaskCrClient([])
     const configMapClient = createRecordingConfigMapClient()
     const imageResizer = createScriptedImageResizer(() => ({
+      ok: true,
       bytes: resizedBytes,
       ext: 'jpg',
     }))
@@ -422,7 +423,10 @@ describe('submitTask', () => {
     )
     const taskCrClient = createScriptedTaskCrClient([])
     const configMapClient = createRecordingConfigMapClient()
-    const imageResizer = createScriptedImageResizer(() => undefined)
+    const imageResizer = createScriptedImageResizer(() => ({
+      ok: false,
+      reason: 'still_too_large',
+    }))
     const images: readonly SlackFile[] = [
       {
         id: 'F1',
@@ -451,6 +455,54 @@ describe('submitTask', () => {
       description:
         "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
     })
+  })
+
+  it('shrinks the resize cap for a later image once an earlier one consumed part of the total budget', async () => {
+    const firstBytes = new Uint8Array(400 * 1024).fill(1)
+    const secondBytes = new Uint8Array(600 * 1024).fill(2)
+    const resizedBytes = new Uint8Array([9, 9])
+    const slackClient = createSlackClientWithDownloads(
+      new Map([
+        ['https://files.slack.com/img-1.png', firstBytes],
+        ['https://files.slack.com/img-2.png', secondBytes],
+      ]),
+    )
+    const taskCrClient = createScriptedTaskCrClient([])
+    const configMapClient = createRecordingConfigMapClient()
+    const imageResizer = createScriptedImageResizer(() => ({
+      ok: true,
+      bytes: resizedBytes,
+      ext: 'jpg',
+    }))
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'first.png',
+        mimetype: 'image/png',
+        url_private: 'https://files.slack.com/img-1.png',
+      },
+      {
+        id: 'F2',
+        name: 'second.png',
+        mimetype: 'image/png',
+        url_private: 'https://files.slack.com/img-2.png',
+      },
+    ]
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      configMapClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+      imageResizer,
+    }
+
+    await submitTask({ ...TEST_ENV, images }, deps)
+
+    // 700 KiB total cap - 400 KiB consumed by the first image leaves 300 KiB,
+    // which is tighter than the flat 500 KiB per-image cap.
+    expect(imageResizer.calls).toEqual([{ maxBytes: 300 * 1024 }])
   })
 
   it('cleans up the orphan ConfigMap when Task CR creation fails', async () => {

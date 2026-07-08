@@ -124,6 +124,53 @@ interface DownloadedImage {
   readonly bytes: Uint8Array
 }
 
+interface FittedImage {
+  readonly bytes: Uint8Array
+  readonly ext: string
+}
+
+// Returns the bytes unchanged if they already fit perImageCap, otherwise
+// attempts a resize and returns undefined if even that can't bring the
+// image under the cap.
+const fitImageToCap = async (
+  resolved: ResolvedDeps,
+  env: SlackEnvelope,
+  file: SlackFile,
+  bytes: Uint8Array,
+  perImageCap: number,
+): Promise<FittedImage | undefined> => {
+  if (bytes.byteLength <= perImageCap) {
+    return { bytes, ext: extForImage(file) }
+  }
+  const outcome = await resolved.imageResizer.resize(bytes, perImageCap)
+  if (!outcome.ok) {
+    resolved.logger.warn(
+      {
+        event: 'llm_agent_slack_image_too_large',
+        event_id: env.eventId,
+        slack_file_id: file.id,
+        bytes: bytes.byteLength,
+        cap: perImageCap,
+        reason: outcome.reason,
+      },
+      'slack image exceeds cap and could not be resized to fit; dropping this attachment',
+    )
+    return undefined
+  }
+  resolved.logger.info(
+    {
+      event: 'llm_agent_slack_image_resized',
+      event_id: env.eventId,
+      slack_file_id: file.id,
+      original_bytes: bytes.byteLength,
+      resized_bytes: outcome.bytes.byteLength,
+      cap: perImageCap,
+    },
+    'slack image exceeded cap; resized to fit',
+  )
+  return { bytes: outcome.bytes, ext: outcome.ext }
+}
+
 const downloadImages = async (
   resolved: ResolvedDeps,
   env: SlackEnvelope,
@@ -172,42 +219,13 @@ const downloadImages = async (
       SINGLE_IMAGE_BYTE_CAP,
       TOTAL_IMAGE_BYTE_CAP - totalBytes,
     )
-    let ext = extForImage(file)
-    if (bytes.byteLength > perImageCap) {
-      const originalBytes = bytes.byteLength
-      const resized = await resolved.imageResizer.resize(bytes, perImageCap)
-      if (resized === undefined) {
-        resolved.logger.warn(
-          {
-            event: 'llm_agent_slack_image_too_large',
-            event_id: env.eventId,
-            slack_file_id: file.id,
-            bytes: originalBytes,
-            cap: perImageCap,
-          },
-          'slack image exceeds cap and could not be resized to fit; dropping this attachment',
-        )
-        continue
-      }
-      bytes = resized.bytes
-      ext = resized.ext
-      resolved.logger.info(
-        {
-          event: 'llm_agent_slack_image_resized',
-          event_id: env.eventId,
-          slack_file_id: file.id,
-          original_bytes: originalBytes,
-          resized_bytes: bytes.byteLength,
-          cap: perImageCap,
-        },
-        'slack image exceeded cap; resized to fit',
-      )
-    }
-    totalBytes += bytes.byteLength
+    const fitted = await fitImageToCap(resolved, env, file, bytes, perImageCap)
+    if (fitted === undefined) continue
+    totalBytes += fitted.bytes.byteLength
     downloaded.push({
       file,
-      key: configMapKeyFor(file, index, ext),
-      bytes,
+      key: configMapKeyFor(file, index, fitted.ext),
+      bytes: fitted.bytes,
     })
   }
   return downloaded

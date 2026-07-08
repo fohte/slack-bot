@@ -5,7 +5,7 @@ import type {
 } from '@/plugins/llm-agent/event-log-store'
 import type {
   ImageResizer,
-  ResizedImage,
+  ResizeOutcome,
 } from '@/plugins/llm-agent/image-resizer'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { SlackEnvelope } from '@/plugins/llm-agent/process-mention'
@@ -216,7 +216,7 @@ export interface ScriptedImageResizer extends ImageResizer {
 }
 
 export const createScriptedImageResizer = (
-  resize: (bytes: Uint8Array, maxBytes: number) => ResizedImage | undefined,
+  resize: (bytes: Uint8Array, maxBytes: number) => ResizeOutcome,
 ): ScriptedImageResizer => {
   const calls: Array<{ maxBytes: number }> = []
   return {
