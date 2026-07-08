@@ -23,6 +23,7 @@ export interface SlackCall {
   readonly channel: string
   readonly thread: string
   readonly text: string
+  readonly blocks: readonly unknown[] | undefined
   readonly loadingMessages: readonly string[] | undefined
 }
 
@@ -45,6 +46,7 @@ export const createStubSlackClient = (): StubSlackClient => {
         channel: arg.channel_id,
         thread: arg.thread_ts,
         text: arg.status,
+        blocks: undefined,
         loadingMessages: arg.loading_messages,
       })
       return { ok: true } as never
@@ -53,12 +55,14 @@ export const createStubSlackClient = (): StubSlackClient => {
       channel?: string
       thread_ts?: string
       text?: string
+      blocks?: unknown[]
     }) {
       calls.push({
         kind: 'post',
         channel: arg.channel ?? '',
         thread: arg.thread_ts ?? '',
         text: arg.text ?? '',
+        blocks: arg.blocks,
         loadingMessages: undefined,
       })
       return { ok: true } as never
