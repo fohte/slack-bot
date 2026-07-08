@@ -69,10 +69,22 @@ const resolveSessionId = async (
 
 // Structurally compatible with @slack/types' MarkdownBlock; kept local so
 // this file doesn't need @slack/types as a direct dependency.
+//
+// chat.postMessage also accepts a top-level markdown_text field, but it
+// can't be combined with text/blocks, so it would drop the notification/
+// accessibility fallback text carries.
 interface SlackMarkdownBlock {
   readonly type: 'markdown'
   readonly text: string
 }
+
+// https://docs.slack.dev/reference/block-kit/blocks/markdown-block
+const MARKDOWN_BLOCK_TEXT_LIMIT = 12_000
+
+const truncateForMarkdownBlock = (text: string): string =>
+  text.length > MARKDOWN_BLOCK_TEXT_LIMIT
+    ? `${text.slice(0, MARKDOWN_BLOCK_TEXT_LIMIT - 1)}…`
+    : text
 
 interface SuccessResponse {
   readonly text: string
@@ -117,16 +129,18 @@ const buildSuccessResponse = async (
     return { text: resolved.successFallbackText, blocks: undefined }
   }
   // The markdown block renders GFM (tables, etc.) natively; text carries
-  // the same raw Markdown as the notification/accessibility fallback.
+  // the raw Markdown too, escaped the same way as formatFailureText since
+  // Slack still parses it as mrkdwn for the notification/accessibility
+  // fallback.
   return {
-    text: assistantText,
-    blocks: [{ type: 'markdown', text: assistantText }],
+    text: escapeMrkdwn(assistantText),
+    blocks: [
+      { type: 'markdown', text: truncateForMarkdownBlock(assistantText) },
+    ],
   }
 }
 
-interface ResponseBody {
-  readonly text: string
-  readonly blocks: SlackMarkdownBlock[] | undefined
+interface ResponseBody extends SuccessResponse {
   readonly sessionId: string | undefined
 }
 
@@ -185,11 +199,12 @@ export const respond = async (
   }
 
   try {
-    await resolved.slackClient.postMessage(
-      blocks !== undefined
-        ? { channel: env.channelId, thread_ts: env.threadRootTs, text, blocks }
-        : { channel: env.channelId, thread_ts: env.threadRootTs, text },
-    )
+    await resolved.slackClient.postMessage({
+      channel: env.channelId,
+      thread_ts: env.threadRootTs,
+      text,
+      ...(blocks !== undefined ? { blocks } : {}),
+    })
   } catch (error) {
     try {
       await resolved.eventLogStore.unmarkResponded(env.eventId)
