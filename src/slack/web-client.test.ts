@@ -381,6 +381,17 @@ describe('SlackWebClient', () => {
     })
   })
 
+  it('returns undefined when files.info responds with a null file', async () => {
+    const mock = buildMockClient()
+    mock.files.info.mockResolvedValue({ ok: true, file: null })
+    const client = createSlackWebClient({
+      botToken: 'xoxb',
+      maxRetries: 0,
+      client: asWebClient(mock),
+    })
+    await expect(client.getFileInfo('F123')).resolves.toBeUndefined()
+  })
+
   it('rethrows files.info failures as SlackApiError', async () => {
     const mock = buildMockClient()
     const slackErr = new Error('platform error') as Error & {

@@ -22,6 +22,10 @@ describe('extractInlineFileIds', () => {
     expect(extractInlineFileIds('FOO is not a file id')).toEqual([])
   })
 
+  it('does not match a long all-caps English word with no digit', () => {
+    expect(extractInlineFileIds('FRIENDSHIP is nice')).toEqual([])
+  })
+
   it('dedupes a repeated file ID', () => {
     expect(extractInlineFileIds('F0BG20H5AVA and again F0BG20H5AVA')).toEqual([
       'F0BG20H5AVA',

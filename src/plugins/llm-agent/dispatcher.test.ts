@@ -384,6 +384,23 @@ describe('resolveInlineImageFiles', () => {
     const result = await resolveInlineImageFiles(env, slackClient, noopLogger)
     expect(result).toEqual({ ...TEST_ENV, text: 'これ', images: [existing] })
   })
+
+  it('caps the number of inline file IDs resolved per message', async () => {
+    const ids = Array.from({ length: 11 }, (_, i) =>
+      `F${String(i).padStart(8, '0')}`.toUpperCase(),
+    )
+    const calls: string[] = []
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo(fileId: string) {
+        calls.push(fileId)
+        return undefined
+      },
+    } as SlackWebClient
+    const env: SlackEnvelope = { ...TEST_ENV, text: ids.join(' ') }
+    await resolveInlineImageFiles(env, slackClient, noopLogger)
+    expect(calls).toEqual(ids.slice(0, 10))
+  })
 })
 
 describe('createTaskDispatcher', () => {

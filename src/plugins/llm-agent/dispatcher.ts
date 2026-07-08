@@ -129,6 +129,11 @@ const mergeImages = (
   return additions.length > 0 ? [...base, ...additions] : base
 }
 
+// Caps the number of serial files.info lookups a single message can trigger,
+// so a message packed with matched tokens (real IDs or false positives)
+// cannot exhaust the rate limit on its own.
+const MAX_INLINE_FILE_IDS = 10
+
 // Slack's "insert file" compose action leaves the file out of `event.files`
 // and embeds its ID as plain text instead (see files.ts). Resolve those IDs
 // via files.info so inline-inserted images join the same download/attach
@@ -138,7 +143,7 @@ export const resolveInlineImageFiles = async (
   slackClient: SlackWebClient,
   logger: Logger,
 ): Promise<SlackEnvelope> => {
-  const fileIds = extractInlineFileIds(env.text)
+  const fileIds = extractInlineFileIds(env.text).slice(0, MAX_INLINE_FILE_IDS)
   if (fileIds.length === 0) return env
 
   const resolvedImages: SlackFile[] = []

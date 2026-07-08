@@ -99,9 +99,11 @@ export const createSlackWebClient = (
 }
 
 const toSlackFile = (
-  file: FilesInfoResponse['file'],
+  // The SDK types this as `File | undefined`, but the raw Slack API can
+  // return `file: null` in some error conditions, so `null` is handled too.
+  file: FilesInfoResponse['file'] | null,
 ): SlackFile | undefined => {
-  if (file === undefined) return undefined
+  if (file == null) return undefined
   return {
     id: file.id,
     name: file.name,

@@ -24,8 +24,10 @@ export const extractSlackImageFiles = (
 // Slack's "insert file" compose action embeds the file as a bare encoded ID
 // (e.g. `F0BG20H5AVA`) in the message text instead of populating `files[]`.
 // Anchors only the `F` prefix and a conservative minimum length to avoid
-// matching short all-caps words like "FOO".
-const INLINE_FILE_ID_PATTERN = /\bF[A-Z0-9]{8,}\b/gu
+// matching short all-caps words like "FOO"; the digit lookahead additionally
+// rules out longer all-letter words like "FRIENDSHIP" since Slack IDs are
+// always alphanumeric.
+const INLINE_FILE_ID_PATTERN = /\bF(?=[A-Z0-9]*[0-9])[A-Z0-9]{8,}\b/gu
 
 export const extractInlineFileIds = (text: string): readonly string[] => {
   const matches = text.match(INLINE_FILE_ID_PATTERN) ?? []
