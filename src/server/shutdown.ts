@@ -32,13 +32,16 @@ export const createShutdownHandler = (deps: ShutdownDeps): ShutdownHandler => {
       'shutdown signal received; draining in-flight tasks before exit',
     )
     await deps.inFlightTasks.waitForIdle()
-    deps.server.close((err) => {
-      if (err !== undefined) {
-        deps.logger.error(
-          { event: 'shutdown_server_close_failed', err },
-          'failed to close http server',
-        )
-      }
+    await new Promise<void>((resolve) => {
+      deps.server.close((err) => {
+        if (err !== undefined) {
+          deps.logger.error(
+            { event: 'shutdown_server_close_failed', err },
+            'failed to close http server',
+          )
+        }
+        resolve()
+      })
     })
     deps.logger.info(
       { event: 'shutdown_complete', signal },
