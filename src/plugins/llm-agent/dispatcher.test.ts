@@ -27,6 +27,7 @@ import type {
 } from '@/plugins/llm-agent/task-cr-client'
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
 import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
+import { createInFlightTasks } from '@/server/in-flight-tasks'
 import type { SlackWebClient } from '@/slack/web-client'
 import type {
   SlackAppMentionEvent,
@@ -64,6 +65,17 @@ const createTimeline = (): {
       entries.push(entry)
     },
   }
+}
+
+const createDeferred = <T>(): {
+  readonly promise: Promise<T>
+  readonly resolve: (value: T) => void
+} => {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
 }
 
 const createSlackClient = (
@@ -599,6 +611,60 @@ describe('createTaskDispatcher', () => {
         ],
       },
     ])
+  })
+})
+
+describe('createTaskDispatcher inFlightTasks tracking', () => {
+  it('keeps the tracker non-idle until the backgrounded processMention completes', async () => {
+    const taskName = taskCrNameForSlackEvent('Ev1')
+    const listResult = createDeferred<readonly TaskCrStatus[]>()
+    const taskCrClient: TaskCrClient = {
+      async create() {
+        return 'created'
+      },
+      async list() {
+        return listResult.promise
+      },
+    }
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async postMessage() {
+        return { ok: true } as never
+      },
+    } as SlackWebClient
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
+      taskCrClient,
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient,
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+      inFlightTasks,
+    })
+
+    await dispatch(acceptedMention())
+
+    let idleResolved = false
+    void inFlightTasks.waitForIdle().then(() => {
+      idleResolved = true
+    })
+    await Promise.resolve()
+    expect(idleResolved).toBe(false)
+
+    listResult.resolve([
+      {
+        name: taskName,
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+    ])
+    await inFlightTasks.waitForIdle()
+    expect(idleResolved).toBe(true)
   })
 })
 

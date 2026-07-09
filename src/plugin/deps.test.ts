@@ -13,6 +13,7 @@ const stubDeps = (): PluginDeps =>
     cfAccess: {} as PluginDeps['cfAccess'],
     eventLogStore: {} as PluginDeps['eventLogStore'],
     threadSessionStore: {} as PluginDeps['threadSessionStore'],
+    inFlightTasks: {} as PluginDeps['inFlightTasks'],
   }) satisfies PluginDeps
 
 describe('resolvePlugin', () => {

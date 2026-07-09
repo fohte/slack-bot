@@ -1,6 +1,7 @@
 export interface HealthEndpoint {
   isReady(): boolean
   setReady(): void
+  setNotReady(): void
 }
 
 export const createHealthEndpoint = (): HealthEndpoint => {
@@ -9,6 +10,9 @@ export const createHealthEndpoint = (): HealthEndpoint => {
     isReady: () => ready,
     setReady: () => {
       ready = true
+    },
+    setNotReady: () => {
+      ready = false
     },
   }
 }

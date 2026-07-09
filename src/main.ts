@@ -24,6 +24,8 @@ import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
 import { createSignatureVerifier } from '@/security/signature-verifier'
 import { createHttpServer } from '@/server/http-server'
+import { createInFlightTasks } from '@/server/in-flight-tasks'
+import { createShutdownHandler } from '@/server/shutdown'
 import { createSlackWebClient } from '@/slack/web-client'
 
 export interface BootstrapOptions {
@@ -48,6 +50,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     logger,
   })
   const cfAccess = createCloudflareAccessHttpClientFactory({ config })
+  const inFlightTasks = createInFlightTasks()
 
   const postgresClient = postgres(config.databaseUrl)
   const db = drizzle(postgresClient)
@@ -63,6 +66,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     cfAccess,
     eventLogStore,
     threadSessionStore,
+    inFlightTasks,
   }
 
   const registry = createPluginRegistry()
@@ -87,11 +91,30 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
   const server = createHttpServer({ verifier, router, logger })
   server.health.setReady()
 
-  serve({ fetch: server.app.fetch, port: config.port }, (info) => {
-    logger.info(
-      { event: 'server_listening', port: info.port },
-      'slack-bot listening',
-    )
+  const httpServer = serve(
+    { fetch: server.app.fetch, port: config.port },
+    (info) => {
+      logger.info(
+        { event: 'server_listening', port: info.port },
+        'slack-bot listening',
+      )
+    },
+  )
+
+  // Draining in-flight work relies on k8s SIGKILLing the process as the
+  // final backstop (via terminationGracePeriodSeconds) rather than an
+  // internal timeout, so a slow-but-legitimate Task poll is never cut short.
+  const shutdown = createShutdownHandler({
+    server: httpServer,
+    health: server.health,
+    inFlightTasks,
+    logger,
+  })
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM')
+  })
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT')
   })
 }
 
@@ -99,7 +122,14 @@ const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   bootstrap({
     plugins: [
-      ({ config, logger, slackClient, eventLogStore, threadSessionStore }) => {
+      ({
+        config,
+        logger,
+        slackClient,
+        eventLogStore,
+        threadSessionStore,
+        inFlightTasks,
+      }) => {
         const taskCrClient = createKubernetesTaskCrClient()
         const configMapClient = createKubernetesConfigMapClient()
         const opencodeClient = createOpencodeClient({
@@ -115,6 +145,7 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
           logger,
           namespace: config.llmAgent.taskCrNamespace,
           agentName: config.llmAgent.taskCrAgentName,
+          inFlightTasks,
         })
         return createLlmAgentPlugin({
           logger,
