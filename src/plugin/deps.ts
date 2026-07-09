@@ -4,6 +4,7 @@ import type { Logger } from '@/logger/logger'
 import type { Plugin } from '@/plugin/plugin'
 import type { EventLogStore, ThreadSessionStore } from '@/plugins/llm-agent'
 import type { InMemoryScheduler } from '@/scheduler/scheduler'
+import type { InFlightTasks } from '@/server/in-flight-tasks'
 import type { SlackWebClient } from '@/slack/web-client'
 
 export interface PluginDeps {
@@ -14,6 +15,7 @@ export interface PluginDeps {
   readonly cfAccess: CloudflareAccessHttpClientFactory
   readonly eventLogStore: EventLogStore
   readonly threadSessionStore: ThreadSessionStore
+  readonly inFlightTasks: InFlightTasks
 }
 
 export type PluginFactory = (deps: PluginDeps) => Plugin

@@ -8,6 +8,7 @@ import { createPluginRegistry } from '@/plugin/registry'
 import { createInteractionRouter } from '@/router/router'
 import { createSignatureVerifier } from '@/security/signature-verifier'
 import { createHttpServer } from '@/server/http-server'
+import { createInFlightTasks } from '@/server/in-flight-tasks'
 import type { SlackWebClient } from '@/slack/web-client'
 
 const SIGNING_SECRET = 'test-secret'
@@ -92,7 +93,12 @@ const buildServer = (plugins: readonly Plugin[]) => {
     logger: noopLogger,
     now: () => FIXED_NOW,
   })
-  const server = createHttpServer({ verifier, router, logger: noopLogger })
+  const server = createHttpServer({
+    verifier,
+    router,
+    logger: noopLogger,
+    inFlightTasks: createInFlightTasks(),
+  })
   server.health.setReady()
   return { server, slackClient }
 }
@@ -358,7 +364,12 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
       logger: noopLogger,
       now: () => FIXED_NOW,
     })
-    const server = createHttpServer({ verifier, router, logger: noopLogger })
+    const server = createHttpServer({
+      verifier,
+      router,
+      logger: noopLogger,
+      inFlightTasks: createInFlightTasks(),
+    })
     const ready = await Promise.resolve(
       server.app.fetch(new Request('http://localhost/health/ready')),
     )

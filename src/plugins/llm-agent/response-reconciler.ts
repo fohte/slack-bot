@@ -7,6 +7,7 @@ import { resolveDeps } from '@/plugins/llm-agent/process-mention-deps'
 import { respond } from '@/plugins/llm-agent/steps/respond'
 import { terminalOutcomeForTaskCrStatus } from '@/plugins/llm-agent/steps/wait-for-completion'
 import type { TaskCrStatus } from '@/plugins/llm-agent/task-cr-client'
+import type { InFlightTasks } from '@/server/in-flight-tasks'
 
 // Grace period, measured from Slack event receipt (not from dispatch, which
 // event_log does not timestamp separately), before a dispatched-but-
@@ -26,6 +27,7 @@ export interface ResponseReconcilerOptions extends ProcessMentionDeps {
     | ((callback: () => void, ms: number) => NodeJS.Timeout)
     | undefined
   readonly clearIntervalImpl?: ((handle: NodeJS.Timeout) => void) | undefined
+  readonly inFlightTasks?: Pick<InFlightTasks, 'track'> | undefined
 }
 
 export interface ResponseReconcilerHandle {
@@ -185,8 +187,17 @@ export const startResponseReconciler = (
     }
   }
 
+  // Wraps every runOnce() invocation — both the interval tick below and the
+  // handle returned to callers — so a graceful-shutdown drain also covers
+  // whichever run is in progress, not just the live dispatch path.
+  const trackedRunOnce = (): Promise<number> => {
+    const result = runOnce()
+    void options.inFlightTasks?.track(result)
+    return result
+  }
+
   const timer = setIntervalImpl(() => {
-    void runOnce()
+    void trackedRunOnce()
   }, intervalMs)
   if (typeof (timer as { unref?: () => void }).unref === 'function') {
     ;(timer as { unref: () => void }).unref()
@@ -196,6 +207,6 @@ export const startResponseReconciler = (
     stop() {
       clearIntervalImpl(timer)
     },
-    runOnce,
+    runOnce: trackedRunOnce,
   }
 }

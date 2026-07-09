@@ -21,6 +21,7 @@ import type {
 } from '@/plugins/llm-agent/process-mention-deps'
 import { reportDispatchFailure } from '@/plugins/llm-agent/steps/report-dispatch-failure'
 import { submitTask } from '@/plugins/llm-agent/steps/submit-task'
+import type { InFlightTasks } from '@/server/in-flight-tasks'
 import type { SlackWebClient } from '@/slack/web-client'
 import type { SlackFile } from '@/types/slack-payloads'
 
@@ -29,7 +30,12 @@ const DISPATCH_SPAN_NAME = 'slack.mention.handle'
 
 export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
-export type TaskDispatcherOptions = ProcessMentionDeps
+export type TaskDispatcherOptions = ProcessMentionDeps & {
+  // Registers the backgrounded processMention call so a graceful-shutdown
+  // handler can wait for it to finish before the process exits. Omitting
+  // it leaves the call as untracked fire-and-forget.
+  readonly inFlightTasks?: Pick<InFlightTasks, 'track'> | undefined
+}
 
 // Slack mentions can include a label form `<@U123|name>` in addition to the
 // plain `<@U123>` form, so the optional `|...` segment must be tolerated.
@@ -269,7 +275,13 @@ export const createTaskDispatcher = (
           // create() failures must reach onAccepted for the event_log rollback;
           // downstream steps run detached so the Slack HTTP handler can ack.
           const { taskName } = await submitTask(env, options)
-          void runProcessMentionInBackground(env, taskName, options, logger)
+          const mentionCompletion = runProcessMentionInBackground(
+            env,
+            taskName,
+            options,
+            logger,
+          )
+          void options.inFlightTasks?.track(mentionCompletion)
         } catch (err) {
           span.recordException(
             err instanceof Error ? err : { message: String(err) },
