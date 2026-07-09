@@ -7,6 +7,7 @@ import {
   type ChatPostMessageResponse,
   type ChatUpdateArguments,
   type ChatUpdateResponse,
+  type FilesInfoResponse,
   type ViewsOpenArguments,
   type ViewsOpenResponse,
   type ViewsPushArguments,
@@ -18,6 +19,7 @@ import {
 } from '@slack/web-api'
 
 import { SlackApiError } from '@/types/errors'
+import type { SlackFile } from '@/types/slack-payloads'
 
 export interface ResponseUrlPayload {
   text?: string
@@ -58,6 +60,9 @@ export interface SlackWebClient {
   // Host is pinned to *.slack.com so a tampered url_private cannot exfiltrate
   // the bot token. maxRetries is not honored; caller owns retry on 429/5xx.
   downloadFile(url: string): Promise<SlackFileDownload>
+  // Throws SlackApiError (e.g. file_not_found) like every other method here;
+  // callers resolving loosely-parsed ID references decide whether to swallow it.
+  getFileInfo(fileId: string): Promise<SlackFile | undefined>
 }
 
 export interface SlackWebClientOptions {
@@ -89,14 +94,46 @@ export const createSlackWebClient = (
     setAssistantThreadStatus: (arg) =>
       callMethod(() => client.assistant.threads.setStatus(arg)),
     downloadFile: (url) => downloadSlackFile(fetchImpl, options.botToken, url),
+    getFileInfo: (fileId) => getSlackFileInfo(client, fileId),
   }
+}
+
+const toSlackFile = (
+  // The SDK types this as `File | undefined`, but the raw Slack API can
+  // return `file: null` in some error conditions, so `null` is handled too.
+  file: FilesInfoResponse['file'] | null,
+): SlackFile | undefined => {
+  if (file == null) return undefined
+  return {
+    id: file.id,
+    name: file.name,
+    title: file.title,
+    mimetype: file.mimetype,
+    filetype: file.filetype,
+    size: file.size,
+    url_private: file.url_private,
+    url_private_download: file.url_private_download,
+    permalink: file.permalink,
+    channels: file.channels,
+    groups: file.groups,
+    ims: file.ims,
+  }
+}
+
+const getSlackFileInfo = async (
+  client: WebClient,
+  fileId: string,
+): Promise<SlackFile | undefined> => {
+  const result = await callMethod(() => client.files.info({ file: fileId }))
+  return toSlackFile(result.file)
 }
 
 const SLACK_FILE_HOST_SUFFIX = '.slack.com'
 // Bound the in-memory buffer for a single download to keep a malicious or
-// runaway Content-Length from OOM-ing the process. Generous enough not to
-// reject ordinary Slack attachments.
-const SLACK_FILE_DOWNLOAD_MAX_BYTES = 10 * 1024 * 1024
+// runaway Content-Length from OOM-ing the process. Modern smartphone photos
+// commonly run 10-20 MB, so this must clear that range; downstream resizing
+// (see image-resizer.ts) shrinks anything still over the ConfigMap cap.
+export const SLACK_FILE_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024
 
 const downloadSlackFile = async (
   fetchImpl: typeof fetch,

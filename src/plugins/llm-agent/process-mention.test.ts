@@ -18,7 +18,7 @@ import {
 } from '@/plugins/llm-agent/process-mention'
 
 describe('processMention', () => {
-  it('drives a submitted task through Queued → Running → Completed and posts the slackified reply', async () => {
+  it('drives a submitted task through Queued → Running → Completed and posts the reply as a markdown block', async () => {
     const taskName = 'task-1'
     const slackClient = createStubSlackClient()
     const threadSessionStore = createScriptedThreadSessionStore()
@@ -59,16 +59,18 @@ describe('processMention', () => {
       initialBubble: PREPARING_BUBBLE,
     })
 
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'status',
           channel: 'C1',
           thread: '111.222',
           text: QUEUED_BUBBLE.status,
+          blocks: undefined,
           loadingMessages: QUEUED_BUBBLE.loadingMessages,
         },
         {
@@ -76,13 +78,15 @@ describe('processMention', () => {
           channel: 'C1',
           thread: '111.222',
           text: RUNNING_BUBBLE.status,
+          blocks: undefined,
           loadingMessages: RUNNING_BUBBLE.loadingMessages,
         },
         {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
-          text: '​*bold*​ answer',
+          text: '**bold** answer',
+          blocks: [{ type: 'markdown', text: '**bold** answer' }],
           loadingMessages: undefined,
         },
         {
@@ -90,6 +94,7 @@ describe('processMention', () => {
           channel: 'C1',
           thread: '111.222',
           text: '',
+          blocks: undefined,
           loadingMessages: undefined,
         },
       ],

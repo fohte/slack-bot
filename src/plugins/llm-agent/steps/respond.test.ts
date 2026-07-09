@@ -16,15 +16,16 @@ import type {
 import { respond } from '@/plugins/llm-agent/process-mention'
 
 describe('respond', () => {
-  it('posts the slackified assistant text and upserts the opencode session id on completed', async () => {
+  it('posts a Markdown table as a markdown block so Slack renders it natively, and upserts the opencode session id on completed', async () => {
     const slackClient = createStubSlackClient()
     const threadSessionStore = createScriptedThreadSessionStore()
+    const tableText = '| a | b |\n| --- | --- |\n| 1 | 2 |'
     const deps: ProcessMentionDeps = {
       configMapClient: noopConfigMapClient,
       taskCrClient: createScriptedTaskCrClient([]),
       opencodeClient: fixedOpencodeClient({
         sessionId: 'ses_xyz',
-        assistantText: '**bold** answer',
+        assistantText: tableText,
       }),
       eventLogStore: createScriptedEventLogStore(),
       threadSessionStore,
@@ -32,16 +33,18 @@ describe('respond', () => {
     }
     const outcome: TerminalOutcome = { kind: 'completed' }
     await respond(TEST_ENV, 'task-1', outcome, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
-          text: '​*bold*​ answer',
+          text: tableText,
+          blocks: [{ type: 'markdown', text: tableText }],
           loadingMessages: undefined,
         },
         {
@@ -49,6 +52,7 @@ describe('respond', () => {
           channel: 'C1',
           thread: '111.222',
           text: '',
+          blocks: undefined,
           loadingMessages: undefined,
         },
       ],
@@ -61,6 +65,112 @@ describe('respond', () => {
         },
       ],
     })
+  })
+
+  it('escapes mrkdwn control characters in the notification fallback text but not in the markdown block', async () => {
+    const slackClient = createStubSlackClient()
+    const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: '<user> & <admin>',
+      }),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+    await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: '&lt;user&gt; &amp; &lt;admin&gt;',
+        blocks: [{ type: 'markdown', text: '<user> & <admin>' }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+  })
+
+  it('truncates the markdown block text to the Slack 12,000-character limit', async () => {
+    const slackClient = createStubSlackClient()
+    const longText = 'a'.repeat(12_005)
+    const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: longText,
+      }),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+    await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
+    const truncatedBlockText = `${'a'.repeat(11_999)}…`
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: longText,
+        blocks: [{ type: 'markdown', text: truncatedBlockText }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+  })
+
+  it('drops a surrogate pair straddling the cut point instead of splitting it', async () => {
+    const slackClient = createStubSlackClient()
+    const longText = `${'a'.repeat(11_998)}😀${'a'.repeat(10)}`
+    const deps: ProcessMentionDeps = {
+      configMapClient: noopConfigMapClient,
+      taskCrClient: createScriptedTaskCrClient([]),
+      opencodeClient: fixedOpencodeClient({
+        sessionId: 'ses_xyz',
+        assistantText: longText,
+      }),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+    await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
+    const truncatedBlockText = `${'a'.repeat(11_998)}…`
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: longText,
+        blocks: [{ type: 'markdown', text: truncatedBlockText }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
   })
 
   it('posts an escaped failure message and does not upsert thread session on failed', async () => {
@@ -79,16 +189,18 @@ describe('respond', () => {
       message: '<oops> & died',
     }
     await respond(TEST_ENV, 'task-1', outcome, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
           text: 'Task failed: &lt;oops&gt; &amp; died',
+          blocks: undefined,
           loadingMessages: undefined,
         },
         {
@@ -96,6 +208,7 @@ describe('respond', () => {
           channel: 'C1',
           thread: '111.222',
           text: '',
+          blocks: undefined,
           loadingMessages: undefined,
         },
       ],
@@ -119,17 +232,19 @@ describe('respond', () => {
       slackClient,
     }
     await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       markedResponded: eventLogStore.markedResponded,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
           text: '(opencode did not produce an assistant message)',
+          blocks: undefined,
           loadingMessages: undefined,
         },
         {
@@ -137,6 +252,7 @@ describe('respond', () => {
           channel: 'C1',
           thread: '111.222',
           text: '',
+          blocks: undefined,
           loadingMessages: undefined,
         },
       ],
@@ -198,11 +314,12 @@ describe('respond', () => {
       slackClient,
     }
     await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       markedResponded: eventLogStore.markedResponded,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [],
       markedResponded: [],
       upserts: [],

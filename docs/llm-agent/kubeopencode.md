@@ -66,7 +66,7 @@ When a Slack message has image attachments, slack-bot creates a ConfigMap in the
 - Name: `<task-cr-name>-images`
 - Label: `slack-bot.fohte.net/slack-event-id: <event_id>`
 - `binaryData` keys: `<NN>-<slack-file-id>.<ext>`, raw bytes base64-encoded
-- Caps: ≤ 500 KiB per image and ≤ 700 KiB total before base64 expansion; over-budget images are dropped before create
+- Caps: ≤ 500 KiB per image and ≤ 700 KiB total before base64 expansion; images over the per-image cap are resized/recompressed to fit (see `image-resizer.ts`), and only dropped if they still don't fit after that (or fail to decode)
 
 slack-bot deletes the ConfigMap on terminal phase and treats `NotFound` as a no-op.
 

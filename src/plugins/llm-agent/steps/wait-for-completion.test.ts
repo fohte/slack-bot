@@ -20,7 +20,7 @@ import {
 
 describe('bubbleForK8sPhase', () => {
   it('maps each non-terminal k8s phase to its bubble and everything else to undefined', () => {
-    expect({
+    const actual = {
       Pending: bubbleForK8sPhase('Pending'),
       Queued: bubbleForK8sPhase('Queued'),
       Running: bubbleForK8sPhase('Running'),
@@ -28,7 +28,8 @@ describe('bubbleForK8sPhase', () => {
       Failed: bubbleForK8sPhase('Failed'),
       Unknown: bubbleForK8sPhase('Cancelled'),
       Undefined: bubbleForK8sPhase(undefined),
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       Pending: PREPARING_BUBBLE,
       Queued: QUEUED_BUBBLE,
       Running: RUNNING_BUBBLE,
@@ -79,11 +80,12 @@ describe('waitForCompletion', () => {
       initialBubble: PREPARING_BUBBLE,
     })
 
-    expect({
+    const actual = {
       outcome,
       listCount: taskCrClient.listCount(),
       slackCalls: slackClient.calls,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       outcome: { kind: 'completed' },
       listCount: 3,
       slackCalls: [
@@ -127,11 +129,12 @@ describe('waitForCompletion', () => {
       sleep: async () => {},
     }
     const outcome = await waitForCompletion(TEST_ENV, taskName, deps)
-    expect({
+    const actual = {
       outcome,
       slackCalls: slackClient.calls,
       listCount: taskCrClient.listCount(),
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       outcome: { kind: 'failed', message: 'boom' },
       slackCalls: [],
       listCount: 1,
@@ -173,7 +176,8 @@ describe('waitForCompletion', () => {
       },
     }
     const outcome = await waitForCompletion(TEST_ENV, taskName, deps)
-    expect({ outcome, sleepCount }).toEqual({
+    const actual = { outcome, sleepCount }
+    expect(actual).toEqual({
       outcome: { kind: 'completed' },
       sleepCount: 2,
     })
@@ -233,11 +237,12 @@ describe('waitForCompletion', () => {
     const outcome = await waitForCompletion(TEST_ENV, taskName, deps, {
       initialBubble: PREPARING_BUBBLE,
     })
-    expect({
+    const actual = {
       outcome,
       slackCalls: slackClient.calls,
       listCount: taskCrClient.listCount(),
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       outcome: { kind: 'completed' },
       slackCalls: [],
       listCount: 2,

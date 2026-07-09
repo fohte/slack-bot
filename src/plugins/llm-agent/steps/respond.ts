@@ -1,5 +1,3 @@
-import { slackifyMarkdown } from 'slackify-markdown'
-
 import {
   CLEAR_STATUS,
   trySetAssistantStatus,
@@ -69,11 +67,47 @@ const resolveSessionId = async (
   }
 }
 
-const buildSuccessText = async (
+// Structurally compatible with @slack/types' MarkdownBlock; kept local so
+// this file doesn't need @slack/types as a direct dependency.
+//
+// chat.postMessage also accepts a top-level markdown_text field, but it
+// can't be combined with text/blocks, so it would drop the notification/
+// accessibility fallback text carries.
+interface SlackMarkdownBlock {
+  readonly type: 'markdown'
+  readonly text: string
+}
+
+// https://docs.slack.dev/reference/block-kit/blocks/markdown-block
+const MARKDOWN_BLOCK_TEXT_LIMIT = 12_000
+
+// Slicing on MARKDOWN_BLOCK_TEXT_LIMIT alone can land between the two
+// UTF-16 units of a surrogate pair (e.g. an emoji), leaving a lone
+// surrogate. Back the cut off by one more unit when that would happen,
+// dropping the whole character instead of splitting it.
+const isSurrogatePairAt = (text: string, lowSurrogateIndex: number): boolean =>
+  text.charCodeAt(lowSurrogateIndex - 1) >= 0xd800 &&
+  text.charCodeAt(lowSurrogateIndex - 1) <= 0xdbff &&
+  text.charCodeAt(lowSurrogateIndex) >= 0xdc00 &&
+  text.charCodeAt(lowSurrogateIndex) <= 0xdfff
+
+const truncateForMarkdownBlock = (text: string): string => {
+  if (text.length <= MARKDOWN_BLOCK_TEXT_LIMIT) return text
+  const cutoff = MARKDOWN_BLOCK_TEXT_LIMIT - 1
+  const end = isSurrogatePairAt(text, cutoff) ? cutoff - 1 : cutoff
+  return `${text.slice(0, end)}…`
+}
+
+interface SuccessResponse {
+  readonly text: string
+  readonly blocks: SlackMarkdownBlock[] | undefined
+}
+
+const buildSuccessResponse = async (
   resolved: ResolvedDeps,
   taskName: string,
   sessionId: string | undefined,
-): Promise<string> => {
+): Promise<SuccessResponse> => {
   let assistantText: string | undefined
   if (sessionId !== undefined) {
     try {
@@ -101,34 +135,24 @@ const buildSuccessText = async (
       'opencode session not found for Completed Task; terminating with placeholder',
     )
   }
-  // LLM output uses CommonMark/GFM; Slack mrkdwn is a different dialect.
-  // slackifyMarkdown always appends a trailing newline (remark-stringify),
-  // so trim it.
-  let converted: string | undefined
-  if (assistantText !== undefined) {
-    try {
-      converted = slackifyMarkdown(assistantText).replace(/\n+$/, '')
-    } catch (error) {
-      resolved.logger.error(
-        {
-          event: 'llm_agent_response_slackify_failed',
-          task_name: taskName,
-          err: error,
-        },
-        'failed to convert assistant text to Slack mrkdwn; falling back to escaped raw text',
-      )
-      converted = escapeMrkdwn(assistantText)
-    }
-  }
   // Whitespace-only text would make chat.postMessage reject with no_text
   // and trigger an unmark/retry loop on the same input.
-  return converted !== undefined && converted.trim().length > 0
-    ? converted
-    : resolved.successFallbackText
+  if (assistantText === undefined || assistantText.trim().length === 0) {
+    return { text: resolved.successFallbackText, blocks: undefined }
+  }
+  // The markdown block renders GFM (tables, etc.) natively; text carries
+  // the raw Markdown too, escaped the same way as formatFailureText since
+  // Slack still parses it as mrkdwn for the notification/accessibility
+  // fallback.
+  return {
+    text: escapeMrkdwn(assistantText),
+    blocks: [
+      { type: 'markdown', text: truncateForMarkdownBlock(assistantText) },
+    ],
+  }
 }
 
-interface ResponseBody {
-  readonly text: string
+interface ResponseBody extends SuccessResponse {
   readonly sessionId: string | undefined
 }
 
@@ -139,11 +163,27 @@ const buildResponseBody = async (
   outcome: TerminalOutcome,
 ): Promise<ResponseBody> => {
   if (outcome.kind === 'failed') {
-    return { text: formatFailureText(outcome.message), sessionId: undefined }
+    return {
+      text: formatFailureText(outcome.message),
+      blocks: undefined,
+      sessionId: undefined,
+    }
   }
   const sessionId = await resolveSessionId(resolved, env, taskName)
-  const text = await buildSuccessText(resolved, taskName, sessionId)
-  return { text, sessionId }
+  const { text, blocks } = await buildSuccessResponse(
+    resolved,
+    taskName,
+    sessionId,
+  )
+  return { text, blocks, sessionId }
+}
+
+export interface RespondResult {
+  // False when event_log markResponded lost the race to another delivery
+  // (live dispatch path or another reconciler tick), in which case respond()
+  // is a no-op — callers that count actual Slack posts must check this
+  // rather than assume respond() resolving means a message went out.
+  readonly posted: boolean
 }
 
 // Post the final Slack message and tear down per-task state (clear the
@@ -155,9 +195,9 @@ export const respond = async (
   taskName: string,
   outcome: TerminalOutcome,
   deps: ProcessMentionDeps,
-): Promise<void> => {
+): Promise<RespondResult> => {
   const resolved = resolveDeps(deps)
-  const { text, sessionId } = await buildResponseBody(
+  const { text, blocks, sessionId } = await buildResponseBody(
     resolved,
     env,
     taskName,
@@ -175,7 +215,7 @@ export const respond = async (
       },
       'llm-agent skipping Slack post; event_log row already marked responded',
     )
-    return
+    return { posted: false }
   }
 
   try {
@@ -183,6 +223,7 @@ export const respond = async (
       channel: env.channelId,
       thread_ts: env.threadRootTs,
       text,
+      ...(blocks !== undefined ? { blocks } : {}),
     })
   } catch (error) {
     try {
@@ -259,4 +300,6 @@ export const respond = async (
     },
     'llm-agent posted Task CR response to Slack',
   )
+
+  return { posted: true }
 }

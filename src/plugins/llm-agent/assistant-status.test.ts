@@ -1,46 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
+import { createRecordingLogger } from '@/plugins/llm-agent/_test-utils'
 import {
   CLEAR_STATUS,
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 import type { SlackWebClient } from '@/slack/web-client'
-
-interface LogEntry {
-  readonly level: 'warn' | 'error'
-  readonly payload: Record<string, unknown>
-  readonly message: string
-}
-
-interface RecordingLogger {
-  readonly entries: ReadonlyArray<LogEntry>
-  debug(): void
-  info(): void
-  warn(payload: Record<string, unknown>, message: string): void
-  error(payload: Record<string, unknown>, message: string): void
-  fatal(): void
-  child(): RecordingLogger
-}
-
-const createRecordingLogger = (): RecordingLogger => {
-  const entries: LogEntry[] = []
-  const logger: RecordingLogger = {
-    entries,
-    debug() {},
-    info() {},
-    warn(payload, message) {
-      entries.push({ level: 'warn', payload, message })
-    },
-    error(payload, message) {
-      entries.push({ level: 'error', payload, message })
-    },
-    fatal() {},
-    child() {
-      return logger
-    },
-  }
-  return logger
-}
 
 interface CapturedCall {
   readonly channel_id: string
@@ -92,6 +57,9 @@ const createSlackStub = (
       throw new Error('not implemented')
     },
     async downloadFile() {
+      throw new Error('not implemented')
+    },
+    async getFileInfo() {
       throw new Error('not implemented')
     },
   } as SlackWebClient & { readonly calls: ReadonlyArray<CapturedCall> }

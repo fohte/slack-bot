@@ -1,8 +1,13 @@
+import type { Logger } from '@/logger/logger'
 import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import type {
   EventLogRow,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
+import type {
+  ImageResizer,
+  ResizeOutcome,
+} from '@/plugins/llm-agent/image-resizer'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { SlackEnvelope } from '@/plugins/llm-agent/process-mention'
 import type {
@@ -23,6 +28,7 @@ export interface SlackCall {
   readonly channel: string
   readonly thread: string
   readonly text: string
+  readonly blocks: readonly unknown[] | undefined
   readonly loadingMessages: readonly string[] | undefined
 }
 
@@ -45,6 +51,7 @@ export const createStubSlackClient = (): StubSlackClient => {
         channel: arg.channel_id,
         thread: arg.thread_ts,
         text: arg.status,
+        blocks: undefined,
         loadingMessages: arg.loading_messages,
       })
       return { ok: true } as never
@@ -53,12 +60,14 @@ export const createStubSlackClient = (): StubSlackClient => {
       channel?: string
       thread_ts?: string
       text?: string
+      blocks?: unknown[]
     }) {
       calls.push({
         kind: 'post',
         channel: arg.channel ?? '',
         thread: arg.thread_ts ?? '',
         text: arg.text ?? '',
+        blocks: arg.blocks,
         loadingMessages: undefined,
       })
       return { ok: true } as never
@@ -82,6 +91,9 @@ export const createStubSlackClient = (): StubSlackClient => {
       throw new Error('not implemented')
     },
     async downloadFile() {
+      throw new Error('not implemented')
+    },
+    async getFileInfo() {
       throw new Error('not implemented')
     },
   } as StubSlackClient
@@ -123,12 +135,16 @@ export interface ScriptedEventLogStore extends EventLogStore {
 export const createScriptedEventLogStore = (
   options: {
     findByTaskName?: (taskName: string) => EventLogRow | undefined
+    findDispatchedUnresponded?: (
+      receivedBefore: Date,
+    ) => readonly EventLogRow[] | Promise<readonly EventLogRow[]>
     alreadyResponded?: boolean
+    markTaskNameError?: Error
   } = {},
 ): ScriptedEventLogStore => {
   const markedTaskNames: Array<{ id: string; name: string }> = []
   const markedResponded: string[] = []
-  let respondedReturnsZero = options.alreadyResponded ?? false
+  const responded = new Set<string>()
   return {
     markedTaskNames,
     markedResponded,
@@ -137,23 +153,36 @@ export const createScriptedEventLogStore = (
     },
     async deleteReceived() {},
     async markTaskName(slackEventId, taskName) {
+      if (options.markTaskNameError !== undefined) {
+        throw options.markTaskNameError
+      }
       markedTaskNames.push({ id: slackEventId, name: taskName })
       return { updated: 1 }
     },
     async findByTaskName(taskName) {
       return options.findByTaskName?.(taskName)
     },
+    async findDispatchedUnresponded(receivedBefore) {
+      return (await options.findDispatchedUnresponded?.(receivedBefore)) ?? []
+    },
     async markResponded(slackEventId) {
-      if (respondedReturnsZero) return { updated: 0 }
+      if (options.alreadyResponded === true || responded.has(slackEventId)) {
+        return { updated: 0 }
+      }
+      responded.add(slackEventId)
       markedResponded.push(slackEventId)
-      respondedReturnsZero = true
       return { updated: 1 }
     },
-    async unmarkResponded() {
-      return { updated: 0 }
+    async unmarkResponded(slackEventId) {
+      if (!responded.has(slackEventId)) return { updated: 0 }
+      responded.delete(slackEventId)
+      return { updated: 1 }
     },
     async pruneOlderThan() {
       return 0
+    },
+    async hasAcceptedSibling() {
+      return false
     },
   }
 }
@@ -200,6 +229,23 @@ export const TEST_ENV: SlackEnvelope = {
   images: [],
 }
 
+export interface ScriptedImageResizer extends ImageResizer {
+  readonly calls: ReadonlyArray<{ readonly maxBytes: number }>
+}
+
+export const createScriptedImageResizer = (
+  resize: (bytes: Uint8Array, maxBytes: number) => ResizeOutcome,
+): ScriptedImageResizer => {
+  const calls: Array<{ maxBytes: number }> = []
+  return {
+    calls,
+    async resize(bytes, maxBytes) {
+      calls.push({ maxBytes })
+      return resize(bytes, maxBytes)
+    },
+  }
+}
+
 export const noopConfigMapClient: ConfigMapClient = {
   async create() {
     throw new Error('configMapClient.create not implemented for this test')
@@ -207,4 +253,33 @@ export const noopConfigMapClient: ConfigMapClient = {
   async delete() {
     return 'not_found'
   },
+}
+
+export interface LogEntry {
+  readonly level: 'warn' | 'error'
+  readonly payload: Record<string, unknown>
+  readonly message: string
+}
+
+export interface RecordingLogger extends Logger {
+  readonly entries: ReadonlyArray<LogEntry>
+}
+
+export const createRecordingLogger = (): RecordingLogger => {
+  const entries: LogEntry[] = []
+  const logger: RecordingLogger = {
+    entries,
+    debug() {},
+    info() {},
+    warn(payload, message) {
+      entries.push({ level: 'warn', payload, message: message ?? '' })
+    },
+    error(payload, message) {
+      entries.push({ level: 'error', payload, message: message ?? '' })
+    },
+    child() {
+      return logger
+    },
+  }
+  return logger
 }

@@ -33,8 +33,7 @@ export interface LlmAgentPluginOptions {
   readonly botUserId: string
   readonly logger?: Logger | undefined
   readonly onAccepted?:
-    | ((accepted: LlmAgentAcceptedEvent) => void | Promise<void>)
-    | undefined
+    ((accepted: LlmAgentAcceptedEvent) => void | Promise<void>) | undefined
 }
 
 interface ExtractedFields {
@@ -81,7 +80,9 @@ type GateReason =
   | 'app_mention'
   | 'dm'
   | 'thread_continuation'
+  | 'mention_with_attachment'
   | 'duplicate_of_app_mention'
+  | 'duplicate_of_message'
   | 'no_mention_no_thread_session'
   | 'unsupported_message_subtype'
   | 'unsupported_event'
@@ -91,6 +92,11 @@ interface GateDecision {
   readonly reason: GateReason
 }
 
+// `file_share` carries the actual message in the same top-level
+// `text`/`files` fields as a plain message, so it can go through the same
+// gating logic below.
+const SUPPORTED_MESSAGE_SUBTYPES = new Set(['file_share'])
+
 const decideForMessage = async (
   event: SlackEvent,
   fields: ExtractedFields,
@@ -98,15 +104,40 @@ const decideForMessage = async (
   threadSessionStore: ThreadSessionStore,
   teamId: string | undefined,
 ): Promise<GateDecision> => {
-  // Non-default message subtypes (message_changed, message_deleted,
-  // channel_join, ...) carry user-visible text in a nested field and Slack
-  // does not emit a paired app_mention even when the edited body mentions
-  // the bot.
-  if (event.type === 'message' && event.subtype !== undefined) {
+  // Other subtypes (message_changed, message_deleted, channel_join, ...)
+  // carry user-visible text in a nested field and Slack does not emit a
+  // paired app_mention even when the edited body mentions the bot.
+  //
+  // `event.subtype` narrows to `{} | null` (not `string`) under
+  // `!== undefined` because `SlackUnknownEvent`'s index signature keeps
+  // `unknown` in the union for the `type === 'message'` branch; the
+  // `typeof` check both satisfies the compiler and keeps a non-string
+  // subtype (which Slack never actually sends) rejected rather than
+  // silently let through.
+  if (
+    event.type === 'message' &&
+    event.subtype !== undefined &&
+    (typeof event.subtype !== 'string' ||
+      !SUPPORTED_MESSAGE_SUBTYPES.has(event.subtype))
+  ) {
     return { accept: false, reason: 'unsupported_message_subtype' }
   }
 
   if (fields.channel_type === 'im') return { accept: true, reason: 'dm' }
+
+  // `app_mention` payloads never carry Slack's `files` array (see
+  // docs.slack.dev/reference/events/app_mention), so a file_share message is
+  // the only delivery able to carry the attachment. Accept it outright
+  // rather than deferring to the paired app_mention; decideForAppMention
+  // below rejects that other delivery once this row is recorded.
+  if (
+    event.type === 'message' &&
+    event.subtype === 'file_share' &&
+    fields.text !== undefined &&
+    mentionPattern.test(fields.text)
+  ) {
+    return { accept: true, reason: 'mention_with_attachment' }
+  }
 
   // A channel message that mentions the bot is also delivered as a separate
   // `app_mention` event; let that delivery handle it.
@@ -133,6 +164,32 @@ const decideForMessage = async (
   }
 
   return { accept: false, reason: 'no_mention_no_thread_session' }
+}
+
+const decideForAppMention = async (
+  fields: ExtractedFields,
+  eventLogStore: EventLogStore,
+  eventId: string,
+  teamId: string | undefined,
+): Promise<GateDecision> => {
+  if (
+    teamId !== undefined &&
+    fields.channel !== undefined &&
+    fields.ts !== undefined
+  ) {
+    // Slack gives no ordering guarantee between an app_mention and its
+    // paired message delivery, so this only catches the case where the
+    // file_share message has already been accepted; if app_mention wins
+    // the race instead, both get accepted.
+    const hasSibling = await eventLogStore.hasAcceptedSibling({
+      slackTeamId: teamId,
+      slackChannelId: fields.channel,
+      messageTs: fields.ts,
+      excludeSlackEventId: eventId,
+    })
+    if (hasSibling) return { accept: false, reason: 'duplicate_of_message' }
+  }
+  return { accept: true, reason: 'app_mention' }
 }
 
 export const createLlmAgentPlugin = (
@@ -167,7 +224,12 @@ export const createLlmAgentPlugin = (
 
       let decision: GateDecision
       if (event.type === 'app_mention') {
-        decision = { accept: true, reason: 'app_mention' }
+        decision = await decideForAppMention(
+          fields,
+          eventLogStore,
+          eventId,
+          ctx.envelope.team_id,
+        )
       } else if (event.type === 'message') {
         decision = await decideForMessage(
           event,
@@ -204,6 +266,7 @@ export const createLlmAgentPlugin = (
           slackTeamId: ctx.envelope.team_id,
           slackChannelId: fields.channel,
           threadRootTs,
+          messageTs: fields.ts,
         })
       } catch (error) {
         logger.error(

@@ -42,6 +42,18 @@ export const eventLog = pgTable(
     slackChannelId: text('slack_channel_id'),
     threadRootTs: text('thread_root_ts'),
     taskName: text('task_name'),
+    // The Slack message's own `ts` (not the thread root). Slack delivers a
+    // `message` and an `app_mention` event for the same physical message
+    // sharing this value, which is what lets the gating logic in
+    // src/plugins/llm-agent/plugin.ts correlate the two deliveries.
+    messageTs: text('message_ts'),
   },
-  (table) => [index('event_log_received_idx').on(table.receivedAt)],
+  (table) => [
+    index('event_log_received_idx').on(table.receivedAt),
+    index('event_log_message_lookup_idx').on(
+      table.slackChannelId,
+      table.messageTs,
+      table.slackTeamId,
+    ),
+  ],
 )

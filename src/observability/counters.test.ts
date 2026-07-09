@@ -126,7 +126,8 @@ describe('wrapOpencodeCall', () => {
       () => ({ models: ['opencode-go/claude-sonnet-4-6'], assistantCount: 1 }),
     )
 
-    expect({ result, snapshot: await collect() }).toEqual({
+    const actual = { result, snapshot: await collect() }
+    expect(actual).toEqual({
       result: { reply: 'hi' },
       snapshot: {
         spans: [
@@ -183,7 +184,8 @@ describe('wrapOpencodeCall', () => {
       thrown = e
     }
 
-    expect({ thrown, snapshot: await collect() }).toEqual({
+    const actual = { thrown, snapshot: await collect() }
+    expect(actual).toEqual({
       thrown: err,
       snapshot: {
         spans: [
@@ -232,7 +234,8 @@ describe('wrapOpencodeCall', () => {
       thrown = e
     }
 
-    expect({ thrown, snapshot: await collect() }).toEqual({
+    const actual = { thrown, snapshot: await collect() }
+    expect(actual).toEqual({
       thrown: err,
       snapshot: {
         spans: [
@@ -279,7 +282,8 @@ describe('wrapOpencodeCall', () => {
       () => ({ models: [], assistantCount: 1 }),
     )
 
-    expect({ result, snapshot: await collect() }).toEqual({
+    const actual = { result, snapshot: await collect() }
+    expect(actual).toEqual({
       result: { ok: true },
       snapshot: {
         spans: [
@@ -340,7 +344,8 @@ describe('wrapOpencodeCall without observability initialized', () => {
       threw = e
     }
 
-    expect({ result, threw }).toEqual({
+    const actual = { result, threw }
+    expect(actual).toEqual({
       result: { ok: true },
       threw: undefined,
     })

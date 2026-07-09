@@ -1,7 +1,12 @@
-import { and, eq, lt, ne } from 'drizzle-orm'
+import { and, eq, isNotNull, lt, ne } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
 import { eventLog } from '@/db/schema'
+
+// Caps a single findDispatchedUnresponded query so a large backlog (e.g.
+// during an extended outage) cannot pull an unbounded result set into
+// memory; the response reconciler picks up any remainder on its next tick.
+const FIND_DISPATCHED_UNRESPONDED_LIMIT = 100
 
 export type EventLogOutcome = 'accepted' | 'rejected_duplicate' | 'responded'
 
@@ -10,6 +15,7 @@ export interface EventLogRecord {
   readonly slackTeamId?: string | undefined
   readonly slackChannelId?: string | undefined
   readonly threadRootTs?: string | undefined
+  readonly messageTs?: string | undefined
 }
 
 export interface EventLogRow {
@@ -21,6 +27,13 @@ export interface EventLogRow {
   readonly taskName: string | undefined
 }
 
+export interface AcceptedSiblingQuery {
+  readonly slackTeamId: string
+  readonly slackChannelId: string
+  readonly messageTs: string
+  readonly excludeSlackEventId: string
+}
+
 export interface EventLogStore {
   recordReceived(record: EventLogRecord): Promise<EventLogOutcome>
   deleteReceived(slackEventId: string): Promise<void>
@@ -29,9 +42,23 @@ export interface EventLogStore {
     taskName: string,
   ): Promise<{ updated: number }>
   findByTaskName(taskName: string): Promise<EventLogRow | undefined>
+  // Rows dispatched (task_name set) but not yet responded, received before
+  // `receivedBefore`. Backs the response reconciler that recovers Task
+  // completions a dead Pod never got to post to Slack. There is no separate
+  // dispatch timestamp on this table, so this filters on `received_at`,
+  // which only approximates how long a row has actually been dispatched.
+  // Capped at FIND_DISPATCHED_UNRESPONDED_LIMIT rows per call; a caller that
+  // needs the true backlog size must call repeatedly across ticks.
+  findDispatchedUnresponded(
+    receivedBefore: Date,
+  ): Promise<readonly EventLogRow[]>
   markResponded(slackEventId: string): Promise<{ updated: number }>
   unmarkResponded(slackEventId: string): Promise<{ updated: number }>
   pruneOlderThan(cutoff: Date): Promise<number>
+  // True when another already-accepted event describes the same physical
+  // Slack message (same team+channel+messageTs). Used to detect the
+  // `message`/`app_mention` pair Slack sends for a single mention.
+  hasAcceptedSibling(query: AcceptedSiblingQuery): Promise<boolean>
 }
 
 const normalize = (value: string | null): string | undefined =>
@@ -47,6 +74,7 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
         slackTeamId: record.slackTeamId ?? null,
         slackChannelId: record.slackChannelId ?? null,
         threadRootTs: record.threadRootTs ?? null,
+        messageTs: record.messageTs ?? null,
       })
       .onConflictDoNothing({ target: eventLog.slackEventId })
       .returning({ slackEventId: eventLog.slackEventId })
@@ -88,6 +116,35 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
       taskName: normalize(row.taskName),
     }
   },
+  async findDispatchedUnresponded(receivedBefore) {
+    const rows = await db
+      .select({
+        slackEventId: eventLog.slackEventId,
+        outcome: eventLog.outcome,
+        slackTeamId: eventLog.slackTeamId,
+        slackChannelId: eventLog.slackChannelId,
+        threadRootTs: eventLog.threadRootTs,
+        taskName: eventLog.taskName,
+      })
+      .from(eventLog)
+      .where(
+        and(
+          isNotNull(eventLog.taskName),
+          ne(eventLog.outcome, 'responded'),
+          lt(eventLog.receivedAt, receivedBefore),
+        ),
+      )
+      .orderBy(eventLog.receivedAt)
+      .limit(FIND_DISPATCHED_UNRESPONDED_LIMIT)
+    return rows.map((row) => ({
+      slackEventId: row.slackEventId,
+      outcome: row.outcome,
+      slackTeamId: normalize(row.slackTeamId),
+      slackChannelId: normalize(row.slackChannelId),
+      threadRootTs: normalize(row.threadRootTs),
+      taskName: normalize(row.taskName),
+    }))
+  },
   async markResponded(slackEventId) {
     // Only transition rows that are not yet responded; the conditional
     // makes this a serialization point so concurrent watcher ticks elect a
@@ -123,5 +180,25 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
       .where(lt(eventLog.receivedAt, cutoff))
       .returning({ slackEventId: eventLog.slackEventId })
     return deleted.length
+  },
+  async hasAcceptedSibling({
+    slackTeamId,
+    slackChannelId,
+    messageTs,
+    excludeSlackEventId,
+  }) {
+    const rows = await db
+      .select({ slackEventId: eventLog.slackEventId })
+      .from(eventLog)
+      .where(
+        and(
+          eq(eventLog.slackTeamId, slackTeamId),
+          eq(eventLog.slackChannelId, slackChannelId),
+          eq(eventLog.messageTs, messageTs),
+          ne(eventLog.slackEventId, excludeSlackEventId),
+        ),
+      )
+      .limit(1)
+    return rows.length > 0
   },
 })
