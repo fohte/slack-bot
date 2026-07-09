@@ -383,18 +383,34 @@ export const submitTask = async (
     }
     throw taskCreateError
   }
-  const { updated } = await resolved.eventLogStore.markTaskName(
-    env.eventId,
-    taskName,
-  )
-  if (updated === 0) {
-    resolved.logger.warn(
+  try {
+    const { updated } = await resolved.eventLogStore.markTaskName(
+      env.eventId,
+      taskName,
+    )
+    if (updated === 0) {
+      resolved.logger.warn(
+        {
+          event: 'llm_agent_event_log_task_name_orphan',
+          event_id: env.eventId,
+          task_name: taskName,
+        },
+        'event_log row missing when recording task_name',
+      )
+    }
+  } catch (markError) {
+    // The Task CR above already exists and is running, so this failure must
+    // not propagate as a submitTask failure: the dispatcher's catch would
+    // treat it as "nothing was created" and tell the user to retry, spawning
+    // a second Task CR for the same request.
+    resolved.logger.error(
       {
-        event: 'llm_agent_event_log_task_name_orphan',
+        event: 'llm_agent_event_log_task_name_write_failed',
         event_id: env.eventId,
         task_name: taskName,
+        err: markError,
       },
-      'event_log row missing when recording task_name',
+      'failed to record task_name on event_log row after Task CR creation succeeded',
     )
   }
   resolved.logger.info(

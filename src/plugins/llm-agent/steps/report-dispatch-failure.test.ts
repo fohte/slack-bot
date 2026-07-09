@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import type { RecordingLogger } from '@/plugins/llm-agent/_test-utils'
 import {
+  createRecordingLogger,
   createScriptedEventLogStore,
   createScriptedTaskCrClient,
   createScriptedThreadSessionStore,
@@ -15,40 +17,6 @@ import {
   reportDispatchFailure,
 } from '@/plugins/llm-agent/steps/report-dispatch-failure'
 import type { SlackWebClient } from '@/slack/web-client'
-
-interface LogEntry {
-  readonly level: 'error'
-  readonly payload: Record<string, unknown>
-  readonly message: string
-}
-
-interface RecordingLogger {
-  readonly entries: ReadonlyArray<LogEntry>
-  debug(): void
-  info(): void
-  warn(): void
-  error(payload: Record<string, unknown>, message: string): void
-  fatal(): void
-  child(): RecordingLogger
-}
-
-const createRecordingLogger = (): RecordingLogger => {
-  const entries: LogEntry[] = []
-  const logger: RecordingLogger = {
-    entries,
-    debug() {},
-    info() {},
-    warn() {},
-    error(payload, message) {
-      entries.push({ level: 'error', payload, message })
-    },
-    fatal() {},
-    child() {
-      return logger
-    },
-  }
-  return logger
-}
 
 const noopOpencodeClient: OpencodeClient = {
   async fetchLatestAssistantText() {

@@ -208,10 +208,7 @@ export const resolveInlineImageFiles = async (
   }
 }
 
-// Runs the detached (fire-and-forget) tail of a dispatch: polling the Task
-// CR to completion and posting the reply. Exported so its failure-handling
-// branch (rather than timing around the detached call in
-// createTaskDispatcher) can be tested directly.
+// Exported for direct unit testing of the failure-handling branch.
 export const runProcessMentionInBackground = async (
   env: SlackEnvelope,
   taskName: string,

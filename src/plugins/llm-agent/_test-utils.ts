@@ -1,3 +1,4 @@
+import type { Logger } from '@/logger/logger'
 import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import type {
   EventLogRow,
@@ -135,6 +136,7 @@ export const createScriptedEventLogStore = (
   options: {
     findByTaskName?: (taskName: string) => EventLogRow | undefined
     alreadyResponded?: boolean
+    markTaskNameError?: Error
   } = {},
 ): ScriptedEventLogStore => {
   const markedTaskNames: Array<{ id: string; name: string }> = []
@@ -148,6 +150,9 @@ export const createScriptedEventLogStore = (
     },
     async deleteReceived() {},
     async markTaskName(slackEventId, taskName) {
+      if (options.markTaskNameError !== undefined) {
+        throw options.markTaskNameError
+      }
       markedTaskNames.push({ id: slackEventId, name: taskName })
       return { updated: 1 }
     },
@@ -238,4 +243,33 @@ export const noopConfigMapClient: ConfigMapClient = {
   async delete() {
     return 'not_found'
   },
+}
+
+export interface LogEntry {
+  readonly level: 'warn' | 'error'
+  readonly payload: Record<string, unknown>
+  readonly message: string
+}
+
+export interface RecordingLogger extends Logger {
+  readonly entries: ReadonlyArray<LogEntry>
+}
+
+export const createRecordingLogger = (): RecordingLogger => {
+  const entries: LogEntry[] = []
+  const logger: RecordingLogger = {
+    entries,
+    debug() {},
+    info() {},
+    warn(payload, message) {
+      entries.push({ level: 'warn', payload, message: message ?? '' })
+    },
+    error(payload, message) {
+      entries.push({ level: 'error', payload, message: message ?? '' })
+    },
+    child() {
+      return logger
+    },
+  }
+  return logger
 }

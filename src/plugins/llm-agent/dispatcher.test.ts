@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  createScriptedTaskCrClient,
   createStubSlackClient,
   noopConfigMapClient,
   TEST_ENV,
@@ -654,20 +655,12 @@ describe('createTaskDispatcher', () => {
 describe('runProcessMentionInBackground', () => {
   it('notifies the Slack thread and clears the assistant status when the Task CR disappears mid-poll', async () => {
     const slackClient = createStubSlackClient()
-    const taskCrClient: TaskCrClient = {
-      async create() {
-        throw new Error('not implemented')
-      },
-      async list() {
-        return []
-      },
-    }
     await runProcessMentionInBackground(
       TEST_ENV,
       'task-1',
       {
         configMapClient: noopConfigMapClient,
-        taskCrClient,
+        taskCrClient: createScriptedTaskCrClient([]),
         opencodeClient: noopOpencodeClient,
         eventLogStore: createEventLogStore(),
         threadSessionStore: createThreadSessionStore(),
