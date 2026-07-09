@@ -436,13 +436,18 @@ describe('startResponseReconciler', () => {
 
     const firstRun = handle.runOnce()
     const secondRun = handle.runOnce()
+    // Assert before releasing the pending query: if the isRunning guard
+    // regresses, the second call reaches findDispatchedUnresponded too and
+    // overwrites releasePendingQuery, leaving the first call's Promise
+    // pending forever — which would otherwise surface as an opaque test
+    // timeout instead of this clear assertion failure.
+    expect(queryCalls).toBe(1)
     releasePendingQuery?.()
     const [firstResult, secondResult] = await Promise.all([firstRun, secondRun])
 
-    expect({ firstResult, secondResult, queryCalls }).toEqual({
+    expect({ firstResult, secondResult }).toEqual({
       firstResult: 0,
       secondResult: 0,
-      queryCalls: 1,
     })
   })
 

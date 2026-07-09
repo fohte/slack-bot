@@ -47,6 +47,8 @@ export interface EventLogStore {
   // completions a dead Pod never got to post to Slack. There is no separate
   // dispatch timestamp on this table, so this filters on `received_at`,
   // which only approximates how long a row has actually been dispatched.
+  // Capped at FIND_DISPATCHED_UNRESPONDED_LIMIT rows per call; a caller that
+  // needs the true backlog size must call repeatedly across ticks.
   findDispatchedUnresponded(
     receivedBefore: Date,
   ): Promise<readonly EventLogRow[]>
