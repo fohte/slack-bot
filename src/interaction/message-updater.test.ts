@@ -18,6 +18,7 @@ const buildMockClient = () => ({
     .mockResolvedValue({ channelId: 'C1', messageTs: '1.2', raw: {} }),
   setAssistantThreadStatus: vi.fn(),
   downloadFile: vi.fn(),
+  getFileInfo: vi.fn(),
 })
 
 describe('MessageUpdater (originalUpdater)', () => {

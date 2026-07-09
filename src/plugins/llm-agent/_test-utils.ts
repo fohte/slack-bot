@@ -88,6 +88,9 @@ export const createStubSlackClient = (): StubSlackClient => {
     async downloadFile() {
       throw new Error('not implemented')
     },
+    async getFileInfo() {
+      throw new Error('not implemented')
+    },
   } as StubSlackClient
 }
 

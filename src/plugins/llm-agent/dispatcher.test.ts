@@ -8,14 +8,17 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { noopConfigMapClient } from '@/plugins/llm-agent/_test-utils'
+import { noopConfigMapClient, TEST_ENV } from '@/plugins/llm-agent/_test-utils'
+import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import {
   createTaskDispatcher,
   envelopeFromAccepted,
+  resolveInlineImageFiles,
 } from '@/plugins/llm-agent/dispatcher'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
+import type { SlackEnvelope } from '@/plugins/llm-agent/process-mention-deps'
 import type {
   TaskCrClient,
   TaskCrCreateOutcome,
@@ -28,6 +31,7 @@ import type { SlackWebClient } from '@/slack/web-client'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
+  SlackFile,
   SlackMessageEvent,
 } from '@/types/slack-payloads'
 
@@ -101,6 +105,9 @@ const createSlackClient = (
     async downloadFile() {
       throw new Error('not implemented')
     },
+    async getFileInfo() {
+      throw new Error('not implemented')
+    },
   }) as SlackWebClient
 
 interface StubTaskCrClient extends TaskCrClient {
@@ -130,6 +137,15 @@ const createTaskCrClient = (
     },
   }
 }
+
+const createConfigMapClientStub = (): ConfigMapClient => ({
+  async create() {
+    return 'created'
+  },
+  async delete() {
+    return 'deleted'
+  },
+})
 
 const createEventLogStore = (): EventLogStore => ({
   async recordReceived() {
@@ -295,6 +311,134 @@ describe('envelopeFromAccepted', () => {
   })
 })
 
+describe('resolveInlineImageFiles', () => {
+  it('returns the envelope unchanged when there is no inline file ID reference', async () => {
+    const result = await resolveInlineImageFiles(
+      TEST_ENV,
+      createSlackClient(),
+      noopLogger,
+    )
+    expect(result).toEqual(TEST_ENV)
+  })
+
+  it('resolves an inline file ID into an image attachment and strips it from the text', async () => {
+    const imageFile: SlackFile = {
+      id: 'F0BG20H5AVA',
+      name: 'lunch.jpg',
+      mimetype: 'image/jpeg',
+      url_private: 'https://files.slack.com/lunch.jpg',
+      channels: ['C1'],
+    }
+    const calls: string[] = []
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo(fileId: string) {
+        calls.push(fileId)
+        return imageFile
+      },
+    } as SlackWebClient
+    const env: SlackEnvelope = {
+      ...TEST_ENV,
+      text: 'F0BG20H5AVA これ昼たべたから記録しといて',
+    }
+    const result = await resolveInlineImageFiles(env, slackClient, noopLogger)
+    expect({ result, calls }).toEqual({
+      result: {
+        ...TEST_ENV,
+        text: 'これ昼たべたから記録しといて',
+        images: [imageFile],
+      },
+      calls: ['F0BG20H5AVA'],
+    })
+  })
+
+  it('leaves the text and images unchanged when the resolved file is not an image', async () => {
+    const pdfFile: SlackFile = {
+      id: 'F0BG20H5AVA',
+      name: 'menu.pdf',
+      mimetype: 'application/pdf',
+    }
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo() {
+        return pdfFile
+      },
+    } as SlackWebClient
+    const env: SlackEnvelope = { ...TEST_ENV, text: 'F0BG20H5AVA menu please' }
+    const result = await resolveInlineImageFiles(env, slackClient, noopLogger)
+    expect(result).toEqual(env)
+  })
+
+  it('leaves the ID as plain text when the lookup fails', async () => {
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo() {
+        throw new Error('file_not_found')
+      },
+    } as SlackWebClient
+    const env: SlackEnvelope = { ...TEST_ENV, text: 'F0BG20H5AVA menu please' }
+    const result = await resolveInlineImageFiles(env, slackClient, noopLogger)
+    expect(result).toEqual(env)
+  })
+
+  it('leaves the ID as plain text when the resolved file is not shared into this channel', async () => {
+    const otherChannelFile: SlackFile = {
+      id: 'F0BG20H5AVA',
+      name: 'lunch.jpg',
+      mimetype: 'image/jpeg',
+      channels: ['C_OTHER'],
+    }
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo() {
+        return otherChannelFile
+      },
+    } as SlackWebClient
+    const env: SlackEnvelope = { ...TEST_ENV, text: 'F0BG20H5AVA menu please' }
+    const result = await resolveInlineImageFiles(env, slackClient, noopLogger)
+    expect(result).toEqual(env)
+  })
+
+  it('does not duplicate a file already present via event.files', async () => {
+    const existing: SlackFile = {
+      id: 'F0BG20H5AVA',
+      name: 'lunch.jpg',
+      mimetype: 'image/jpeg',
+      channels: ['C1'],
+    }
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo() {
+        return existing
+      },
+    } as SlackWebClient
+    const env: SlackEnvelope = {
+      ...TEST_ENV,
+      text: 'F0BG20H5AVA これ',
+      images: [existing],
+    }
+    const result = await resolveInlineImageFiles(env, slackClient, noopLogger)
+    expect(result).toEqual({ ...TEST_ENV, text: 'これ', images: [existing] })
+  })
+
+  it('caps the number of inline file IDs resolved per message', async () => {
+    const ids = Array.from({ length: 11 }, (_, i) =>
+      `F${String(i).padStart(8, '0')}`.toUpperCase(),
+    )
+    const calls: string[] = []
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo(fileId: string) {
+        calls.push(fileId)
+        return undefined
+      },
+    } as SlackWebClient
+    const env: SlackEnvelope = { ...TEST_ENV, text: ids.join(' ') }
+    await resolveInlineImageFiles(env, slackClient, noopLogger)
+    expect(calls).toEqual(ids.slice(0, 10))
+  })
+})
+
 describe('createTaskDispatcher', () => {
   it('sets the initial Preparing bubble before calling taskCrClient.create()', async () => {
     const timeline = createTimeline()
@@ -387,6 +531,74 @@ describe('createTaskDispatcher', () => {
     // backgrounding processMention this await would hang the test.
     await dispatch(acceptedMention())
     expect(taskCrClient.creates.length).toBe(1)
+  })
+
+  it('resolves an inline file ID reference into the Task CR image ConfigMap context', async () => {
+    const taskCrClient = createTaskCrClient()
+    const imageFile: SlackFile = {
+      id: 'F0BG20H5AVA',
+      name: 'lunch.jpg',
+      mimetype: 'image/jpeg',
+      url_private: 'https://files.slack.com/lunch.jpg',
+      channels: ['C1'],
+    }
+    const slackClient: SlackWebClient = {
+      ...createSlackClient(),
+      async getFileInfo() {
+        return imageFile
+      },
+      async downloadFile() {
+        return { bytes: new Uint8Array([1, 2, 3]), contentType: 'image/jpeg' }
+      },
+    } as SlackWebClient
+    const dispatch = createTaskDispatcher({
+      configMapClient: createConfigMapClientStub(),
+      taskCrClient,
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient,
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    })
+    await dispatch(
+      acceptedMention({
+        text: '<@U_BOT> F0BG20H5AVA これ昼たべたから記録しといて',
+      }),
+    )
+    expect(taskCrClient.creates).toEqual([
+      {
+        name: taskCrNameForSlackEvent('Ev1'),
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description:
+          'The user attached 1 image file(s) to this Slack message.\n' +
+          'They are included directly in this conversation as image attachments, so you can view their contents without calling any tool. Original filenames, in attachment order:\n' +
+          '- lunch.jpg\n\n' +
+          'これ昼たべたから記録しといて',
+        contexts: [
+          {
+            kind: 'text',
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            kind: 'text',
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '111.222',
+          },
+          {
+            kind: 'configMap',
+            name: 'slack-images',
+            mountPath: 'slack-images',
+            configMapName: `${taskCrNameForSlackEvent('Ev1')}-images`,
+          },
+        ],
+      },
+    ])
   })
 })
 
