@@ -46,4 +46,15 @@ describe('createInFlightTasks', () => {
     void tasks.track(rejecting).catch(() => {})
     await expect(tasks.waitForIdle()).resolves.toBeUndefined()
   })
+
+  it('reports the number of tasks currently tracked', async () => {
+    const tasks = createInFlightTasks()
+    const deferred = createDeferred<undefined>()
+    expect(tasks.size()).toBe(0)
+    void tasks.track(deferred.promise)
+    expect(tasks.size()).toBe(1)
+    deferred.resolve(undefined)
+    await tasks.waitForIdle()
+    expect(tasks.size()).toBe(0)
+  })
 })

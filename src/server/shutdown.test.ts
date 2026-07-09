@@ -20,6 +20,7 @@ describe('createShutdownHandler', () => {
           await idle.promise
           timeline.push('drained')
         },
+        size: () => 0,
       },
       logger: noopLogger,
       exit: (code) => {
@@ -42,7 +43,7 @@ describe('createShutdownHandler', () => {
           callback?.()
         },
       },
-      inFlightTasks: { waitForIdle: () => idle.promise },
+      inFlightTasks: { waitForIdle: () => idle.promise, size: () => 0 },
       logger: noopLogger,
       exit: () => {},
     })
@@ -51,5 +52,39 @@ describe('createShutdownHandler', () => {
     idle.resolve(undefined)
     await first
     expect(closeCalls).toBe(1)
+  })
+
+  it('logs and still exits when server.close reports an error', async () => {
+    const errorCalls: Array<{
+      payload: Record<string, unknown>
+      message: string | undefined
+    }> = []
+    const timeline: string[] = []
+    const closeError = new Error('already closed')
+    const handler = createShutdownHandler({
+      server: {
+        close: (callback) => {
+          callback?.(closeError)
+        },
+      },
+      inFlightTasks: { waitForIdle: async () => {}, size: () => 0 },
+      logger: {
+        ...noopLogger,
+        error: (payload, message) => {
+          errorCalls.push({ payload, message })
+        },
+      },
+      exit: (code) => {
+        timeline.push(`exited:${code}`)
+      },
+    })
+    await handler('SIGTERM')
+    expect(timeline).toEqual(['exited:0'])
+    expect(errorCalls).toEqual([
+      {
+        payload: { event: 'shutdown_server_close_failed', err: closeError },
+        message: 'failed to close http server',
+      },
+    ])
   })
 })
