@@ -18,6 +18,8 @@ import type {
   TaskCrClient,
   TaskCrStatus,
 } from '@/plugins/llm-agent/task-cr-client'
+import { createDeferred } from '@/server/_test-utils'
+import { createInFlightTasks } from '@/server/in-flight-tasks'
 
 const row = (overrides: Partial<EventLogRow> = {}): EventLogRow => ({
   slackEventId: 'Ev1',
@@ -465,6 +467,46 @@ describe('startResponseReconciler', () => {
 
     handle.stop()
     expect(clearIntervalImpl.mock.calls).toEqual([[fakeTimer]])
+  })
+
+  it('tracks a handle.runOnce() call in inFlightTasks so a shutdown drain waits for it', async () => {
+    const gate = createDeferred<undefined>()
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: async () => {
+        await gate.promise
+        return []
+      },
+    })
+    const inFlightTasks = createInFlightTasks()
+    const handle = startResponseReconciler(
+      baseDeps({ eventLogStore, inFlightTasks }),
+    )
+    const timeline: string[] = []
+
+    void handle.runOnce()
+    void inFlightTasks.waitForIdle().then(() => timeline.push('idle'))
+    await Promise.resolve()
+    timeline.push('checked-still-in-flight')
+
+    gate.resolve(undefined)
+    await inFlightTasks.waitForIdle()
+    expect(timeline).toEqual(['checked-still-in-flight', 'idle'])
+  })
+
+  it('tracks an interval-triggered run in inFlightTasks', () => {
+    let tick: (() => void) | undefined
+    const setIntervalImpl = vi.fn<
+      (callback: () => void, ms: number) => NodeJS.Timeout
+    >((callback) => {
+      tick = callback
+      return Symbol('timer') as unknown as NodeJS.Timeout
+    })
+    const inFlightTasks = createInFlightTasks()
+    startResponseReconciler(baseDeps({ setIntervalImpl, inFlightTasks }))
+
+    expect(inFlightTasks.size()).toBe(0)
+    tick?.()
+    expect(inFlightTasks.size()).toBe(1)
   })
 
   it('exposes default grace and interval constants used when options are omitted', () => {
