@@ -364,6 +364,50 @@ describe('submitTask', () => {
     expect(downloadCalls).toEqual(['https://files.slack.com/huge.png'])
   })
 
+  it('skips downloading images whose declared Slack size exceeds the download guard', async () => {
+    // Unlike the per-image resize cap, a download the web client's own OOM
+    // guard will reject outright cannot be salvaged by resizing.
+    const downloadCalls: string[] = []
+    const smallBytes = new Uint8Array([1, 2, 3])
+    const slackClient: SlackWebClient = {
+      ...createStubSlackClient(),
+      async downloadFile(url: string) {
+        downloadCalls.push(url)
+        return { bytes: smallBytes, contentType: 'image/png' }
+      },
+    } as SlackWebClient
+    const taskCrClient = createScriptedTaskCrClient([])
+    const configMapClient = createRecordingConfigMapClient()
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'massive.png',
+        mimetype: 'image/png',
+        size: 30 * 1024 * 1024,
+        url_private: 'https://files.slack.com/massive.png',
+      },
+      {
+        id: 'F2',
+        name: 'ok.png',
+        mimetype: 'image/png',
+        size: 1024,
+        url_private: 'https://files.slack.com/ok.png',
+      },
+    ]
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      configMapClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore(),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient,
+    }
+
+    await submitTask({ ...TEST_ENV, images }, deps)
+
+    expect(downloadCalls).toEqual(['https://files.slack.com/ok.png'])
+  })
+
   it('resizes a downloaded image that exceeds the per-image cap and uses the resized bytes', async () => {
     const bigBytes = new Uint8Array(600 * 1024).fill(7)
     const resizedBytes = new Uint8Array([9, 9, 9, 9])

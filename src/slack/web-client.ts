@@ -97,7 +97,7 @@ const SLACK_FILE_HOST_SUFFIX = '.slack.com'
 // runaway Content-Length from OOM-ing the process. Modern smartphone photos
 // commonly run 10-20 MB, so this must clear that range; downstream resizing
 // (see image-resizer.ts) shrinks anything still over the ConfigMap cap.
-const SLACK_FILE_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024
+export const SLACK_FILE_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024
 
 const downloadSlackFile = async (
   fetchImpl: typeof fetch,

@@ -9,6 +9,7 @@ import type {
 import { resolveDeps } from '@/plugins/llm-agent/process-mention-deps'
 import type { TaskCrContext } from '@/plugins/llm-agent/task-cr-client'
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
+import { SLACK_FILE_DOWNLOAD_MAX_BYTES } from '@/slack/web-client'
 import type { SlackFile } from '@/types/slack-payloads'
 
 export const SLACK_IMAGES_MOUNT_PATH = 'slack-images'
@@ -197,6 +198,25 @@ const downloadImages = async (
     }
     const url = file.url_private_download ?? file.url_private
     if (typeof url !== 'string' || url.length === 0) continue
+    // Unlike the per-image resize cap, nothing can salvage a download that
+    // the web client's own OOM guard will reject outright, so it's worth
+    // skipping the request when Slack's metadata already rules it out.
+    if (
+      typeof file.size === 'number' &&
+      file.size > SLACK_FILE_DOWNLOAD_MAX_BYTES
+    ) {
+      resolved.logger.warn(
+        {
+          event: 'llm_agent_slack_image_download_too_large',
+          event_id: env.eventId,
+          slack_file_id: file.id,
+          bytes: file.size,
+          cap: SLACK_FILE_DOWNLOAD_MAX_BYTES,
+        },
+        'slack image exceeds the download size guard; dropping this attachment without downloading',
+      )
+      continue
+    }
     let bytes: Uint8Array
     try {
       const result = await resolved.slackClient.downloadFile(url)

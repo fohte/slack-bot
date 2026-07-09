@@ -50,6 +50,8 @@ export const createSharpImageResizer = (): ImageResizer => ({
     // drop the animation, so leave those to the caller's fallback path
     // instead.
     if ((metadata.pages ?? 1) > 1) return { ok: false, reason: 'animated' }
+    // width/height are non-optional on sharp's Metadata type (unlike e.g.
+    // orientation/size), so no undefined guard is needed here.
     if (metadata.width * metadata.height > MAX_DECODE_PIXELS) {
       return { ok: false, reason: 'still_too_large' }
     }
