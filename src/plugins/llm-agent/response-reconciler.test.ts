@@ -87,11 +87,12 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({
+    const actual = {
       recovered,
       slackCalls: slackClient.calls,
       markedResponded: eventLogStore.markedResponded,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       recovered: 1,
       slackCalls: [
         {
@@ -134,7 +135,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+    const actual = { recovered, slackCalls: slackClient.calls }
+    expect(actual).toEqual({
       recovered: 1,
       slackCalls: [
         {
@@ -176,7 +178,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+    const actual = { recovered, slackCalls: slackClient.calls }
+    expect(actual).toEqual({
       recovered: 0,
       slackCalls: [],
     })
@@ -194,11 +197,12 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({
+    const actual = {
       recovered,
       slackCalls: slackClient.calls,
       markedResponded: eventLogStore.markedResponded,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       recovered: 0,
       slackCalls: [],
       markedResponded: ['Ev1'],
@@ -224,7 +228,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+    const actual = { recovered, slackCalls: slackClient.calls }
+    expect(actual).toEqual({
       recovered: 0,
       slackCalls: [],
     })
@@ -241,7 +246,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({ recovered, listCalls: taskCrClient.listCalls() }).toEqual({
+    const actual = { recovered, listCalls: taskCrClient.listCalls() }
+    expect(actual).toEqual({
       recovered: 0,
       listCalls: 0,
     })
@@ -282,7 +288,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+    const actual = { recovered, slackCalls: slackClient.calls }
+    expect(actual).toEqual({
       recovered: 2,
       slackCalls: [
         {
@@ -383,7 +390,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+    const actual = { recovered, slackCalls: slackClient.calls }
+    expect(actual).toEqual({
       recovered: 1,
       slackCalls: [
         {
@@ -447,7 +455,8 @@ describe('startResponseReconciler', () => {
     releasePendingQuery?.()
     const [firstResult, secondResult] = await Promise.all([firstRun, secondRun])
 
-    expect({ firstResult, secondResult }).toEqual({
+    const actual = { firstResult, secondResult }
+    expect(actual).toEqual({
       firstResult: 0,
       secondResult: 0,
     })
@@ -510,10 +519,11 @@ describe('startResponseReconciler', () => {
   })
 
   it('exposes default grace and interval constants used when options are omitted', () => {
-    expect({
+    const actual = {
       graceMs: RESPONSE_RECONCILER_DEFAULT_GRACE_MS,
       intervalMs: RESPONSE_RECONCILER_DEFAULT_INTERVAL_MS,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       graceMs: 2 * 60 * 1000,
       intervalMs: 60 * 1000,
     })

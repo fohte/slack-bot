@@ -144,9 +144,7 @@ export interface SlackAppMentionEvent extends SlackEventBase {
 }
 
 export type SlackEvent =
-  | SlackMessageEvent
-  | SlackAppMentionEvent
-  | SlackUnknownEvent
+  SlackMessageEvent | SlackAppMentionEvent | SlackUnknownEvent
 
 export interface SlackEventCallback {
   readonly type: 'event_callback'

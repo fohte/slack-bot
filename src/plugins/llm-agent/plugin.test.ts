@@ -457,10 +457,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-dm',
@@ -486,10 +487,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-mention',
@@ -516,10 +518,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [],
       onAcceptedCalls: 0,
     })
@@ -544,10 +547,11 @@ describe('createLlmAgentPlugin', () => {
       appMentionEnvelope.event,
     )
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-dup-mention',
@@ -585,10 +589,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-thread-hit',
@@ -616,10 +621,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [],
       onAcceptedCalls: 0,
     })
@@ -640,11 +646,12 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
       lookupCalls: lookupSpy.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [],
       onAcceptedCalls: 0,
       lookupCalls: 0,
@@ -665,10 +672,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [],
       onAcceptedCalls: 0,
     })
@@ -699,10 +707,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-file-thread-hit',
@@ -731,10 +740,11 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAccepted: onAccepted.mock.calls.map(([event]) => event),
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-img-msg',
@@ -769,10 +779,11 @@ describe('createLlmAgentPlugin', () => {
       appMentionEnvelope.event,
     )
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-img-msg-first',
@@ -807,10 +818,11 @@ describe('createLlmAgentPlugin', () => {
     )
     await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
 
-    expect({
+    const actual = {
       records: eventLogStore.records,
       onAcceptedCalls: onAccepted.mock.calls.length,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       records: [
         {
           slackEventId: 'Ev-mention-first',

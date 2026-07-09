@@ -59,10 +59,11 @@ describe('processMention', () => {
       initialBubble: PREPARING_BUBBLE,
     })
 
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'status',

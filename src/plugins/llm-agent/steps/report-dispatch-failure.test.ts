@@ -75,10 +75,11 @@ describe('reportDispatchFailure', () => {
     }
     const logger = createRecordingLogger()
     await reportDispatchFailure(TEST_ENV, baseDeps(slackClient, logger))
-    expect({
+    const actual = {
       calls: stub.calls,
       logEntries: logger.entries,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       calls: [
         {
           kind: 'status',

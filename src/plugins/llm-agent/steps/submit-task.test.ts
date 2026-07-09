@@ -87,11 +87,12 @@ describe('submitTask', () => {
     const result = await submitTask(TEST_ENV, deps)
 
     const expectedName = taskCrNameForSlackEvent(TEST_ENV.eventId)
-    expect({
+    const actual = {
       result,
       creates: taskCrClient.creates,
       marked: eventLogStore.markedTaskNames,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       result: { taskName: expectedName },
       creates: [
         {
@@ -136,11 +137,12 @@ describe('submitTask', () => {
     const expectedName = taskCrNameForSlackEvent(TEST_ENV.eventId)
     const result = await submitTask(TEST_ENV, deps)
 
-    expect({
+    const actual = {
       result,
       creates: taskCrClient.creates.map((c) => c.name),
       logEntries: logger.entries,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       result: { taskName: expectedName },
       creates: [expectedName],
       logEntries: [
@@ -176,11 +178,12 @@ describe('submitTask', () => {
     const result = await submitTask(TEST_ENV, deps)
 
     const expectedName = taskCrNameForSlackEvent(TEST_ENV.eventId)
-    expect({
+    const actual = {
       result,
       creates: taskCrClient.creates,
       marked: eventLogStore.markedTaskNames,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       result: { taskName: expectedName },
       creates: [
         {
@@ -264,11 +267,12 @@ describe('submitTask', () => {
       '',
       'look at these',
     ].join('\n')
-    expect({
+    const actual = {
       result,
       creates: taskCrClient.creates,
       configMaps: configMapClient.creates,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       result: { taskName: expectedTaskName },
       creates: [
         {
@@ -352,13 +356,14 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    expect({
+    const actual = {
       configMaps: configMapClient.creates.map((c) => ({
         name: c.name,
         keys: c.binaryEntries.map((e) => e.filename),
       })),
       contextKinds: taskCrClient.creates[0]?.contexts.map((c) => c.kind),
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       configMaps: [
         {
           name: `${taskCrNameForSlackEvent('Ev1')}-images`,
@@ -495,10 +500,11 @@ describe('submitTask', () => {
     await submitTask({ ...TEST_ENV, images }, deps)
 
     const expectedConfigMapName = `${taskCrNameForSlackEvent('Ev1')}-images`
-    expect({
+    const actual = {
       resizerCalls: imageResizer.calls,
       configMaps: configMapClient.creates,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       resizerCalls: [{ maxBytes: 500 * 1024 }],
       configMaps: [
         {
@@ -544,10 +550,11 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    expect({
+    const actual = {
       configMaps: configMapClient.creates,
       description: taskCrClient.creates[0]?.description,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       configMaps: [],
       description:
         "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
@@ -645,10 +652,11 @@ describe('submitTask', () => {
     )
 
     const expectedConfigMapName = `${taskCrNameForSlackEvent(TEST_ENV.eventId)}-images`
-    expect({
+    const actual = {
       creates: configMapClient.creates.map((c) => c.name),
       deletes: configMapClient.deletes,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       creates: [expectedConfigMapName],
       deletes: [{ name: expectedConfigMapName, namespace: 'kubeopencode' }],
     })
@@ -788,11 +796,12 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    expect({
+    const actual = {
       configMaps: configMapClient.creates,
       contextKinds: taskCrClient.creates[0]?.contexts.map((c) => c.kind),
       description: taskCrClient.creates[0]?.description,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       configMaps: [],
       contextKinds: ['text', 'text'],
       description:

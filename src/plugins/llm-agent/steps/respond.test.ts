@@ -33,10 +33,11 @@ describe('respond', () => {
     }
     const outcome: TerminalOutcome = { kind: 'completed' }
     await respond(TEST_ENV, 'task-1', outcome, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'post',
@@ -188,10 +189,11 @@ describe('respond', () => {
       message: '<oops> & died',
     }
     await respond(TEST_ENV, 'task-1', outcome, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'post',
@@ -230,11 +232,12 @@ describe('respond', () => {
       slackClient,
     }
     await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       markedResponded: eventLogStore.markedResponded,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [
         {
           kind: 'post',
@@ -311,11 +314,12 @@ describe('respond', () => {
       slackClient,
     }
     await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
-    expect({
+    const actual = {
       slackCalls: slackClient.calls,
       markedResponded: eventLogStore.markedResponded,
       upserts: threadSessionStore.upserts,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       slackCalls: [],
       markedResponded: [],
       upserts: [],

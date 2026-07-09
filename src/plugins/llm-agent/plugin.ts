@@ -33,8 +33,7 @@ export interface LlmAgentPluginOptions {
   readonly botUserId: string
   readonly logger?: Logger | undefined
   readonly onAccepted?:
-    | ((accepted: LlmAgentAcceptedEvent) => void | Promise<void>)
-    | undefined
+    ((accepted: LlmAgentAcceptedEvent) => void | Promise<void>) | undefined
 }
 
 interface ExtractedFields {

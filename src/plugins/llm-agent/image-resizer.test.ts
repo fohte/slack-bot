@@ -69,12 +69,13 @@ describe('createSharpImageResizer', () => {
     const decoded = outcome.ok
       ? await sharp(outcome.bytes).metadata()
       : undefined
-    expect({
+    const actual = {
       ok: outcome.ok,
       fitsUnderCap: outcome.ok && outcome.bytes.byteLength <= cap,
       ext: outcome.ok ? outcome.ext : undefined,
       decodedFormat: decoded?.format,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       ok: true,
       fitsUnderCap: true,
       ext: 'jpg',

@@ -154,10 +154,11 @@ describe('SlackWebClient', () => {
       thread_ts: '1700000000.000050',
       status: 'is thinking...',
     })
-    expect({
+    const actual = {
       result,
       calls: mock.assistant.threads.setStatus.mock.calls,
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       result: { ok: true },
       calls: [
         [
@@ -257,19 +258,19 @@ describe('SlackWebClient', () => {
     const result = await client.downloadFile(
       'https://files.slack.com/files-pri/T1-F1/image.png',
     )
-    expect({
+    const actual = {
       fetchCalls: fetchImpl.mock.calls.map(([url, init]) => ({
         url,
         method: (init as RequestInit | undefined)?.method,
         auth: (
           (init as RequestInit | undefined)?.headers as
-            | Record<string, string>
-            | undefined
+            Record<string, string> | undefined
         )?.['Authorization'],
       })),
       contentType: result.contentType,
       bytes: Array.from(result.bytes),
-    }).toEqual({
+    }
+    expect(actual).toEqual({
       fetchCalls: [
         {
           url: 'https://files.slack.com/files-pri/T1-F1/image.png',
@@ -361,7 +362,8 @@ describe('SlackWebClient', () => {
       client: asWebClient(mock),
     })
     const result = await client.getFileInfo('F123')
-    expect({ result, calls: mock.files.info.mock.calls }).toEqual({
+    const actual = { result, calls: mock.files.info.mock.calls }
+    expect(actual).toEqual({
       result: {
         id: 'F123',
         name: 'lunch.jpg',

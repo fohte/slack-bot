@@ -23,17 +23,15 @@ describe('resolvePlugin', () => {
   })
 
   it('invokes a factory with the deps and returns the produced plugin', () => {
-    const factory = vi.fn(
-      (deps: PluginDeps): Plugin => ({
-        name: 'factory-built',
-        commands: [],
-        async onCommand(ctx) {
-          // touch deps to assert they are accessible inside the factory closure
-          ctx.ack()
-          deps.scheduler.listActive()
-        },
-      }),
-    )
+    const factory = vi.fn((deps: PluginDeps): Plugin => ({
+      name: 'factory-built',
+      commands: [],
+      async onCommand(ctx) {
+        // touch deps to assert they are accessible inside the factory closure
+        ctx.ack()
+        deps.scheduler.listActive()
+      },
+    }))
     const deps = stubDeps()
     const plugin = resolvePlugin(factory, deps)
     expect(plugin.name).toBe('factory-built')
