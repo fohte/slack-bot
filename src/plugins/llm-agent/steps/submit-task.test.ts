@@ -388,6 +388,13 @@ describe('submitTask', () => {
       },
       {
         id: 'F2',
+        name: 'at-guard.png',
+        mimetype: 'image/png',
+        size: 25 * 1024 * 1024,
+        url_private: 'https://files.slack.com/at-guard.png',
+      },
+      {
+        id: 'F3',
         name: 'ok.png',
         mimetype: 'image/png',
         size: 1024,
@@ -405,7 +412,12 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    expect(downloadCalls).toEqual(['https://files.slack.com/ok.png'])
+    // A file exactly at the guard (25 MiB) is not skipped: the check is a
+    // strict `>`, matching the web client's own Content-Length guard.
+    expect(downloadCalls).toEqual([
+      'https://files.slack.com/at-guard.png',
+      'https://files.slack.com/ok.png',
+    ])
   })
 
   it('resizes a downloaded image that exceeds the per-image cap and uses the resized bytes', async () => {
