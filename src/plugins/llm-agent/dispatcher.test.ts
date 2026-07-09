@@ -9,7 +9,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
-  createDeferred,
   createScriptedTaskCrClient,
   createStubSlackClient,
   noopConfigMapClient,
@@ -35,6 +34,7 @@ import type {
 } from '@/plugins/llm-agent/task-cr-client'
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
 import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
+import { createDeferred } from '@/server/_test-utils'
 import { createInFlightTasks } from '@/server/in-flight-tasks'
 import type { SlackWebClient } from '@/slack/web-client'
 import type {

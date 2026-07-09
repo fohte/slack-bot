@@ -34,7 +34,7 @@ export type TaskDispatcherOptions = ProcessMentionDeps & {
   // Registers the backgrounded processMention call so a graceful-shutdown
   // handler can wait for it to finish before the process exits. Omitting
   // it leaves the call as untracked fire-and-forget.
-  readonly inFlightTasks?: InFlightTasks | undefined
+  readonly inFlightTasks?: Pick<InFlightTasks, 'track'> | undefined
 }
 
 // Slack mentions can include a label form `<@U123|name>` in addition to the
