@@ -8,17 +8,23 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { noopConfigMapClient, TEST_ENV } from '@/plugins/llm-agent/_test-utils'
+import {
+  createStubSlackClient,
+  noopConfigMapClient,
+  TEST_ENV,
+} from '@/plugins/llm-agent/_test-utils'
 import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import {
   createTaskDispatcher,
   envelopeFromAccepted,
   resolveInlineImageFiles,
+  runProcessMentionInBackground,
 } from '@/plugins/llm-agent/dispatcher'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
 import type { SlackEnvelope } from '@/plugins/llm-agent/process-mention-deps'
+import { DISPATCH_FAILURE_TEXT } from '@/plugins/llm-agent/steps/report-dispatch-failure'
 import type {
   TaskCrClient,
   TaskCrCreateOutcome,
@@ -514,6 +520,49 @@ describe('createTaskDispatcher', () => {
     await expect(dispatch(acceptedMention())).rejects.toBe(failure)
   })
 
+  it('notifies the Slack thread and clears the assistant status when taskCrClient.create() fails', async () => {
+    const failure = new Error('k8s API down')
+    const slackClient = createStubSlackClient()
+    const dispatch = createTaskDispatcher({
+      configMapClient: noopConfigMapClient,
+      taskCrClient: createTaskCrClient({ createError: failure }),
+      opencodeClient: noopOpencodeClient,
+      eventLogStore: createEventLogStore(),
+      threadSessionStore: createThreadSessionStore(),
+      slackClient,
+      logger: noopLogger,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    })
+    await dispatch(acceptedMention()).catch(() => {})
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'is thinking...',
+        blocks: undefined,
+        loadingMessages: ['Preparing your task…'],
+      },
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: DISPATCH_FAILURE_TEXT,
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+  })
+
   it('returns once Received → Submitted has run, leaving the rest of the flow in the background', async () => {
     const taskCrClient = createTaskCrClient()
     const dispatch = createTaskDispatcher({
@@ -597,6 +646,53 @@ describe('createTaskDispatcher', () => {
             configMapName: `${taskCrNameForSlackEvent('Ev1')}-images`,
           },
         ],
+      },
+    ])
+  })
+})
+
+describe('runProcessMentionInBackground', () => {
+  it('notifies the Slack thread and clears the assistant status when the Task CR disappears mid-poll', async () => {
+    const slackClient = createStubSlackClient()
+    const taskCrClient: TaskCrClient = {
+      async create() {
+        throw new Error('not implemented')
+      },
+      async list() {
+        return []
+      },
+    }
+    await runProcessMentionInBackground(
+      TEST_ENV,
+      'task-1',
+      {
+        configMapClient: noopConfigMapClient,
+        taskCrClient,
+        opencodeClient: noopOpencodeClient,
+        eventLogStore: createEventLogStore(),
+        threadSessionStore: createThreadSessionStore(),
+        slackClient,
+        pollIntervalMs: 0,
+        sleep: async () => {},
+      },
+      noopLogger,
+    )
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: DISPATCH_FAILURE_TEXT,
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
       },
     ])
   })
