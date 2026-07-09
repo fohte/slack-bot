@@ -75,14 +75,19 @@ export const startResponseReconciler = (
 
     const status = statusByName.get(taskName)
     if (status === undefined) {
+      // A missing Task CR (e.g. deleted by an operator) can never reach a
+      // terminal phase again, so mark the row responded to drop it from
+      // findDispatchedUnresponded — otherwise it would warn on every tick
+      // for the rest of its 7-day event_log retention.
       logger.warn(
         {
           event: 'llm_agent_response_reconcile_task_cr_missing',
           task_name: taskName,
           slack_event_id: row.slackEventId,
         },
-        'llm-agent reconciler found no Task CR for an unresponded event_log row',
+        'llm-agent reconciler found no Task CR for an unresponded event_log row; giving up and marking it responded',
       )
+      await resolved.eventLogStore.markResponded(row.slackEventId)
       return false
     }
 
@@ -115,57 +120,69 @@ export const startResponseReconciler = (
     return posted
   }
 
+  // Guards against overlapping ticks: setInterval fires on a fixed cadence
+  // regardless of how long the previous runOnce() is still taking (slow DB,
+  // Kubernetes API, or Slack/opencode calls), so without this a slow run
+  // would pile up concurrent runs against the same rows.
+  let isRunning = false
+
   const runOnce = async (): Promise<number> => {
-    let rows: readonly EventLogRow[]
+    if (isRunning) return 0
+    isRunning = true
     try {
-      rows = await resolved.eventLogStore.findDispatchedUnresponded(
-        new Date(now() - graceMs),
-      )
-    } catch (error) {
-      logger.error(
-        {
-          event: 'llm_agent_response_reconcile_query_failed',
-          err: error,
-        },
-        'llm-agent reconciler failed to query dispatched-but-unresponded event_log rows',
-      )
-      return 0
-    }
-    if (rows.length === 0) return 0
-
-    let statuses: readonly TaskCrStatus[]
-    try {
-      statuses = await resolved.taskCrClient.list(resolved.namespace)
-    } catch (error) {
-      logger.error(
-        {
-          event: 'llm_agent_response_reconcile_list_failed',
-          namespace: resolved.namespace,
-          err: error,
-        },
-        'llm-agent reconciler failed to list Task CRs',
-      )
-      return 0
-    }
-    const statusByName = new Map(statuses.map((s) => [s.name, s] as const))
-
-    let recovered = 0
-    for (const row of rows) {
+      let rows: readonly EventLogRow[]
       try {
-        if (await reconcileRow(row, statusByName)) recovered++
+        rows = await resolved.eventLogStore.findDispatchedUnresponded(
+          new Date(now() - graceMs),
+        )
       } catch (error) {
         logger.error(
           {
-            event: 'llm_agent_response_reconcile_respond_failed',
-            task_name: row.taskName,
-            slack_event_id: row.slackEventId,
+            event: 'llm_agent_response_reconcile_query_failed',
             err: error,
           },
-          'llm-agent reconciler failed to recover a Task response',
+          'llm-agent reconciler failed to query dispatched-but-unresponded event_log rows',
         )
+        return 0
       }
+      if (rows.length === 0) return 0
+
+      let statuses: readonly TaskCrStatus[]
+      try {
+        statuses = await resolved.taskCrClient.list(resolved.namespace)
+      } catch (error) {
+        logger.error(
+          {
+            event: 'llm_agent_response_reconcile_list_failed',
+            namespace: resolved.namespace,
+            err: error,
+          },
+          'llm-agent reconciler failed to list Task CRs',
+        )
+        return 0
+      }
+      const statusByName = new Map(statuses.map((s) => [s.name, s] as const))
+
+      let recovered = 0
+      for (const row of rows) {
+        try {
+          if (await reconcileRow(row, statusByName)) recovered++
+        } catch (error) {
+          logger.error(
+            {
+              event: 'llm_agent_response_reconcile_respond_failed',
+              task_name: row.taskName,
+              slack_event_id: row.slackEventId,
+              err: error,
+            },
+            'llm-agent reconciler failed to recover a Task response',
+          )
+        }
+      }
+      return recovered
+    } finally {
+      isRunning = false
     }
-    return recovered
   }
 
   const timer = setIntervalImpl(() => {

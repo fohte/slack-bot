@@ -180,7 +180,7 @@ describe('startResponseReconciler', () => {
     })
   })
 
-  it('does nothing when no Task CR in the namespace matches the row', async () => {
+  it('marks the row responded without posting when no Task CR in the namespace matches it, so it is never reconciled again', async () => {
     const slackClient = createStubSlackClient()
     const eventLogStore = createScriptedEventLogStore({
       findDispatchedUnresponded: () => [row()],
@@ -192,9 +192,14 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+    expect({
+      recovered,
+      slackCalls: slackClient.calls,
+      markedResponded: eventLogStore.markedResponded,
+    }).toEqual({
       recovered: 0,
       slackCalls: [],
+      markedResponded: ['Ev1'],
     })
   })
 
@@ -414,6 +419,31 @@ describe('startResponseReconciler', () => {
     await handle.runOnce()
 
     expect(seenCutoffs).toEqual([new Date(95_000)])
+  })
+
+  it('skips a run that starts while a previous run is still in flight', async () => {
+    let releasePendingQuery: (() => void) | undefined
+    let queryCalls = 0
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => {
+        queryCalls += 1
+        return new Promise<readonly EventLogRow[]>((resolve) => {
+          releasePendingQuery = () => resolve([])
+        })
+      },
+    })
+    const handle = startResponseReconciler(baseDeps({ eventLogStore }))
+
+    const firstRun = handle.runOnce()
+    const secondRun = handle.runOnce()
+    releasePendingQuery?.()
+    const [firstResult, secondResult] = await Promise.all([firstRun, secondRun])
+
+    expect({ firstResult, secondResult, queryCalls }).toEqual({
+      firstResult: 0,
+      secondResult: 0,
+      queryCalls: 1,
+    })
   })
 
   it('schedules the reconciler on the requested interval and stop clears it', () => {

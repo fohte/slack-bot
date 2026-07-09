@@ -134,7 +134,9 @@ export interface ScriptedEventLogStore extends EventLogStore {
 export const createScriptedEventLogStore = (
   options: {
     findByTaskName?: (taskName: string) => EventLogRow | undefined
-    findDispatchedUnresponded?: (receivedBefore: Date) => readonly EventLogRow[]
+    findDispatchedUnresponded?: (
+      receivedBefore: Date,
+    ) => readonly EventLogRow[] | Promise<readonly EventLogRow[]>
     alreadyResponded?: boolean
   } = {},
 ): ScriptedEventLogStore => {
@@ -156,7 +158,7 @@ export const createScriptedEventLogStore = (
       return options.findByTaskName?.(taskName)
     },
     async findDispatchedUnresponded(receivedBefore) {
-      return options.findDispatchedUnresponded?.(receivedBefore) ?? []
+      return (await options.findDispatchedUnresponded?.(receivedBefore)) ?? []
     },
     async markResponded(slackEventId) {
       if (options.alreadyResponded === true || responded.has(slackEventId)) {

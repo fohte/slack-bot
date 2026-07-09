@@ -3,6 +3,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
 import { eventLog } from '@/db/schema'
 
+// Caps a single findDispatchedUnresponded query so a large backlog (e.g.
+// during an extended outage) cannot pull an unbounded result set into
+// memory; the response reconciler picks up any remainder on its next tick.
+const FIND_DISPATCHED_UNRESPONDED_LIMIT = 100
+
 export type EventLogOutcome = 'accepted' | 'rejected_duplicate' | 'responded'
 
 export interface EventLogRecord {
@@ -128,6 +133,7 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
         ),
       )
       .orderBy(eventLog.receivedAt)
+      .limit(FIND_DISPATCHED_UNRESPONDED_LIMIT)
     return rows.map((row) => ({
       slackEventId: row.slackEventId,
       outcome: row.outcome,
