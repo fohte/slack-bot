@@ -1,4 +1,4 @@
-import { and, eq, lt, ne } from 'drizzle-orm'
+import { and, eq, isNotNull, lt, ne } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
 import { eventLog } from '@/db/schema'
@@ -37,6 +37,14 @@ export interface EventLogStore {
     taskName: string,
   ): Promise<{ updated: number }>
   findByTaskName(taskName: string): Promise<EventLogRow | undefined>
+  // Rows dispatched (task_name set) but not yet responded, received before
+  // `receivedBefore`. Backs the response reconciler that recovers Task
+  // completions a dead Pod never got to post to Slack. There is no separate
+  // dispatch timestamp on this table, so this filters on `received_at`,
+  // which only approximates how long a row has actually been dispatched.
+  findDispatchedUnresponded(
+    receivedBefore: Date,
+  ): Promise<readonly EventLogRow[]>
   markResponded(slackEventId: string): Promise<{ updated: number }>
   unmarkResponded(slackEventId: string): Promise<{ updated: number }>
   pruneOlderThan(cutoff: Date): Promise<number>
@@ -100,6 +108,34 @@ export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
       threadRootTs: normalize(row.threadRootTs),
       taskName: normalize(row.taskName),
     }
+  },
+  async findDispatchedUnresponded(receivedBefore) {
+    const rows = await db
+      .select({
+        slackEventId: eventLog.slackEventId,
+        outcome: eventLog.outcome,
+        slackTeamId: eventLog.slackTeamId,
+        slackChannelId: eventLog.slackChannelId,
+        threadRootTs: eventLog.threadRootTs,
+        taskName: eventLog.taskName,
+      })
+      .from(eventLog)
+      .where(
+        and(
+          isNotNull(eventLog.taskName),
+          ne(eventLog.outcome, 'responded'),
+          lt(eventLog.receivedAt, receivedBefore),
+        ),
+      )
+      .orderBy(eventLog.receivedAt)
+    return rows.map((row) => ({
+      slackEventId: row.slackEventId,
+      outcome: row.outcome,
+      slackTeamId: normalize(row.slackTeamId),
+      slackChannelId: normalize(row.slackChannelId),
+      threadRootTs: normalize(row.threadRootTs),
+      taskName: normalize(row.taskName),
+    }))
   },
   async markResponded(slackEventId) {
     // Only transition rows that are not yet responded; the conditional

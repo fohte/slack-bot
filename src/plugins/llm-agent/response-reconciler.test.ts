@@ -1,0 +1,444 @@
+import { describe, expect, it, vi } from 'vitest'
+
+import {
+  createScriptedEventLogStore,
+  createScriptedThreadSessionStore,
+  createStubSlackClient,
+  fixedOpencodeClient,
+  noopConfigMapClient,
+} from '@/plugins/llm-agent/_test-utils'
+import type { EventLogRow } from '@/plugins/llm-agent/event-log-store'
+import type { ResponseReconcilerOptions } from '@/plugins/llm-agent/response-reconciler'
+import {
+  RESPONSE_RECONCILER_DEFAULT_GRACE_MS,
+  RESPONSE_RECONCILER_DEFAULT_INTERVAL_MS,
+  startResponseReconciler,
+} from '@/plugins/llm-agent/response-reconciler'
+import type {
+  TaskCrClient,
+  TaskCrStatus,
+} from '@/plugins/llm-agent/task-cr-client'
+
+const row = (overrides: Partial<EventLogRow> = {}): EventLogRow => ({
+  slackEventId: 'Ev1',
+  outcome: 'accepted',
+  slackTeamId: 'T1',
+  slackChannelId: 'C1',
+  threadRootTs: '111.222',
+  taskName: 'task-1',
+  ...overrides,
+})
+
+interface FixedTaskCrClient extends TaskCrClient {
+  readonly listCalls: () => number
+}
+
+const createFixedTaskCrClient = (
+  statuses: readonly TaskCrStatus[],
+  listImpl?: () => Promise<readonly TaskCrStatus[]>,
+): FixedTaskCrClient => {
+  let calls = 0
+  return {
+    listCalls: () => calls,
+    async create() {
+      throw new Error('not used in reconciler tests')
+    },
+    async list() {
+      calls += 1
+      return listImpl ? await listImpl() : statuses
+    },
+  }
+}
+
+const baseDeps = (
+  overrides: Partial<ResponseReconcilerOptions> = {},
+): ResponseReconcilerOptions => ({
+  configMapClient: noopConfigMapClient,
+  taskCrClient: createFixedTaskCrClient([]),
+  opencodeClient: fixedOpencodeClient({
+    sessionId: 'ses_xyz',
+    assistantText: 'answer',
+  }),
+  eventLogStore: createScriptedEventLogStore(),
+  threadSessionStore: createScriptedThreadSessionStore(),
+  slackClient: createStubSlackClient(),
+  ...overrides,
+})
+
+describe('startResponseReconciler', () => {
+  it('recovers a Completed task by posting the Slack response and marking it responded', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [row()],
+    })
+    const taskCrClient = createFixedTaskCrClient([
+      {
+        name: 'task-1',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+    ])
+    const handle = startResponseReconciler(
+      baseDeps({ slackClient, eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({
+      recovered,
+      slackCalls: slackClient.calls,
+      markedResponded: eventLogStore.markedResponded,
+    }).toEqual({
+      recovered: 1,
+      slackCalls: [
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'answer',
+          blocks: [{ type: 'markdown', text: 'answer' }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ],
+      markedResponded: ['Ev1'],
+    })
+  })
+
+  it('recovers a Failed task by posting the failure message', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [row()],
+    })
+    const taskCrClient = createFixedTaskCrClient([
+      {
+        name: 'task-1',
+        namespace: 'kubeopencode',
+        phase: 'Failed',
+        message: 'boom',
+      },
+    ])
+    const handle = startResponseReconciler(
+      baseDeps({ slackClient, eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+      recovered: 1,
+      slackCalls: [
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'Task failed: boom',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ],
+    })
+  })
+
+  it('does nothing for a Task CR that is still running', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [row()],
+    })
+    const taskCrClient = createFixedTaskCrClient([
+      {
+        name: 'task-1',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+    ])
+    const handle = startResponseReconciler(
+      baseDeps({ slackClient, eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+      recovered: 0,
+      slackCalls: [],
+    })
+  })
+
+  it('does nothing when no Task CR in the namespace matches the row', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [row()],
+    })
+    const taskCrClient = createFixedTaskCrClient([])
+    const handle = startResponseReconciler(
+      baseDeps({ slackClient, eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+      recovered: 0,
+      slackCalls: [],
+    })
+  })
+
+  it('skips a row missing envelope fields instead of throwing', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [row({ slackChannelId: undefined })],
+    })
+    const taskCrClient = createFixedTaskCrClient([
+      {
+        name: 'task-1',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+    ])
+    const handle = startResponseReconciler(
+      baseDeps({ slackClient, eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+      recovered: 0,
+      slackCalls: [],
+    })
+  })
+
+  it('does not call taskCrClient.list when there are no dispatched-but-unresponded rows', async () => {
+    const taskCrClient = createFixedTaskCrClient([])
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [],
+    })
+    const handle = startResponseReconciler(
+      baseDeps({ eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({ recovered, listCalls: taskCrClient.listCalls() }).toEqual({
+      recovered: 0,
+      listCalls: 0,
+    })
+  })
+
+  it('processes multiple rows in one tick, recovering only the terminal ones', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [
+        row({ slackEventId: 'Ev1', taskName: 'task-1' }),
+        row({ slackEventId: 'Ev2', taskName: 'task-2' }),
+        row({ slackEventId: 'Ev3', taskName: 'task-3' }),
+      ],
+    })
+    const taskCrClient = createFixedTaskCrClient([
+      {
+        name: 'task-1',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+      {
+        name: 'task-2',
+        namespace: 'kubeopencode',
+        phase: 'Running',
+        message: undefined,
+      },
+      {
+        name: 'task-3',
+        namespace: 'kubeopencode',
+        phase: 'Failed',
+        message: 'oops',
+      },
+    ])
+    const handle = startResponseReconciler(
+      baseDeps({ slackClient, eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+      recovered: 2,
+      slackCalls: [
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'answer',
+          blocks: [{ type: 'markdown', text: 'answer' }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'Task failed: oops',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ],
+    })
+  })
+
+  it('returns 0 and swallows the error when findDispatchedUnresponded throws', async () => {
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => {
+        throw new Error('db down')
+      },
+    })
+    const handle = startResponseReconciler(baseDeps({ eventLogStore }))
+
+    await expect(handle.runOnce()).resolves.toBe(0)
+  })
+
+  it('returns 0 and swallows the error when taskCrClient.list throws', async () => {
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [row()],
+    })
+    const taskCrClient = createFixedTaskCrClient([], async () => {
+      throw new Error('k8s unreachable')
+    })
+    const handle = startResponseReconciler(
+      baseDeps({ eventLogStore, taskCrClient }),
+    )
+
+    await expect(handle.runOnce()).resolves.toBe(0)
+  })
+
+  it('continues to the next row when respond() throws while posting for an earlier row', async () => {
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: () => [
+        row({ slackEventId: 'Ev1', taskName: 'task-1' }),
+        row({ slackEventId: 'Ev2', taskName: 'task-2' }),
+      ],
+    })
+    const taskCrClient = createFixedTaskCrClient([
+      {
+        name: 'task-1',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+      {
+        name: 'task-2',
+        namespace: 'kubeopencode',
+        phase: 'Completed',
+        message: undefined,
+      },
+    ])
+    const slackClient = createStubSlackClient()
+    let postCalls = 0
+    const originalPostMessage = slackClient.postMessage.bind(slackClient)
+    slackClient.postMessage = (async (
+      arg: Parameters<typeof originalPostMessage>[0],
+    ) => {
+      postCalls += 1
+      if (postCalls === 1) throw new Error('slack down')
+      return originalPostMessage(arg)
+    }) as typeof slackClient.postMessage
+    const handle = startResponseReconciler(
+      baseDeps({ slackClient, eventLogStore, taskCrClient }),
+    )
+
+    const recovered = await handle.runOnce()
+
+    expect({ recovered, slackCalls: slackClient.calls }).toEqual({
+      recovered: 1,
+      slackCalls: [
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'answer',
+          blocks: [{ type: 'markdown', text: 'answer' }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ],
+    })
+  })
+
+  it('passes now() - graceMs as the received-before cutoff to findDispatchedUnresponded', async () => {
+    const seenCutoffs: Date[] = []
+    const eventLogStore = createScriptedEventLogStore({
+      findDispatchedUnresponded: (receivedBefore) => {
+        seenCutoffs.push(receivedBefore)
+        return []
+      },
+    })
+    const handle = startResponseReconciler(
+      baseDeps({ eventLogStore, graceMs: 5_000, now: () => 100_000 }),
+    )
+
+    await handle.runOnce()
+
+    expect(seenCutoffs).toEqual([new Date(95_000)])
+  })
+
+  it('schedules the reconciler on the requested interval and stop clears it', () => {
+    const fakeTimer = Symbol('timer') as unknown as NodeJS.Timeout
+    const setIntervalImpl = vi.fn<
+      (callback: () => void, ms: number) => NodeJS.Timeout
+    >(() => fakeTimer)
+    const clearIntervalImpl = vi.fn<(handle: NodeJS.Timeout) => void>()
+    const handle = startResponseReconciler(
+      baseDeps({ intervalMs: 12_345, setIntervalImpl, clearIntervalImpl }),
+    )
+
+    expect(setIntervalImpl.mock.calls.map((args) => args[1])).toEqual([12_345])
+
+    handle.stop()
+    expect(clearIntervalImpl.mock.calls).toEqual([[fakeTimer]])
+  })
+
+  it('exposes default grace and interval constants used when options are omitted', () => {
+    expect({
+      graceMs: RESPONSE_RECONCILER_DEFAULT_GRACE_MS,
+      intervalMs: RESPONSE_RECONCILER_DEFAULT_INTERVAL_MS,
+    }).toEqual({
+      graceMs: 2 * 60 * 1000,
+      intervalMs: 60 * 1000,
+    })
+  })
+})
