@@ -9,12 +9,18 @@ export const createInFlightTasks = (): InFlightTasks => {
   const track = <T>(promise: Promise<T>): Promise<T> => {
     // Normalized to never reject so a caller-swallowed rejection can't
     // surface here as an unhandled rejection while nothing is draining yet.
-    const settled = promise.then(
-      () => undefined,
-      () => undefined,
+    // Deletes `settled` from within its own callbacks (rather than chaining
+    // another `.then()`) so the entry is gone from `pending` before
+    // `Promise.all(pending)` in waitForIdle() observes it as resolved.
+    const settled: Promise<void> = promise.then(
+      () => {
+        pending.delete(settled)
+      },
+      () => {
+        pending.delete(settled)
+      },
     )
     pending.add(settled)
-    void settled.then(() => pending.delete(settled))
     return promise
   }
 
