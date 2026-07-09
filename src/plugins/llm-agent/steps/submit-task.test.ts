@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  createRecordingLogger,
   createScriptedEventLogStore,
   createScriptedImageResizer,
   createScriptedTaskCrClient,
@@ -115,6 +116,46 @@ describe('submitTask', () => {
         },
       ],
       marked: [{ id: 'Ev1', name: expectedName }],
+    })
+  })
+
+  it('still returns the Task CR result when recording task_name fails, since the Task CR already exists', async () => {
+    const markTaskNameError = new Error('connection reset')
+    const taskCrClient = createScriptedTaskCrClient([])
+    const logger = createRecordingLogger()
+    const deps: ProcessMentionDeps = {
+      taskCrClient,
+      configMapClient: noopConfigMapClient,
+      opencodeClient: fixedOpencodeClient(),
+      eventLogStore: createScriptedEventLogStore({ markTaskNameError }),
+      threadSessionStore: createScriptedThreadSessionStore(),
+      slackClient: createStubSlackClient(),
+      logger,
+    }
+
+    const expectedName = taskCrNameForSlackEvent(TEST_ENV.eventId)
+    const result = await submitTask(TEST_ENV, deps)
+
+    expect({
+      result,
+      creates: taskCrClient.creates.map((c) => c.name),
+      logEntries: logger.entries,
+    }).toEqual({
+      result: { taskName: expectedName },
+      creates: [expectedName],
+      logEntries: [
+        {
+          level: 'error',
+          payload: {
+            event: 'llm_agent_event_log_task_name_write_failed',
+            event_id: 'Ev1',
+            task_name: expectedName,
+            err: markTaskNameError,
+          },
+          message:
+            'failed to record task_name on event_log row after Task CR creation succeeded',
+        },
+      ],
     })
   })
 

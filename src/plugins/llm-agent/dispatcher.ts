@@ -19,6 +19,7 @@ import type {
   ProcessMentionDeps,
   SlackEnvelope,
 } from '@/plugins/llm-agent/process-mention-deps'
+import { reportDispatchFailure } from '@/plugins/llm-agent/steps/report-dispatch-failure'
 import { submitTask } from '@/plugins/llm-agent/steps/submit-task'
 import type { SlackWebClient } from '@/slack/web-client'
 import type { SlackFile } from '@/types/slack-payloads'
@@ -207,6 +208,30 @@ export const resolveInlineImageFiles = async (
   }
 }
 
+// Exported for direct unit testing of the failure-handling branch.
+export const runProcessMentionInBackground = async (
+  env: SlackEnvelope,
+  taskName: string,
+  options: TaskDispatcherOptions,
+  logger: Logger,
+): Promise<void> => {
+  try {
+    await processMention(env, taskName, options, {
+      initialBubble: INITIAL_PHASE_STATUS,
+    })
+  } catch (error) {
+    logger.error(
+      {
+        event: 'llm_agent_process_mention_failed',
+        event_id: env.eventId,
+        err: error,
+      },
+      'llm-agent processMention failed',
+    )
+    await reportDispatchFailure(env, options)
+  }
+}
+
 export const createTaskDispatcher = (
   options: TaskDispatcherOptions,
 ): TaskDispatcher => {
@@ -244,23 +269,21 @@ export const createTaskDispatcher = (
           // create() failures must reach onAccepted for the event_log rollback;
           // downstream steps run detached so the Slack HTTP handler can ack.
           const { taskName } = await submitTask(env, options)
-          void processMention(env, taskName, options, {
-            initialBubble: INITIAL_PHASE_STATUS,
-          }).catch((error: unknown) => {
-            logger.error(
-              {
-                event: 'llm_agent_process_mention_failed',
-                event_id: env.eventId,
-                err: error,
-              },
-              'llm-agent processMention failed',
-            )
-          })
+          void runProcessMentionInBackground(env, taskName, options, logger)
         } catch (err) {
           span.recordException(
             err instanceof Error ? err : { message: String(err) },
           )
           span.setStatus({ code: SpanStatusCode.ERROR })
+          logger.error(
+            {
+              event: 'llm_agent_submit_task_failed',
+              event_id: env.eventId,
+              err,
+            },
+            'llm-agent submitTask failed before dispatch completed',
+          )
+          await reportDispatchFailure(env, options)
           throw err
         } finally {
           span.end()
