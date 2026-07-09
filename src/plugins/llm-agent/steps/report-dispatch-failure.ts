@@ -19,10 +19,8 @@ export const DISPATCH_FAILURE_TEXT =
 // generic failure message and clear the "thinking..." indicator so it
 // doesn't sit stuck in the thread forever. Never throws — both Slack
 // calls swallow their own errors, since callers reach this from a
-// failure path with nothing further to roll back to. Runs both calls
-// concurrently: this runs synchronously in the Task CR create failure
-// path, ahead of the Slack HTTP handler's ack, so serializing two
-// network round trips here risks tripping Slack's 3s ack timeout.
+// failure path with nothing further to roll back to. The two calls are
+// independent, so serializing them would only add needless latency.
 export const reportDispatchFailure = async (
   env: SlackEnvelope,
   deps: ProcessMentionDeps,
