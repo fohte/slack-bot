@@ -3,6 +3,10 @@ import type {
   EventLogRow,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
+import type {
+  ImageResizer,
+  ResizeOutcome,
+} from '@/plugins/llm-agent/image-resizer'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { SlackEnvelope } from '@/plugins/llm-agent/process-mention'
 import type {
@@ -208,6 +212,23 @@ export const TEST_ENV: SlackEnvelope = {
   threadRootTs: '111.222',
   text: 'hello bot',
   images: [],
+}
+
+export interface ScriptedImageResizer extends ImageResizer {
+  readonly calls: ReadonlyArray<{ readonly maxBytes: number }>
+}
+
+export const createScriptedImageResizer = (
+  resize: (bytes: Uint8Array, maxBytes: number) => ResizeOutcome,
+): ScriptedImageResizer => {
+  const calls: Array<{ maxBytes: number }> = []
+  return {
+    calls,
+    async resize(bytes, maxBytes) {
+      calls.push({ maxBytes })
+      return resize(bytes, maxBytes)
+    },
+  }
 }
 
 export const noopConfigMapClient: ConfigMapClient = {

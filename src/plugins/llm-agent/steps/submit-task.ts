@@ -9,6 +9,7 @@ import type {
 import { resolveDeps } from '@/plugins/llm-agent/process-mention-deps'
 import type { TaskCrContext } from '@/plugins/llm-agent/task-cr-client'
 import { taskCrNameForSlackEvent } from '@/plugins/llm-agent/task-cr-client'
+import { SLACK_FILE_DOWNLOAD_MAX_BYTES } from '@/slack/web-client'
 import type { SlackFile } from '@/types/slack-payloads'
 
 export const SLACK_IMAGES_MOUNT_PATH = 'slack-images'
@@ -102,13 +103,17 @@ const extForImage = (file: SlackFile): string => {
 // ConfigMap binaryData keys must be DNS-subdomain-ish: lowercase alnum, dot,
 // hyphen. The numeric index prefix guarantees uniqueness even if two files
 // share the same id, which Slack does not formally promise.
-const configMapKeyFor = (file: SlackFile, index: number): string => {
+const configMapKeyFor = (
+  file: SlackFile,
+  index: number,
+  ext: string,
+): string => {
   const idPart =
     typeof file.id === 'string' && file.id.length > 0
       ? file.id.toLowerCase().replace(/[^a-z0-9.-]/g, '-')
       : `image`
   const prefix = String(index + 1).padStart(2, '0')
-  return `${prefix}-${idPart}.${extForImage(file)}`
+  return `${prefix}-${idPart}.${ext}`
 }
 
 export const configMapNameForSlackEvent = (taskName: string): string =>
@@ -118,6 +123,53 @@ interface DownloadedImage {
   readonly file: SlackFile
   readonly key: string
   readonly bytes: Uint8Array
+}
+
+interface FittedImage {
+  readonly bytes: Uint8Array
+  readonly ext: string
+}
+
+// Returns the bytes unchanged if they already fit perImageCap, otherwise
+// attempts a resize and returns undefined if even that can't bring the
+// image under the cap.
+const fitImageToCap = async (
+  resolved: ResolvedDeps,
+  env: SlackEnvelope,
+  file: SlackFile,
+  bytes: Uint8Array,
+  perImageCap: number,
+): Promise<FittedImage | undefined> => {
+  if (bytes.byteLength <= perImageCap) {
+    return { bytes, ext: extForImage(file) }
+  }
+  const outcome = await resolved.imageResizer.resize(bytes, perImageCap)
+  if (!outcome.ok) {
+    resolved.logger.warn(
+      {
+        event: 'llm_agent_slack_image_too_large',
+        event_id: env.eventId,
+        slack_file_id: file.id,
+        bytes: bytes.byteLength,
+        cap: perImageCap,
+        reason: outcome.reason,
+      },
+      'slack image exceeds cap and could not be resized to fit; dropping this attachment',
+    )
+    return undefined
+  }
+  resolved.logger.info(
+    {
+      event: 'llm_agent_slack_image_resized',
+      event_id: env.eventId,
+      slack_file_id: file.id,
+      original_bytes: bytes.byteLength,
+      resized_bytes: outcome.bytes.byteLength,
+      cap: perImageCap,
+    },
+    'slack image exceeded cap; resized to fit',
+  )
+  return { bytes: outcome.bytes, ext: outcome.ext }
 }
 
 const downloadImages = async (
@@ -131,28 +183,7 @@ const downloadImages = async (
   for (let index = 0; index < env.images.length; index++) {
     const file = env.images[index]
     if (file === undefined) continue
-    const url = file.url_private_download ?? file.url_private
-    if (typeof url !== 'string' || url.length === 0) continue
-    // Drop oversize attachments via Slack metadata before downloading so we
-    // don't burn bandwidth on bytes we'd reject below.
-    if (typeof file.size === 'number' && file.size > SINGLE_IMAGE_BYTE_CAP) {
-      resolved.logger.warn(
-        {
-          event: 'llm_agent_slack_image_too_large',
-          event_id: env.eventId,
-          slack_file_id: file.id,
-          bytes: file.size,
-          cap: SINGLE_IMAGE_BYTE_CAP,
-          checked_pre_download: true,
-        },
-        'slack image exceeds per-image cap; dropping this attachment',
-      )
-      continue
-    }
-    if (
-      typeof file.size === 'number' &&
-      totalBytes + file.size > TOTAL_IMAGE_BYTE_CAP
-    ) {
+    if (totalBytes >= TOTAL_IMAGE_BYTE_CAP) {
       resolved.logger.warn(
         {
           event: 'llm_agent_slack_image_total_cap_reached',
@@ -160,11 +191,31 @@ const downloadImages = async (
           slack_file_id: file.id,
           total_bytes: totalBytes,
           cap: TOTAL_IMAGE_BYTE_CAP,
-          checked_pre_download: true,
         },
         'slack image would push ConfigMap over total cap; dropping this and any later attachments',
       )
       break
+    }
+    const url = file.url_private_download ?? file.url_private
+    if (typeof url !== 'string' || url.length === 0) continue
+    // Unlike the per-image resize cap, nothing can salvage a download that
+    // the web client's own OOM guard will reject outright, so it's worth
+    // skipping the request when Slack's metadata already rules it out.
+    if (
+      typeof file.size === 'number' &&
+      file.size > SLACK_FILE_DOWNLOAD_MAX_BYTES
+    ) {
+      resolved.logger.warn(
+        {
+          event: 'llm_agent_slack_image_download_too_large',
+          event_id: env.eventId,
+          slack_file_id: file.id,
+          bytes: file.size,
+          cap: SLACK_FILE_DOWNLOAD_MAX_BYTES,
+        },
+        'slack image exceeds the download size guard; dropping this attachment without downloading',
+      )
+      continue
     }
     let bytes: Uint8Array
     try {
@@ -182,37 +233,19 @@ const downloadImages = async (
       )
       continue
     }
-    if (bytes.byteLength > SINGLE_IMAGE_BYTE_CAP) {
-      resolved.logger.warn(
-        {
-          event: 'llm_agent_slack_image_too_large',
-          event_id: env.eventId,
-          slack_file_id: file.id,
-          bytes: bytes.byteLength,
-          cap: SINGLE_IMAGE_BYTE_CAP,
-        },
-        'slack image exceeds per-image cap; dropping this attachment',
-      )
-      continue
-    }
-    if (totalBytes + bytes.byteLength > TOTAL_IMAGE_BYTE_CAP) {
-      resolved.logger.warn(
-        {
-          event: 'llm_agent_slack_image_total_cap_reached',
-          event_id: env.eventId,
-          slack_file_id: file.id,
-          total_bytes: totalBytes,
-          cap: TOTAL_IMAGE_BYTE_CAP,
-        },
-        'slack image would push ConfigMap over total cap; dropping this and any later attachments',
-      )
-      break
-    }
-    totalBytes += bytes.byteLength
+    // The remaining total budget can be smaller than the per-image cap once
+    // earlier images have already consumed part of it.
+    const perImageCap = Math.min(
+      SINGLE_IMAGE_BYTE_CAP,
+      TOTAL_IMAGE_BYTE_CAP - totalBytes,
+    )
+    const fitted = await fitImageToCap(resolved, env, file, bytes, perImageCap)
+    if (fitted === undefined) continue
+    totalBytes += fitted.bytes.byteLength
     downloaded.push({
       file,
-      key: configMapKeyFor(file, index),
-      bytes,
+      key: configMapKeyFor(file, index, fitted.ext),
+      bytes: fitted.bytes,
     })
   }
   return downloaded
@@ -262,7 +295,7 @@ const composeDescription = (
   if (downloaded.length > 0) blocks.push(describeImagesForAgent(downloaded))
   if (dropped > 0) {
     blocks.push(
-      `Note: ${String(dropped)} attached image(s) could not be loaded (download failed or exceeded the workspace size budget) and are not available. Tell the user you couldn't read those images.`,
+      `Note: ${String(dropped)} attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.`,
     )
   }
   if (envText.length > 0) blocks.push(envText)

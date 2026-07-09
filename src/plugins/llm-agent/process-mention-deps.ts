@@ -2,6 +2,8 @@ import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
+import type { ImageResizer } from '@/plugins/llm-agent/image-resizer'
+import { createSharpImageResizer } from '@/plugins/llm-agent/image-resizer'
 import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
 import type { TaskCrClient } from '@/plugins/llm-agent/task-cr-client'
 import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
@@ -30,6 +32,7 @@ export interface ProcessMentionDeps {
   readonly eventLogStore: EventLogStore
   readonly threadSessionStore: ThreadSessionStore
   readonly slackClient: SlackWebClient
+  readonly imageResizer?: ImageResizer | undefined
   readonly namespace?: string | undefined
   readonly agentName?: string | undefined
   readonly successFallbackText?: string | undefined
@@ -45,6 +48,7 @@ export interface ResolvedDeps {
   readonly eventLogStore: EventLogStore
   readonly threadSessionStore: ThreadSessionStore
   readonly slackClient: SlackWebClient
+  readonly imageResizer: ImageResizer
   readonly namespace: string
   readonly agentName: string
   readonly successFallbackText: string
@@ -63,6 +67,7 @@ export const resolveDeps = (deps: ProcessMentionDeps): ResolvedDeps => ({
   eventLogStore: deps.eventLogStore,
   threadSessionStore: deps.threadSessionStore,
   slackClient: deps.slackClient,
+  imageResizer: deps.imageResizer ?? createSharpImageResizer(),
   namespace: deps.namespace ?? DEFAULT_TASK_CR_NAMESPACE,
   agentName: deps.agentName ?? DEFAULT_TASK_CR_AGENT_NAME,
   successFallbackText: deps.successFallbackText ?? DEFAULT_SUCCESS_FALLBACK,
