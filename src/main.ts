@@ -103,7 +103,6 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
 
   const shutdown = createShutdownHandler({
     server: httpServer,
-    health: server.health,
     inFlightTasks,
     logger,
   })

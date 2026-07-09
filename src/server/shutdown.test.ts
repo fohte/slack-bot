@@ -5,13 +5,10 @@ import { createDeferred } from '@/server/_test-utils'
 import { createShutdownHandler } from '@/server/shutdown'
 
 describe('createShutdownHandler', () => {
-  it('sets not-ready, closes the server, drains in-flight tasks, then exits', async () => {
+  it('drains in-flight tasks, closes the server, then exits', async () => {
     const timeline: string[] = []
     const idle = createDeferred<undefined>()
     const handler = createShutdownHandler({
-      health: {
-        setNotReady: () => timeline.push('not-ready'),
-      },
       server: {
         close: (callback) => {
           timeline.push('server-closed')
@@ -32,19 +29,13 @@ describe('createShutdownHandler', () => {
     const result = handler('SIGTERM')
     idle.resolve(undefined)
     await result
-    expect(timeline).toEqual([
-      'not-ready',
-      'server-closed',
-      'drained',
-      'exited:0',
-    ])
+    expect(timeline).toEqual(['drained', 'server-closed', 'exited:0'])
   })
 
   it('ignores a second signal received while already shutting down', async () => {
     let closeCalls = 0
     const idle = createDeferred<undefined>()
     const handler = createShutdownHandler({
-      health: { setNotReady: () => {} },
       server: {
         close: (callback) => {
           closeCalls += 1
