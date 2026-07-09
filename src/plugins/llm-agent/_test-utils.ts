@@ -134,12 +134,15 @@ export interface ScriptedEventLogStore extends EventLogStore {
 export const createScriptedEventLogStore = (
   options: {
     findByTaskName?: (taskName: string) => EventLogRow | undefined
+    findDispatchedUnresponded?: (
+      receivedBefore: Date,
+    ) => readonly EventLogRow[] | Promise<readonly EventLogRow[]>
     alreadyResponded?: boolean
   } = {},
 ): ScriptedEventLogStore => {
   const markedTaskNames: Array<{ id: string; name: string }> = []
   const markedResponded: string[] = []
-  let respondedReturnsZero = options.alreadyResponded ?? false
+  const responded = new Set<string>()
   return {
     markedTaskNames,
     markedResponded,
@@ -154,14 +157,21 @@ export const createScriptedEventLogStore = (
     async findByTaskName(taskName) {
       return options.findByTaskName?.(taskName)
     },
+    async findDispatchedUnresponded(receivedBefore) {
+      return (await options.findDispatchedUnresponded?.(receivedBefore)) ?? []
+    },
     async markResponded(slackEventId) {
-      if (respondedReturnsZero) return { updated: 0 }
+      if (options.alreadyResponded === true || responded.has(slackEventId)) {
+        return { updated: 0 }
+      }
+      responded.add(slackEventId)
       markedResponded.push(slackEventId)
-      respondedReturnsZero = true
       return { updated: 1 }
     },
-    async unmarkResponded() {
-      return { updated: 0 }
+    async unmarkResponded(slackEventId) {
+      if (!responded.has(slackEventId)) return { updated: 0 }
+      responded.delete(slackEventId)
+      return { updated: 1 }
     },
     async pruneOlderThan() {
       return 0

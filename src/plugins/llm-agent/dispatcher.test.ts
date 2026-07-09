@@ -158,6 +158,9 @@ const createEventLogStore = (): EventLogStore => ({
   async findByTaskName() {
     return undefined
   },
+  async findDispatchedUnresponded() {
+    return []
+  },
   async markResponded() {
     return { updated: 1 }
   },

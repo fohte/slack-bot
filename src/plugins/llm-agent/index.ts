@@ -63,6 +63,7 @@ export {
 } from '@/plugins/llm-agent/plugin'
 export type {
   ProcessMentionDeps,
+  RespondResult,
   SlackEnvelope,
   SubmitTaskResult,
   TerminalOutcome,
@@ -80,8 +81,18 @@ export {
   respond,
   RUNNING_BUBBLE,
   submitTask,
+  terminalOutcomeForTaskCrStatus,
   waitForCompletion,
 } from '@/plugins/llm-agent/process-mention'
+export type {
+  ResponseReconcilerHandle,
+  ResponseReconcilerOptions,
+} from '@/plugins/llm-agent/response-reconciler'
+export {
+  RESPONSE_RECONCILER_DEFAULT_GRACE_MS,
+  RESPONSE_RECONCILER_DEFAULT_INTERVAL_MS,
+  startResponseReconciler,
+} from '@/plugins/llm-agent/response-reconciler'
 export type {
   TaskCrClient,
   TaskCrContext,

@@ -178,6 +178,14 @@ const buildResponseBody = async (
   return { text, blocks, sessionId }
 }
 
+export interface RespondResult {
+  // False when event_log markResponded lost the race to another delivery
+  // (live dispatch path or another reconciler tick), in which case respond()
+  // is a no-op — callers that count actual Slack posts must check this
+  // rather than assume respond() resolving means a message went out.
+  readonly posted: boolean
+}
+
 // Post the final Slack message and tear down per-task state (clear the
 // assistant-status indicator, persist the opencode session id for
 // thread resumption). event_log markResponded gates against a duplicate
@@ -187,7 +195,7 @@ export const respond = async (
   taskName: string,
   outcome: TerminalOutcome,
   deps: ProcessMentionDeps,
-): Promise<void> => {
+): Promise<RespondResult> => {
   const resolved = resolveDeps(deps)
   const { text, blocks, sessionId } = await buildResponseBody(
     resolved,
@@ -207,7 +215,7 @@ export const respond = async (
       },
       'llm-agent skipping Slack post; event_log row already marked responded',
     )
-    return
+    return { posted: false }
   }
 
   try {
@@ -292,4 +300,6 @@ export const respond = async (
     },
     'llm-agent posted Task CR response to Slack',
   )
+
+  return { posted: true }
 }

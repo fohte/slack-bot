@@ -40,6 +40,18 @@ export type TerminalOutcome =
   | { readonly kind: 'completed' }
   | { readonly kind: 'failed'; readonly message: string | undefined }
 
+// undefined for any non-terminal phase (Pending/Queued/Running/unknown),
+// shared with the response reconciler so both agree on what counts as done.
+export const terminalOutcomeForTaskCrStatus = (
+  status: Pick<TaskCrStatus, 'phase' | 'message'>,
+): TerminalOutcome | undefined => {
+  if (status.phase === 'Completed') return { kind: 'completed' }
+  if (status.phase === 'Failed') {
+    return { kind: 'failed', message: status.message }
+  }
+  return undefined
+}
+
 export interface WaitForCompletionOptions {
   // Bubble already shown for this Slack thread (typically the Preparing
   // bubble set by the dispatcher before submitTask). Suppresses a
@@ -101,10 +113,8 @@ export const waitForCompletion = async (
         `Task CR ${taskName} not found in namespace ${resolved.namespace}`,
       )
     }
-    if (match.phase === 'Completed') return { kind: 'completed' }
-    if (match.phase === 'Failed') {
-      return { kind: 'failed', message: match.message }
-    }
+    const terminalOutcome = terminalOutcomeForTaskCrStatus(match)
+    if (terminalOutcome !== undefined) return terminalOutcome
     const bubble = bubbleForK8sPhase(match.phase)
     if (bubble !== undefined && bubble.status !== lastShownStatus) {
       await updateBubble(resolved, env, bubble)
