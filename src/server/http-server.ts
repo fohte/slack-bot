@@ -4,6 +4,7 @@ import type { Logger } from '@/logger/logger'
 import type { InteractionRouter, RouterResult } from '@/router/router'
 import type { SignatureVerifier } from '@/security/signature-verifier'
 import { createHealthEndpoint, type HealthEndpoint } from '@/server/health'
+import type { InFlightTasks } from '@/server/in-flight-tasks'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -26,6 +27,7 @@ export interface HttpServerOptions {
   readonly router: InteractionRouter
   readonly logger: Logger
   readonly health?: HealthEndpoint | undefined
+  readonly inFlightTasks: Pick<InFlightTasks, 'track'>
 }
 
 export interface HttpServer {
@@ -137,15 +139,20 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
         'received event payload that could not be normalized',
       )
     } else {
-      void options.router.routeEvent(envelope).catch((err: unknown) => {
-        options.logger.error(
-          {
-            event: 'route_event_unhandled',
-            error: err instanceof Error ? err.message : String(err),
-          },
-          'routeEvent threw outside per-plugin handler',
-        )
-      })
+      // Tracked so a graceful-shutdown handler can wait for it to finish:
+      // the 200 below acks Slack before routeEvent (and everything it
+      // kicks off downstream) has actually completed.
+      void options.inFlightTasks.track(
+        options.router.routeEvent(envelope).catch((err: unknown) => {
+          options.logger.error(
+            {
+              event: 'route_event_unhandled',
+              error: err instanceof Error ? err.message : String(err),
+            },
+            'routeEvent threw outside per-plugin handler',
+          )
+        }),
+      )
     }
     // Acknowledge with 200 so Slack keeps the event subscription healthy.
     return c.body(null, 200)

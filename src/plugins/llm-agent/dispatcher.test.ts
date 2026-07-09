@@ -8,7 +8,11 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { noopConfigMapClient, TEST_ENV } from '@/plugins/llm-agent/_test-utils'
+import {
+  createDeferred,
+  noopConfigMapClient,
+  TEST_ENV,
+} from '@/plugins/llm-agent/_test-utils'
 import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import {
   createTaskDispatcher,
@@ -67,17 +71,6 @@ const createTimeline = (): {
   }
 }
 
-const createDeferred = <T>(): {
-  readonly promise: Promise<T>
-  readonly resolve: (value: T) => void
-} => {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
-
 const createSlackClient = (
   options: {
     timeline?: { push(entry: TimelineEntry): void }
@@ -131,6 +124,10 @@ const createTaskCrClient = (
     timeline?: { push(entry: TimelineEntry): void }
     createOutcome?: TaskCrCreateOutcome
     createError?: Error
+    // Defaults to a promise that never resolves, so background
+    // processMention stays parked while the dispatcher's foreground
+    // promise observes only Received→Submitted.
+    list?: () => Promise<readonly TaskCrStatus[]>
   } = {},
 ): StubTaskCrClient => {
   const creates: TaskCrSpec[] = []
@@ -142,11 +139,8 @@ const createTaskCrClient = (
       options.timeline?.push({ kind: 'create', taskName: task.name })
       return options.createOutcome ?? 'created'
     },
-    async list() {
-      // Never resolves so background processMention stays parked while
-      // the dispatcher's foreground promise observes only Received→Submitted.
-      return new Promise<readonly TaskCrStatus[]>(() => {})
-    },
+    list:
+      options.list ?? (() => new Promise<readonly TaskCrStatus[]>(() => {})),
   }
 }
 
@@ -618,14 +612,7 @@ describe('createTaskDispatcher inFlightTasks tracking', () => {
   it('keeps the tracker non-idle until the backgrounded processMention completes', async () => {
     const taskName = taskCrNameForSlackEvent('Ev1')
     const listResult = createDeferred<readonly TaskCrStatus[]>()
-    const taskCrClient: TaskCrClient = {
-      async create() {
-        return 'created'
-      },
-      async list() {
-        return listResult.promise
-      },
-    }
+    const taskCrClient = createTaskCrClient({ list: () => listResult.promise })
     const slackClient: SlackWebClient = {
       ...createSlackClient(),
       async postMessage() {
@@ -633,6 +620,7 @@ describe('createTaskDispatcher inFlightTasks tracking', () => {
       },
     } as SlackWebClient
     const inFlightTasks = createInFlightTasks()
+    const timeline: string[] = []
     const dispatch = createTaskDispatcher({
       configMapClient: noopConfigMapClient,
       taskCrClient,
@@ -647,13 +635,11 @@ describe('createTaskDispatcher inFlightTasks tracking', () => {
     })
 
     await dispatch(acceptedMention())
-
-    let idleResolved = false
-    void inFlightTasks.waitForIdle().then(() => {
-      idleResolved = true
-    })
+    void inFlightTasks.waitForIdle().then(() => timeline.push('idle'))
+    // Nothing has resolved the Task CR to a terminal phase yet, so this
+    // must land in the timeline before 'idle' does.
     await Promise.resolve()
-    expect(idleResolved).toBe(false)
+    timeline.push('checked-still-in-flight')
 
     listResult.resolve([
       {
@@ -664,7 +650,7 @@ describe('createTaskDispatcher inFlightTasks tracking', () => {
       },
     ])
     await inFlightTasks.waitForIdle()
-    expect(idleResolved).toBe(true)
+    expect(timeline).toEqual(['checked-still-in-flight', 'idle'])
   })
 })
 

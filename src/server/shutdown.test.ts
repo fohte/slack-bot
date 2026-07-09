@@ -1,24 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { noopLogger } from '@/logger/logger'
+import { createDeferred } from '@/server/_test-utils'
 import { createShutdownHandler } from '@/server/shutdown'
-
-const createDeferred = <T>(): {
-  readonly promise: Promise<T>
-  readonly resolve: (value: T) => void
-} => {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
 
 describe('createShutdownHandler', () => {
   it('sets not-ready, closes the server, drains in-flight tasks, then exits', async () => {
     const timeline: string[] = []
     const idle = createDeferred<undefined>()
-    const exitCodes: number[] = []
     const handler = createShutdownHandler({
       health: {
         setNotReady: () => timeline.push('not-ready'),
@@ -37,8 +26,7 @@ describe('createShutdownHandler', () => {
       },
       logger: noopLogger,
       exit: (code) => {
-        exitCodes.push(code)
-        timeline.push('exited')
+        timeline.push(`exited:${code}`)
       },
     })
     const result = handler('SIGTERM')
@@ -48,9 +36,8 @@ describe('createShutdownHandler', () => {
       'not-ready',
       'server-closed',
       'drained',
-      'exited',
+      'exited:0',
     ])
-    expect(exitCodes).toEqual([0])
   })
 
   it('ignores a second signal received while already shutting down', async () => {

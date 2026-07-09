@@ -31,8 +31,8 @@ export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
 export type TaskDispatcherOptions = ProcessMentionDeps & {
   // Registers the backgrounded processMention call so a graceful-shutdown
-  // handler can wait for it to finish before the process exits. Falls back
-  // to untracked fire-and-forget (today's behavior) when omitted.
+  // handler can wait for it to finish before the process exits. Omitting
+  // it leaves the call as untracked fire-and-forget.
   readonly inFlightTasks?: InFlightTasks | undefined
 }
 

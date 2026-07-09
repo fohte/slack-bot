@@ -1,17 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { createDeferred } from '@/server/_test-utils'
 import { createInFlightTasks } from '@/server/in-flight-tasks'
-
-const createDeferred = <T>(): {
-  readonly promise: Promise<T>
-  readonly resolve: (value: T) => void
-} => {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
 
 describe('createInFlightTasks', () => {
   it('resolves track() to the tracked promise value', async () => {
@@ -53,9 +43,7 @@ describe('createInFlightTasks', () => {
   it('does not let a rejected tracked promise break waitForIdle()', async () => {
     const tasks = createInFlightTasks()
     const rejecting = Promise.reject(new Error('boom'))
-    await expect(tasks.track(rejecting).catch(() => 'caught')).resolves.toBe(
-      'caught',
-    )
+    void tasks.track(rejecting).catch(() => {})
     await expect(tasks.waitForIdle()).resolves.toBeUndefined()
   })
 })

@@ -88,7 +88,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     slackClient,
     logger,
   })
-  const server = createHttpServer({ verifier, router, logger })
+  const server = createHttpServer({ verifier, router, logger, inFlightTasks })
   server.health.setReady()
 
   const httpServer = serve(
@@ -101,9 +101,6 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     },
   )
 
-  // Draining in-flight work relies on k8s SIGKILLing the process as the
-  // final backstop (via terminationGracePeriodSeconds) rather than an
-  // internal timeout, so a slow-but-legitimate Task poll is never cut short.
   const shutdown = createShutdownHandler({
     server: httpServer,
     health: server.health,
