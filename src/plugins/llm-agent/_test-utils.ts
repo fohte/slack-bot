@@ -1,3 +1,4 @@
+import type { Logger } from '@/logger/logger'
 import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import type {
   EventLogRow,
@@ -134,12 +135,16 @@ export interface ScriptedEventLogStore extends EventLogStore {
 export const createScriptedEventLogStore = (
   options: {
     findByTaskName?: (taskName: string) => EventLogRow | undefined
+    findDispatchedUnresponded?: (
+      receivedBefore: Date,
+    ) => readonly EventLogRow[] | Promise<readonly EventLogRow[]>
     alreadyResponded?: boolean
+    markTaskNameError?: Error
   } = {},
 ): ScriptedEventLogStore => {
   const markedTaskNames: Array<{ id: string; name: string }> = []
   const markedResponded: string[] = []
-  let respondedReturnsZero = options.alreadyResponded ?? false
+  const responded = new Set<string>()
   return {
     markedTaskNames,
     markedResponded,
@@ -148,20 +153,30 @@ export const createScriptedEventLogStore = (
     },
     async deleteReceived() {},
     async markTaskName(slackEventId, taskName) {
+      if (options.markTaskNameError !== undefined) {
+        throw options.markTaskNameError
+      }
       markedTaskNames.push({ id: slackEventId, name: taskName })
       return { updated: 1 }
     },
     async findByTaskName(taskName) {
       return options.findByTaskName?.(taskName)
     },
+    async findDispatchedUnresponded(receivedBefore) {
+      return (await options.findDispatchedUnresponded?.(receivedBefore)) ?? []
+    },
     async markResponded(slackEventId) {
-      if (respondedReturnsZero) return { updated: 0 }
+      if (options.alreadyResponded === true || responded.has(slackEventId)) {
+        return { updated: 0 }
+      }
+      responded.add(slackEventId)
       markedResponded.push(slackEventId)
-      respondedReturnsZero = true
       return { updated: 1 }
     },
-    async unmarkResponded() {
-      return { updated: 0 }
+    async unmarkResponded(slackEventId) {
+      if (!responded.has(slackEventId)) return { updated: 0 }
+      responded.delete(slackEventId)
+      return { updated: 1 }
     },
     async pruneOlderThan() {
       return 0
@@ -249,4 +264,33 @@ export const createDeferred = <T>(): {
     resolve = res
   })
   return { promise, resolve }
+}
+
+export interface LogEntry {
+  readonly level: 'warn' | 'error'
+  readonly payload: Record<string, unknown>
+  readonly message: string
+}
+
+export interface RecordingLogger extends Logger {
+  readonly entries: ReadonlyArray<LogEntry>
+}
+
+export const createRecordingLogger = (): RecordingLogger => {
+  const entries: LogEntry[] = []
+  const logger: RecordingLogger = {
+    entries,
+    debug() {},
+    info() {},
+    warn(payload, message) {
+      entries.push({ level: 'warn', payload, message: message ?? '' })
+    },
+    error(payload, message) {
+      entries.push({ level: 'error', payload, message: message ?? '' })
+    },
+    child() {
+      return logger
+    },
+  }
+  return logger
 }

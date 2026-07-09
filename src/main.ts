@@ -19,6 +19,7 @@ import {
   createTaskDispatcher,
   createThreadSessionStore,
   startEventLogRetention,
+  startResponseReconciler,
 } from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
@@ -131,7 +132,7 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
         const opencodeClient = createOpencodeClient({
           baseUrl: config.llmAgent.opencodeBaseUrl,
         })
-        const onAccepted = createTaskDispatcher({
+        const processMentionDeps = {
           taskCrClient,
           configMapClient,
           opencodeClient,
@@ -142,7 +143,13 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
           namespace: config.llmAgent.taskCrNamespace,
           agentName: config.llmAgent.taskCrAgentName,
           inFlightTasks,
-        })
+        }
+        const onAccepted = createTaskDispatcher(processMentionDeps)
+        // Run once immediately in addition to the interval: on Pod restart
+        // this is the earliest chance to recover a response the previous
+        // Pod's fire-and-forget processMention never got to deliver.
+        const reconciler = startResponseReconciler(processMentionDeps)
+        void reconciler.runOnce()
         return createLlmAgentPlugin({
           logger,
           eventLogStore,

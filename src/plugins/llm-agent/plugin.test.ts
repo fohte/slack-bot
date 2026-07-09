@@ -71,6 +71,9 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
     async findByTaskName() {
       return undefined
     },
+    async findDispatchedUnresponded() {
+      return []
+    },
     async markResponded(): Promise<{ updated: number }> {
       return { updated: 0 }
     },

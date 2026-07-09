@@ -16,6 +16,7 @@ export {
   DEFAULT_TASK_CR_AGENT_NAME,
   DEFAULT_TASK_CR_NAMESPACE,
 } from '@/plugins/llm-agent/process-mention-deps'
+export type { RespondResult } from '@/plugins/llm-agent/steps/respond'
 export { respond } from '@/plugins/llm-agent/steps/respond'
 export type { SubmitTaskResult } from '@/plugins/llm-agent/steps/submit-task'
 export { submitTask } from '@/plugins/llm-agent/steps/submit-task'
@@ -28,6 +29,7 @@ export {
   PREPARING_BUBBLE,
   QUEUED_BUBBLE,
   RUNNING_BUBBLE,
+  terminalOutcomeForTaskCrStatus,
   waitForCompletion,
 } from '@/plugins/llm-agent/steps/wait-for-completion'
 
