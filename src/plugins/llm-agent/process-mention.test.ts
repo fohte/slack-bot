@@ -59,53 +59,47 @@ describe('processMention', () => {
       initialBubble: PREPARING_BUBBLE,
     })
 
-    const actual = {
-      slackCalls: slackClient.calls,
-      upserts: threadSessionStore.upserts,
-    }
-    expect(actual).toEqual({
-      slackCalls: [
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: QUEUED_BUBBLE.status,
-          blocks: undefined,
-          loadingMessages: QUEUED_BUBBLE.loadingMessages,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: RUNNING_BUBBLE.status,
-          blocks: undefined,
-          loadingMessages: RUNNING_BUBBLE.loadingMessages,
-        },
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: '**bold** answer',
-          blocks: [{ type: 'markdown', text: '**bold** answer' }],
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-      upserts: [
-        {
-          slackTeamId: 'T1',
-          slackChannelId: 'C1',
-          threadRootTs: '111.222',
-          opencodeSessionId: 'ses_xyz',
-        },
-      ],
-    })
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: QUEUED_BUBBLE.status,
+        blocks: undefined,
+        loadingMessages: QUEUED_BUBBLE.loadingMessages,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: RUNNING_BUBBLE.status,
+        blocks: undefined,
+        loadingMessages: RUNNING_BUBBLE.loadingMessages,
+      },
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: '**bold** answer',
+        blocks: [{ type: 'markdown', text: '**bold** answer' }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+    expect(threadSessionStore.upserts).toEqual([
+      {
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        opencodeSessionId: 'ses_xyz',
+      },
+    ])
   })
 })

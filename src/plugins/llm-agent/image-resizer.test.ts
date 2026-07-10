@@ -66,21 +66,13 @@ describe('createSharpImageResizer', () => {
     const resizer = createSharpImageResizer()
     const outcome = await resizer.resize(source, cap)
 
-    const decoded = outcome.ok
-      ? await sharp(outcome.bytes).metadata()
-      : undefined
-    const actual = {
-      ok: outcome.ok,
-      fitsUnderCap: outcome.ok && outcome.bytes.byteLength <= cap,
-      ext: outcome.ok ? outcome.ext : undefined,
-      decodedFormat: decoded?.format,
-    }
-    expect(actual).toEqual({
-      ok: true,
-      fitsUnderCap: true,
-      ext: 'jpg',
-      decodedFormat: 'jpeg',
-    })
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    expect(outcome.ext).toBe('jpg')
+    expect(outcome.bytes.byteLength).toBeLessThanOrEqual(cap)
+
+    const decoded = await sharp(outcome.bytes).metadata()
+    expect(decoded.format).toBe('jpeg')
   })
 
   it('gives up when the cap is too small for any attempt', async () => {
