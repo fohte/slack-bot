@@ -20,24 +20,13 @@ import {
 
 describe('bubbleForK8sPhase', () => {
   it('maps each non-terminal k8s phase to its bubble and everything else to undefined', () => {
-    const actual = {
-      Pending: bubbleForK8sPhase('Pending'),
-      Queued: bubbleForK8sPhase('Queued'),
-      Running: bubbleForK8sPhase('Running'),
-      Completed: bubbleForK8sPhase('Completed'),
-      Failed: bubbleForK8sPhase('Failed'),
-      Unknown: bubbleForK8sPhase('Cancelled'),
-      Undefined: bubbleForK8sPhase(undefined),
-    }
-    expect(actual).toEqual({
-      Pending: PREPARING_BUBBLE,
-      Queued: QUEUED_BUBBLE,
-      Running: RUNNING_BUBBLE,
-      Completed: undefined,
-      Failed: undefined,
-      Unknown: undefined,
-      Undefined: undefined,
-    })
+    expect(bubbleForK8sPhase('Pending')).toBe(PREPARING_BUBBLE)
+    expect(bubbleForK8sPhase('Queued')).toBe(QUEUED_BUBBLE)
+    expect(bubbleForK8sPhase('Running')).toBe(RUNNING_BUBBLE)
+    expect(bubbleForK8sPhase('Completed')).toBeUndefined()
+    expect(bubbleForK8sPhase('Failed')).toBeUndefined()
+    expect(bubbleForK8sPhase('Cancelled')).toBeUndefined()
+    expect(bubbleForK8sPhase(undefined)).toBeUndefined()
   })
 })
 
@@ -80,31 +69,24 @@ describe('waitForCompletion', () => {
       initialBubble: PREPARING_BUBBLE,
     })
 
-    const actual = {
-      outcome,
-      listCount: taskCrClient.listCount(),
-      slackCalls: slackClient.calls,
-    }
-    expect(actual).toEqual({
-      outcome: { kind: 'completed' },
-      listCount: 3,
-      slackCalls: [
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: QUEUED_BUBBLE.status,
-          loadingMessages: QUEUED_BUBBLE.loadingMessages,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: RUNNING_BUBBLE.status,
-          loadingMessages: RUNNING_BUBBLE.loadingMessages,
-        },
-      ],
-    })
+    expect(outcome).toEqual({ kind: 'completed' })
+    expect(taskCrClient.listCount()).toBe(3)
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: QUEUED_BUBBLE.status,
+        loadingMessages: QUEUED_BUBBLE.loadingMessages,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: RUNNING_BUBBLE.status,
+        loadingMessages: RUNNING_BUBBLE.loadingMessages,
+      },
+    ])
   })
 
   it('returns Failed with the cluster message and does not emit a bubble when the Task CR transitions straight to Failed', async () => {
@@ -129,16 +111,9 @@ describe('waitForCompletion', () => {
       sleep: async () => {},
     }
     const outcome = await waitForCompletion(TEST_ENV, taskName, deps)
-    const actual = {
-      outcome,
-      slackCalls: slackClient.calls,
-      listCount: taskCrClient.listCount(),
-    }
-    expect(actual).toEqual({
-      outcome: { kind: 'failed', message: 'boom' },
-      slackCalls: [],
-      listCount: 1,
-    })
+    expect(outcome).toEqual({ kind: 'failed', message: 'boom' })
+    expect(slackClient.calls).toEqual([])
+    expect(taskCrClient.listCount()).toBe(1)
   })
 
   it('keeps sleeping past unknown / undefined phases without busy-looping', async () => {
@@ -176,11 +151,8 @@ describe('waitForCompletion', () => {
       },
     }
     const outcome = await waitForCompletion(TEST_ENV, taskName, deps)
-    const actual = { outcome, sleepCount }
-    expect(actual).toEqual({
-      outcome: { kind: 'completed' },
-      sleepCount: 2,
-    })
+    expect(outcome).toEqual({ kind: 'completed' })
+    expect(sleepCount).toBe(2)
   })
 
   it('throws when the Task CR is absent from the list result so the background poll loop terminates', async () => {
@@ -237,15 +209,8 @@ describe('waitForCompletion', () => {
     const outcome = await waitForCompletion(TEST_ENV, taskName, deps, {
       initialBubble: PREPARING_BUBBLE,
     })
-    const actual = {
-      outcome,
-      slackCalls: slackClient.calls,
-      listCount: taskCrClient.listCount(),
-    }
-    expect(actual).toEqual({
-      outcome: { kind: 'completed' },
-      slackCalls: [],
-      listCount: 2,
-    })
+    expect(outcome).toEqual({ kind: 'completed' })
+    expect(slackClient.calls).toEqual([])
+    expect(taskCrClient.listCount()).toBe(2)
   })
 })

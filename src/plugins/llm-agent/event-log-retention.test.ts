@@ -76,13 +76,7 @@ describe('startEventLogRetention', () => {
   })
 
   it('exposes default ttl and interval constants used when options are omitted', () => {
-    const actual = {
-      ttlMs: EVENT_LOG_DEFAULT_TTL_MS,
-      intervalMs: EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS,
-    }
-    expect(actual).toEqual({
-      ttlMs: 7 * 24 * 60 * 60 * 1000,
-      intervalMs: 60 * 60 * 1000,
-    })
+    expect(EVENT_LOG_DEFAULT_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000)
+    expect(EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS).toBe(60 * 60 * 1000)
   })
 })

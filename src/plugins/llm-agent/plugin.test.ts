@@ -457,22 +457,16 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-dm',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000100',
-          messageTs: '1700000000.000100',
-        },
-      ],
-      onAcceptedCalls: 1,
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-dm',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
   })
 
   it('accepts channel app_mention events', async () => {
@@ -487,22 +481,16 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-mention',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000001.000200',
-          messageTs: '1700000001.000200',
-        },
-      ],
-      onAcceptedCalls: 1,
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-mention',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000001.000200',
+        messageTs: '1700000001.000200',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
   })
 
   it('skips channel message events that mention the bot to avoid duplicating the app_mention delivery', async () => {
@@ -518,14 +506,8 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [],
-      onAcceptedCalls: 0,
-    })
+    expect(eventLogStore.records).toEqual([])
+    expect(onAccepted.mock.calls.length).toBe(0)
   })
 
   it('dispatches a mention only once when both message and app_mention are delivered', async () => {
@@ -547,22 +529,16 @@ describe('createLlmAgentPlugin', () => {
       appMentionEnvelope.event,
     )
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-dup-mention',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000100',
-          messageTs: '1700000000.000100',
-        },
-      ],
-      onAcceptedCalls: 1,
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-dup-mention',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
   })
 
   it('accepts mention-less channel messages when the thread already has an opencode session', async () => {
@@ -589,22 +565,16 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-thread-hit',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000050',
-          messageTs: '1700000000.000100',
-        },
-      ],
-      onAcceptedCalls: 1,
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-thread-hit',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
   })
 
   it('skips mention-less channel messages when no thread session exists', async () => {
@@ -621,14 +591,8 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [],
-      onAcceptedCalls: 0,
-    })
+    expect(eventLogStore.records).toEqual([])
+    expect(onAccepted.mock.calls.length).toBe(0)
   })
 
   it('skips the thread session lookup for top-level channel messages without thread_ts', async () => {
@@ -646,16 +610,9 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-      lookupCalls: lookupSpy.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [],
-      onAcceptedCalls: 0,
-      lookupCalls: 0,
-    })
+    expect(eventLogStore.records).toEqual([])
+    expect(onAccepted.mock.calls.length).toBe(0)
+    expect(lookupSpy.mock.calls.length).toBe(0)
   })
 
   it('skips message_changed subtype even when the edited body mentions the bot', async () => {
@@ -672,14 +629,8 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [],
-      onAcceptedCalls: 0,
-    })
+    expect(eventLogStore.records).toEqual([])
+    expect(onAccepted.mock.calls.length).toBe(0)
   })
 
   it('accepts file_share subtype messages when the thread already has an opencode session', async () => {
@@ -707,22 +658,16 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-file-thread-hit',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000050',
-          messageTs: '1700000000.000100',
-        },
-      ],
-      onAcceptedCalls: 1,
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-file-thread-hit',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
   })
 
   it('accepts a channel message that mentions the bot when it carries a file_share attachment', async () => {
@@ -740,22 +685,18 @@ describe('createLlmAgentPlugin', () => {
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAccepted: onAccepted.mock.calls.map(([event]) => event),
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-img-msg',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000100',
-          messageTs: '1700000000.000100',
-        },
-      ],
-      onAccepted: [{ ctx: { envelope }, event: envelope.event }],
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-img-msg',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.map(([event]) => event)).toEqual([
+      { ctx: { envelope }, event: envelope.event },
+    ])
   })
 
   it('rejects app_mention as duplicate once its file_share sibling has been accepted', async () => {
@@ -779,22 +720,16 @@ describe('createLlmAgentPlugin', () => {
       appMentionEnvelope.event,
     )
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-img-msg-first',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000100',
-          messageTs: '1700000000.000100',
-        },
-      ],
-      onAcceptedCalls: 1,
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-img-msg-first',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
   })
 
   it('still accepts a later file_share message when its app_mention sibling was accepted first', async () => {
@@ -818,28 +753,22 @@ describe('createLlmAgentPlugin', () => {
     )
     await plugin.onEvent?.({ envelope: messageEnvelope }, messageEnvelope.event)
 
-    const actual = {
-      records: eventLogStore.records,
-      onAcceptedCalls: onAccepted.mock.calls.length,
-    }
-    expect(actual).toEqual({
-      records: [
-        {
-          slackEventId: 'Ev-mention-first',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000100',
-          messageTs: '1700000000.000100',
-        },
-        {
-          slackEventId: 'Ev-img-msg-second',
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000100',
-          messageTs: '1700000000.000100',
-        },
-      ],
-      onAcceptedCalls: 2,
-    })
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-mention-first',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
+      },
+      {
+        slackEventId: 'Ev-img-msg-second',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(2)
   })
 })

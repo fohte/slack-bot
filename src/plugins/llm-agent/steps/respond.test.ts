@@ -33,38 +33,32 @@ describe('respond', () => {
     }
     const outcome: TerminalOutcome = { kind: 'completed' }
     await respond(TEST_ENV, 'task-1', outcome, deps)
-    const actual = {
-      slackCalls: slackClient.calls,
-      upserts: threadSessionStore.upserts,
-    }
-    expect(actual).toEqual({
-      slackCalls: [
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: tableText,
-          blocks: [{ type: 'markdown', text: tableText }],
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-      upserts: [
-        {
-          slackTeamId: 'T1',
-          slackChannelId: 'C1',
-          threadRootTs: '111.222',
-          opencodeSessionId: 'ses_xyz',
-        },
-      ],
-    })
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: tableText,
+        blocks: [{ type: 'markdown', text: tableText }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+    expect(threadSessionStore.upserts).toEqual([
+      {
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        opencodeSessionId: 'ses_xyz',
+      },
+    ])
   })
 
   it('escapes mrkdwn control characters in the notification fallback text but not in the markdown block', async () => {
@@ -189,31 +183,25 @@ describe('respond', () => {
       message: '<oops> & died',
     }
     await respond(TEST_ENV, 'task-1', outcome, deps)
-    const actual = {
-      slackCalls: slackClient.calls,
-      upserts: threadSessionStore.upserts,
-    }
-    expect(actual).toEqual({
-      slackCalls: [
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'Task failed: &lt;oops&gt; &amp; died',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-      upserts: [],
-    })
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'Task failed: &lt;oops&gt; &amp; died',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+    expect(threadSessionStore.upserts).toEqual([])
   })
 
   it('falls back to the placeholder text when the opencode session yields no assistant message', async () => {
@@ -232,40 +220,33 @@ describe('respond', () => {
       slackClient,
     }
     await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
-    const actual = {
-      slackCalls: slackClient.calls,
-      markedResponded: eventLogStore.markedResponded,
-      upserts: threadSessionStore.upserts,
-    }
-    expect(actual).toEqual({
-      slackCalls: [
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: '(opencode did not produce an assistant message)',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-      markedResponded: ['Ev1'],
-      upserts: [
-        {
-          slackTeamId: 'T1',
-          slackChannelId: 'C1',
-          threadRootTs: '111.222',
-          opencodeSessionId: 'ses_xyz',
-        },
-      ],
-    })
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: '(opencode did not produce an assistant message)',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+    expect(eventLogStore.markedResponded).toEqual(['Ev1'])
+    expect(threadSessionStore.upserts).toEqual([
+      {
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        opencodeSessionId: 'ses_xyz',
+      },
+    ])
   })
 
   it('deletes the image ConfigMap after responding so the namespace stays clean', async () => {
@@ -314,15 +295,8 @@ describe('respond', () => {
       slackClient,
     }
     await respond(TEST_ENV, 'task-1', { kind: 'completed' }, deps)
-    const actual = {
-      slackCalls: slackClient.calls,
-      markedResponded: eventLogStore.markedResponded,
-      upserts: threadSessionStore.upserts,
-    }
-    expect(actual).toEqual({
-      slackCalls: [],
-      markedResponded: [],
-      upserts: [],
-    })
+    expect(slackClient.calls).toEqual([])
+    expect(eventLogStore.markedResponded).toEqual([])
+    expect(threadSessionStore.upserts).toEqual([])
   })
 })

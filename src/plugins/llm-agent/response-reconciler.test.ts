@@ -87,33 +87,26 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = {
-      recovered,
-      slackCalls: slackClient.calls,
-      markedResponded: eventLogStore.markedResponded,
-    }
-    expect(actual).toEqual({
-      recovered: 1,
-      slackCalls: [
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'answer',
-          blocks: [{ type: 'markdown', text: 'answer' }],
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-      markedResponded: ['Ev1'],
-    })
+    expect(recovered).toBe(1)
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'answer',
+        blocks: [{ type: 'markdown', text: 'answer' }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+    expect(eventLogStore.markedResponded).toEqual(['Ev1'])
   })
 
   it('recovers a Failed task by posting the failure message', async () => {
@@ -135,28 +128,25 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = { recovered, slackCalls: slackClient.calls }
-    expect(actual).toEqual({
-      recovered: 1,
-      slackCalls: [
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'Task failed: boom',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-    })
+    expect(recovered).toBe(1)
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'Task failed: boom',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
   })
 
   it('does nothing for a Task CR that is still running', async () => {
@@ -178,11 +168,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = { recovered, slackCalls: slackClient.calls }
-    expect(actual).toEqual({
-      recovered: 0,
-      slackCalls: [],
-    })
+    expect(recovered).toBe(0)
+    expect(slackClient.calls).toEqual([])
   })
 
   it('marks the row responded without posting when no Task CR in the namespace matches it, so it is never reconciled again', async () => {
@@ -197,16 +184,9 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = {
-      recovered,
-      slackCalls: slackClient.calls,
-      markedResponded: eventLogStore.markedResponded,
-    }
-    expect(actual).toEqual({
-      recovered: 0,
-      slackCalls: [],
-      markedResponded: ['Ev1'],
-    })
+    expect(recovered).toBe(0)
+    expect(slackClient.calls).toEqual([])
+    expect(eventLogStore.markedResponded).toEqual(['Ev1'])
   })
 
   it('skips a row missing envelope fields instead of throwing', async () => {
@@ -228,11 +208,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = { recovered, slackCalls: slackClient.calls }
-    expect(actual).toEqual({
-      recovered: 0,
-      slackCalls: [],
-    })
+    expect(recovered).toBe(0)
+    expect(slackClient.calls).toEqual([])
   })
 
   it('does not call taskCrClient.list when there are no dispatched-but-unresponded rows', async () => {
@@ -246,11 +223,8 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = { recovered, listCalls: taskCrClient.listCalls() }
-    expect(actual).toEqual({
-      recovered: 0,
-      listCalls: 0,
-    })
+    expect(recovered).toBe(0)
+    expect(taskCrClient.listCalls()).toBe(0)
   })
 
   it('processes multiple rows in one tick, recovering only the terminal ones', async () => {
@@ -288,44 +262,41 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = { recovered, slackCalls: slackClient.calls }
-    expect(actual).toEqual({
-      recovered: 2,
-      slackCalls: [
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'answer',
-          blocks: [{ type: 'markdown', text: 'answer' }],
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'Task failed: oops',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-    })
+    expect(recovered).toBe(2)
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'answer',
+        blocks: [{ type: 'markdown', text: 'answer' }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'Task failed: oops',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
   })
 
   it('returns 0 and swallows the error when findDispatchedUnresponded throws', async () => {
@@ -390,28 +361,25 @@ describe('startResponseReconciler', () => {
 
     const recovered = await handle.runOnce()
 
-    const actual = { recovered, slackCalls: slackClient.calls }
-    expect(actual).toEqual({
-      recovered: 1,
-      slackCalls: [
-        {
-          kind: 'post',
-          channel: 'C1',
-          thread: '111.222',
-          text: 'answer',
-          blocks: [{ type: 'markdown', text: 'answer' }],
-          loadingMessages: undefined,
-        },
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
-        },
-      ],
-    })
+    expect(recovered).toBe(1)
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'answer',
+        blocks: [{ type: 'markdown', text: 'answer' }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
   })
 
   it('passes now() - graceMs as the received-before cutoff to findDispatchedUnresponded', async () => {
@@ -455,11 +423,8 @@ describe('startResponseReconciler', () => {
     releasePendingQuery?.()
     const [firstResult, secondResult] = await Promise.all([firstRun, secondRun])
 
-    const actual = { firstResult, secondResult }
-    expect(actual).toEqual({
-      firstResult: 0,
-      secondResult: 0,
-    })
+    expect(firstResult).toBe(0)
+    expect(secondResult).toBe(0)
   })
 
   it('schedules the reconciler on the requested interval and stop clears it', () => {
@@ -519,13 +484,7 @@ describe('startResponseReconciler', () => {
   })
 
   it('exposes default grace and interval constants used when options are omitted', () => {
-    const actual = {
-      graceMs: RESPONSE_RECONCILER_DEFAULT_GRACE_MS,
-      intervalMs: RESPONSE_RECONCILER_DEFAULT_INTERVAL_MS,
-    }
-    expect(actual).toEqual({
-      graceMs: 2 * 60 * 1000,
-      intervalMs: 60 * 1000,
-    })
+    expect(RESPONSE_RECONCILER_DEFAULT_GRACE_MS).toBe(2 * 60 * 1000)
+    expect(RESPONSE_RECONCILER_DEFAULT_INTERVAL_MS).toBe(60 * 1000)
   })
 })
