@@ -185,9 +185,10 @@ describe('CiWatcher', () => {
   it('patches a timeout message when 15 minutes elapse with no completion', async () => {
     const { updater, patch } = makeUpdater()
     let nowVal = 0
-    const getCiStatus = vi.fn(
-      async (): Promise<CiStatus> => ({ state: 'pending', failedChecks: [] }),
-    )
+    const getCiStatus = vi.fn(async (): Promise<CiStatus> => ({
+      state: 'pending',
+      failedChecks: [],
+    }))
     const client = { getCiStatus } as unknown as BlogServiceClient
     const scheduler = createScheduler({
       maxConcurrentTasks: 8,

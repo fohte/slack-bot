@@ -34,8 +34,7 @@ export interface SchedulerOptions {
   readonly maxConcurrentTasks: number
   readonly logger?: Logger | undefined
   readonly setTimeoutImpl?:
-    | ((callback: () => void, ms: number) => NodeJS.Timeout)
-    | undefined
+    ((callback: () => void, ms: number) => NodeJS.Timeout) | undefined
   readonly clearTimeoutImpl?: ((handle: NodeJS.Timeout) => void) | undefined
   readonly now?: (() => number) | undefined
 }

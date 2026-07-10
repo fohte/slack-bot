@@ -12,8 +12,7 @@ export interface EventLogRetentionOptions {
   readonly logger?: Logger | undefined
   readonly now?: (() => number) | undefined
   readonly setIntervalImpl?:
-    | ((callback: () => void, ms: number) => NodeJS.Timeout)
-    | undefined
+    ((callback: () => void, ms: number) => NodeJS.Timeout) | undefined
   readonly clearIntervalImpl?: ((handle: NodeJS.Timeout) => void) | undefined
 }
 
