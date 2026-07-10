@@ -75,32 +75,26 @@ describe('reportDispatchFailure', () => {
     }
     const logger = createRecordingLogger()
     await reportDispatchFailure(TEST_ENV, baseDeps(slackClient, logger))
-    const actual = {
-      calls: stub.calls,
-      logEntries: logger.entries,
-    }
-    expect(actual).toEqual({
-      calls: [
-        {
-          kind: 'status',
-          channel: 'C1',
-          thread: '111.222',
-          text: '',
-          blocks: undefined,
-          loadingMessages: undefined,
+    expect(stub.calls).toEqual([
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+    expect(logger.entries).toEqual([
+      {
+        level: 'error',
+        payload: {
+          event: 'llm_agent_dispatch_failure_notify_failed',
+          event_id: 'Ev1',
+          err: postError,
         },
-      ],
-      logEntries: [
-        {
-          level: 'error',
-          payload: {
-            event: 'llm_agent_dispatch_failure_notify_failed',
-            event_id: 'Ev1',
-            err: postError,
-          },
-          message: 'failed to notify Slack thread about a dispatch failure',
-        },
-      ],
-    })
+        message: 'failed to notify Slack thread about a dispatch failure',
+      },
+    ])
   })
 })

@@ -87,37 +87,32 @@ describe('submitTask', () => {
     const result = await submitTask(TEST_ENV, deps)
 
     const expectedName = taskCrNameForSlackEvent(TEST_ENV.eventId)
-    const actual = {
-      result,
-      creates: taskCrClient.creates,
-      marked: eventLogStore.markedTaskNames,
-    }
-    expect(actual).toEqual({
-      result: { taskName: expectedName },
-      creates: [
-        {
-          name: expectedName,
-          namespace: 'kubeopencode',
-          agentName: 'slack-bot',
-          description: 'hello bot',
-          contexts: [
-            {
-              kind: 'text',
-              name: 'slack-channel',
-              mountPath: 'slack-context/channel',
-              text: 'C1',
-            },
-            {
-              kind: 'text',
-              name: 'slack-thread-ts',
-              mountPath: 'slack-context/thread-ts',
-              text: '111.222',
-            },
-          ],
-        },
-      ],
-      marked: [{ id: 'Ev1', name: expectedName }],
-    })
+    expect(result).toEqual({ taskName: expectedName })
+    expect(taskCrClient.creates).toEqual([
+      {
+        name: expectedName,
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: 'hello bot',
+        contexts: [
+          {
+            kind: 'text',
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            kind: 'text',
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '111.222',
+          },
+        ],
+      },
+    ])
+    expect(eventLogStore.markedTaskNames).toEqual([
+      { id: 'Ev1', name: expectedName },
+    ])
   })
 
   it('still returns the Task CR result when recording task_name fails, since the Task CR already exists', async () => {
@@ -137,28 +132,21 @@ describe('submitTask', () => {
     const expectedName = taskCrNameForSlackEvent(TEST_ENV.eventId)
     const result = await submitTask(TEST_ENV, deps)
 
-    const actual = {
-      result,
-      creates: taskCrClient.creates.map((c) => c.name),
-      logEntries: logger.entries,
-    }
-    expect(actual).toEqual({
-      result: { taskName: expectedName },
-      creates: [expectedName],
-      logEntries: [
-        {
-          level: 'error',
-          payload: {
-            event: 'llm_agent_event_log_task_name_write_failed',
-            event_id: 'Ev1',
-            task_name: expectedName,
-            err: markTaskNameError,
-          },
-          message:
-            'failed to record task_name on event_log row after Task CR creation succeeded',
+    expect(result).toEqual({ taskName: expectedName })
+    expect(taskCrClient.creates.map((c) => c.name)).toEqual([expectedName])
+    expect(logger.entries).toEqual([
+      {
+        level: 'error',
+        payload: {
+          event: 'llm_agent_event_log_task_name_write_failed',
+          event_id: 'Ev1',
+          task_name: expectedName,
+          err: markTaskNameError,
         },
-      ],
-    })
+        message:
+          'failed to record task_name on event_log row after Task CR creation succeeded',
+      },
+    ])
   })
 
   it('attaches the opencode session id when a thread is already mapped', async () => {
@@ -178,43 +166,38 @@ describe('submitTask', () => {
     const result = await submitTask(TEST_ENV, deps)
 
     const expectedName = taskCrNameForSlackEvent(TEST_ENV.eventId)
-    const actual = {
-      result,
-      creates: taskCrClient.creates,
-      marked: eventLogStore.markedTaskNames,
-    }
-    expect(actual).toEqual({
-      result: { taskName: expectedName },
-      creates: [
-        {
-          name: expectedName,
-          namespace: 'kubeopencode',
-          agentName: 'slack-bot',
-          description: 'hello bot',
-          contexts: [
-            {
-              kind: 'text',
-              name: 'slack-channel',
-              mountPath: 'slack-context/channel',
-              text: 'C1',
-            },
-            {
-              kind: 'text',
-              name: 'slack-thread-ts',
-              mountPath: 'slack-context/thread-ts',
-              text: '111.222',
-            },
-            {
-              kind: 'text',
-              name: 'opencode-session-id',
-              mountPath: 'slack-context/session-id',
-              text: 'ses_abc',
-            },
-          ],
-        },
-      ],
-      marked: [{ id: 'Ev1', name: expectedName }],
-    })
+    expect(result).toEqual({ taskName: expectedName })
+    expect(taskCrClient.creates).toEqual([
+      {
+        name: expectedName,
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: 'hello bot',
+        contexts: [
+          {
+            kind: 'text',
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
+          },
+          {
+            kind: 'text',
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '111.222',
+          },
+          {
+            kind: 'text',
+            name: 'opencode-session-id',
+            mountPath: 'slack-context/session-id',
+            text: 'ses_abc',
+          },
+        ],
+      },
+    ])
+    expect(eventLogStore.markedTaskNames).toEqual([
+      { id: 'Ev1', name: expectedName },
+    ])
   })
 
   it('downloads attached images, mounts them via a ConfigMap context, and prepends an image-attachment description block', async () => {
@@ -267,55 +250,48 @@ describe('submitTask', () => {
       '',
       'look at these',
     ].join('\n')
-    const actual = {
-      result,
-      creates: taskCrClient.creates,
-      configMaps: configMapClient.creates,
-    }
-    expect(actual).toEqual({
-      result: { taskName: expectedTaskName },
-      creates: [
-        {
-          name: expectedTaskName,
-          namespace: 'kubeopencode',
-          agentName: 'slack-bot',
-          description: expectedDescription,
-          contexts: [
-            {
-              kind: 'text',
-              name: 'slack-channel',
-              mountPath: 'slack-context/channel',
-              text: 'C1',
-            },
-            {
-              kind: 'text',
-              name: 'slack-thread-ts',
-              mountPath: 'slack-context/thread-ts',
-              text: '111.222',
-            },
-            {
-              kind: 'configMap',
-              name: 'slack-images',
-              mountPath: 'slack-images',
-              configMapName: expectedConfigMapName,
-            },
-          ],
-        },
-      ],
-      configMaps: [
-        {
-          name: expectedConfigMapName,
-          namespace: 'kubeopencode',
-          binaryEntries: [
-            { filename: '01-f1.png', bytes: pngBytes },
-            { filename: '02-f2.jpg', bytes: jpgBytes },
-          ],
-          labels: {
-            'slack-bot.fohte.net/slack-event-id': 'Ev1',
+    expect(result).toEqual({ taskName: expectedTaskName })
+    expect(taskCrClient.creates).toEqual([
+      {
+        name: expectedTaskName,
+        namespace: 'kubeopencode',
+        agentName: 'slack-bot',
+        description: expectedDescription,
+        contexts: [
+          {
+            kind: 'text',
+            name: 'slack-channel',
+            mountPath: 'slack-context/channel',
+            text: 'C1',
           },
+          {
+            kind: 'text',
+            name: 'slack-thread-ts',
+            mountPath: 'slack-context/thread-ts',
+            text: '111.222',
+          },
+          {
+            kind: 'configMap',
+            name: 'slack-images',
+            mountPath: 'slack-images',
+            configMapName: expectedConfigMapName,
+          },
+        ],
+      },
+    ])
+    expect(configMapClient.creates).toEqual([
+      {
+        name: expectedConfigMapName,
+        namespace: 'kubeopencode',
+        binaryEntries: [
+          { filename: '01-f1.png', bytes: pngBytes },
+          { filename: '02-f2.jpg', bytes: jpgBytes },
+        ],
+        labels: {
+          'slack-bot.fohte.net/slack-event-id': 'Ev1',
         },
-      ],
-    })
+      },
+    ])
   })
 
   it('drops images whose download fails and continues with the rest', async () => {
@@ -356,22 +332,22 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    const actual = {
-      configMaps: configMapClient.creates.map((c) => ({
+    expect(
+      configMapClient.creates.map((c) => ({
         name: c.name,
         keys: c.binaryEntries.map((e) => e.filename),
       })),
-      contextKinds: taskCrClient.creates[0]?.contexts.map((c) => c.kind),
-    }
-    expect(actual).toEqual({
-      configMaps: [
-        {
-          name: `${taskCrNameForSlackEvent('Ev1')}-images`,
-          keys: ['02-f2.png'],
-        },
-      ],
-      contextKinds: ['text', 'text', 'configMap'],
-    })
+    ).toEqual([
+      {
+        name: `${taskCrNameForSlackEvent('Ev1')}-images`,
+        keys: ['02-f2.png'],
+      },
+    ])
+    expect(taskCrClient.creates[0]?.contexts.map((c) => c.kind)).toEqual([
+      'text',
+      'text',
+      'configMap',
+    ])
   })
 
   it('still downloads images whose declared Slack size metadata exceeds the per-image cap', async () => {
@@ -500,23 +476,17 @@ describe('submitTask', () => {
     await submitTask({ ...TEST_ENV, images }, deps)
 
     const expectedConfigMapName = `${taskCrNameForSlackEvent('Ev1')}-images`
-    const actual = {
-      resizerCalls: imageResizer.calls,
-      configMaps: configMapClient.creates,
-    }
-    expect(actual).toEqual({
-      resizerCalls: [{ maxBytes: 500 * 1024 }],
-      configMaps: [
-        {
-          name: expectedConfigMapName,
-          namespace: 'kubeopencode',
-          binaryEntries: [{ filename: '01-f1.jpg', bytes: resizedBytes }],
-          labels: {
-            'slack-bot.fohte.net/slack-event-id': 'Ev1',
-          },
+    expect(imageResizer.calls).toEqual([{ maxBytes: 500 * 1024 }])
+    expect(configMapClient.creates).toEqual([
+      {
+        name: expectedConfigMapName,
+        namespace: 'kubeopencode',
+        binaryEntries: [{ filename: '01-f1.jpg', bytes: resizedBytes }],
+        labels: {
+          'slack-bot.fohte.net/slack-event-id': 'Ev1',
         },
-      ],
-    })
+      },
+    ])
   })
 
   it('drops an image when it cannot be resized under the cap', async () => {
@@ -550,15 +520,10 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    const actual = {
-      configMaps: configMapClient.creates,
-      description: taskCrClient.creates[0]?.description,
-    }
-    expect(actual).toEqual({
-      configMaps: [],
-      description:
-        "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
-    })
+    expect(configMapClient.creates).toEqual([])
+    expect(taskCrClient.creates[0]?.description).toBe(
+      "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
+    )
   })
 
   it('shrinks the resize cap for a later image once an earlier one consumed part of the total budget', async () => {
@@ -652,14 +617,12 @@ describe('submitTask', () => {
     )
 
     const expectedConfigMapName = `${taskCrNameForSlackEvent(TEST_ENV.eventId)}-images`
-    const actual = {
-      creates: configMapClient.creates.map((c) => c.name),
-      deletes: configMapClient.deletes,
-    }
-    expect(actual).toEqual({
-      creates: [expectedConfigMapName],
-      deletes: [{ name: expectedConfigMapName, namespace: 'kubeopencode' }],
-    })
+    expect(configMapClient.creates.map((c) => c.name)).toEqual([
+      expectedConfigMapName,
+    ])
+    expect(configMapClient.deletes).toEqual([
+      { name: expectedConfigMapName, namespace: 'kubeopencode' },
+    ])
   })
 
   describe('with an active OTel span', () => {
@@ -796,13 +759,12 @@ describe('submitTask', () => {
 
     await submitTask({ ...TEST_ENV, images }, deps)
 
-    const actual = {
-      configMaps: configMapClient.creates,
+    expect(configMapClient.creates).toEqual([])
+    const created = {
       contextKinds: taskCrClient.creates[0]?.contexts.map((c) => c.kind),
       description: taskCrClient.creates[0]?.description,
     }
-    expect(actual).toEqual({
-      configMaps: [],
+    expect(created).toEqual({
       contextKinds: ['text', 'text'],
       description:
         "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",

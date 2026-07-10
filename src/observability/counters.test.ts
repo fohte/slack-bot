@@ -126,46 +126,43 @@ describe('wrapOpencodeCall', () => {
       () => ({ models: ['opencode-go/claude-sonnet-4-6'], assistantCount: 1 }),
     )
 
-    const actual = { result, snapshot: await collect() }
-    expect(actual).toEqual({
-      result: { reply: 'hi' },
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_abc',
-              'opencode.operation': 'fetch_messages',
-              'opencode.model': 'opencode-go/claude-sonnet-4-6',
-              'opencode.status': 'success',
-              'opencode.assistant_count': 1,
-              'http.status_code': 200,
-            },
-            statusCode: SpanStatusCode.UNSET,
+    expect(result).toEqual({ reply: 'hi' })
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_abc',
+            'opencode.operation': 'fetch_messages',
+            'opencode.model': 'opencode-go/claude-sonnet-4-6',
+            'opencode.status': 'success',
+            'opencode.assistant_count': 1,
+            'http.status_code': 200,
           },
-        ],
-        messages: [
-          {
-            name: 'opencode.messages.count',
-            attributes: {
-              model: 'opencode-go/claude-sonnet-4-6',
-              status: 'success',
-            },
-            value: 1,
+          statusCode: SpanStatusCode.UNSET,
+        },
+      ],
+      messages: [
+        {
+          name: 'opencode.messages.count',
+          attributes: {
+            model: 'opencode-go/claude-sonnet-4-6',
+            status: 'success',
           },
-        ],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'fetch_messages',
-              status: 'success',
-              http_status_code: 200,
-            },
-            value: 1,
+          value: 1,
+        },
+      ],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'fetch_messages',
+            status: 'success',
+            http_status_code: 200,
           },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -184,37 +181,34 @@ describe('wrapOpencodeCall', () => {
       thrown = e
     }
 
-    const actual = { thrown, snapshot: await collect() }
-    expect(actual).toEqual({
-      thrown: err,
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_abc',
-              'opencode.operation': 'fetch_messages',
-              'opencode.model': 'unknown',
-              'opencode.status': 'error',
-            },
-            statusCode: SpanStatusCode.ERROR,
+    expect(thrown).toEqual(err)
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_abc',
+            'opencode.operation': 'fetch_messages',
+            'opencode.model': 'unknown',
+            'opencode.status': 'error',
           },
-        ],
-        messages: [
-          {
-            name: 'opencode.messages.count',
-            attributes: { model: 'unknown', status: 'error' },
-            value: 1,
-          },
-        ],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: { operation: 'fetch_messages', status: 'error' },
-            value: 1,
-          },
-        ],
-      },
+          statusCode: SpanStatusCode.ERROR,
+        },
+      ],
+      messages: [
+        {
+          name: 'opencode.messages.count',
+          attributes: { model: 'unknown', status: 'error' },
+          value: 1,
+        },
+      ],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: { operation: 'fetch_messages', status: 'error' },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -234,44 +228,41 @@ describe('wrapOpencodeCall', () => {
       thrown = e
     }
 
-    const actual = { thrown, snapshot: await collect() }
-    expect(actual).toEqual({
-      thrown: err,
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_abc',
-              'opencode.operation': 'fetch_messages',
-              'opencode.model': 'unknown',
-              'opencode.status': 'rate_limited',
-              'http.status_code': 429,
-              'http.retry_after': 30,
-              'error.type': 'GoUsageLimitError',
-            },
-            statusCode: SpanStatusCode.ERROR,
+    expect(thrown).toEqual(err)
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_abc',
+            'opencode.operation': 'fetch_messages',
+            'opencode.model': 'unknown',
+            'opencode.status': 'rate_limited',
+            'http.status_code': 429,
+            'http.retry_after': 30,
+            'error.type': 'GoUsageLimitError',
           },
-        ],
-        messages: [
-          {
-            name: 'opencode.messages.count',
-            attributes: { model: 'unknown', status: 'rate_limited' },
-            value: 1,
+          statusCode: SpanStatusCode.ERROR,
+        },
+      ],
+      messages: [
+        {
+          name: 'opencode.messages.count',
+          attributes: { model: 'unknown', status: 'rate_limited' },
+          value: 1,
+        },
+      ],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'fetch_messages',
+            status: 'rate_limited',
+            http_status_code: 429,
           },
-        ],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'fetch_messages',
-              status: 'rate_limited',
-              http_status_code: 429,
-            },
-            value: 1,
-          },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 
@@ -282,43 +273,40 @@ describe('wrapOpencodeCall', () => {
       () => ({ models: [], assistantCount: 1 }),
     )
 
-    const actual = { result, snapshot: await collect() }
-    expect(actual).toEqual({
-      result: { ok: true },
-      snapshot: {
-        spans: [
-          {
-            name: 'opencode.message',
-            attributes: {
-              'opencode.session_id': 'sess_xyz',
-              'opencode.operation': 'find_session',
-              'opencode.model': 'unknown',
-              'opencode.status': 'success',
-              'opencode.assistant_count': 1,
-              'http.status_code': 200,
-            },
-            statusCode: SpanStatusCode.UNSET,
+    expect(result).toEqual({ ok: true })
+    expect(await collect()).toEqual({
+      spans: [
+        {
+          name: 'opencode.message',
+          attributes: {
+            'opencode.session_id': 'sess_xyz',
+            'opencode.operation': 'find_session',
+            'opencode.model': 'unknown',
+            'opencode.status': 'success',
+            'opencode.assistant_count': 1,
+            'http.status_code': 200,
           },
-        ],
-        messages: [
-          {
-            name: 'opencode.messages.count',
-            attributes: { model: 'unknown', status: 'success' },
-            value: 1,
+          statusCode: SpanStatusCode.UNSET,
+        },
+      ],
+      messages: [
+        {
+          name: 'opencode.messages.count',
+          attributes: { model: 'unknown', status: 'success' },
+          value: 1,
+        },
+      ],
+      calls: [
+        {
+          name: 'opencode.calls.count',
+          attributes: {
+            operation: 'find_session',
+            status: 'success',
+            http_status_code: 200,
           },
-        ],
-        calls: [
-          {
-            name: 'opencode.calls.count',
-            attributes: {
-              operation: 'find_session',
-              status: 'success',
-              http_status_code: 200,
-            },
-            value: 1,
-          },
-        ],
-      },
+          value: 1,
+        },
+      ],
     })
   })
 })
@@ -344,10 +332,7 @@ describe('wrapOpencodeCall without observability initialized', () => {
       threw = e
     }
 
-    const actual = { result, threw }
-    expect(actual).toEqual({
-      result: { ok: true },
-      threw: undefined,
-    })
+    const outcome = { result, threw }
+    expect(outcome).toEqual({ result: { ok: true }, threw: undefined })
   })
 })

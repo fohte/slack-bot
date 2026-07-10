@@ -154,22 +154,16 @@ describe('SlackWebClient', () => {
       thread_ts: '1700000000.000050',
       status: 'is thinking...',
     })
-    const actual = {
-      result,
-      calls: mock.assistant.threads.setStatus.mock.calls,
-    }
-    expect(actual).toEqual({
-      result: { ok: true },
-      calls: [
-        [
-          {
-            channel_id: 'C1',
-            thread_ts: '1700000000.000050',
-            status: 'is thinking...',
-          },
-        ],
+    expect(result).toEqual({ ok: true })
+    expect(mock.assistant.threads.setStatus.mock.calls).toEqual([
+      [
+        {
+          channel_id: 'C1',
+          thread_ts: '1700000000.000050',
+          status: 'is thinking...',
+        },
       ],
-    })
+    ])
   })
 
   it('forwards setAssistantThreadStatus loading_messages to the underlying client', async () => {
@@ -258,8 +252,8 @@ describe('SlackWebClient', () => {
     const result = await client.downloadFile(
       'https://files.slack.com/files-pri/T1-F1/image.png',
     )
-    const actual = {
-      fetchCalls: fetchImpl.mock.calls.map(([url, init]) => ({
+    expect(
+      fetchImpl.mock.calls.map(([url, init]) => ({
         url,
         method: (init as RequestInit | undefined)?.method,
         auth: (
@@ -267,17 +261,18 @@ describe('SlackWebClient', () => {
             Record<string, string> | undefined
         )?.['Authorization'],
       })),
+    ).toEqual([
+      {
+        url: 'https://files.slack.com/files-pri/T1-F1/image.png',
+        method: 'GET',
+        auth: 'Bearer xoxb-secret',
+      },
+    ])
+    const downloaded = {
       contentType: result.contentType,
       bytes: Array.from(result.bytes),
     }
-    expect(actual).toEqual({
-      fetchCalls: [
-        {
-          url: 'https://files.slack.com/files-pri/T1-F1/image.png',
-          method: 'GET',
-          auth: 'Bearer xoxb-secret',
-        },
-      ],
+    expect(downloaded).toEqual({
       contentType: 'image/png',
       bytes: [0x89, 0x50, 0x4e, 0x47],
     })
@@ -362,25 +357,22 @@ describe('SlackWebClient', () => {
       client: asWebClient(mock),
     })
     const result = await client.getFileInfo('F123')
-    const actual = { result, calls: mock.files.info.mock.calls }
-    expect(actual).toEqual({
-      result: {
-        id: 'F123',
-        name: 'lunch.jpg',
-        title: 'lunch',
-        mimetype: 'image/jpeg',
-        filetype: 'jpg',
-        size: 1234,
-        url_private: 'https://files.slack.com/files-pri/T1-F123/lunch.jpg',
-        url_private_download:
-          'https://files.slack.com/files-pri/T1-F123/download/lunch.jpg',
-        permalink: 'https://team.slack.com/files/U1/F123/lunch.jpg',
-        channels: ['C1'],
-        groups: ['G1'],
-        ims: [],
-      },
-      calls: [[{ file: 'F123' }]],
+    expect(result).toEqual({
+      id: 'F123',
+      name: 'lunch.jpg',
+      title: 'lunch',
+      mimetype: 'image/jpeg',
+      filetype: 'jpg',
+      size: 1234,
+      url_private: 'https://files.slack.com/files-pri/T1-F123/lunch.jpg',
+      url_private_download:
+        'https://files.slack.com/files-pri/T1-F123/download/lunch.jpg',
+      permalink: 'https://team.slack.com/files/U1/F123/lunch.jpg',
+      channels: ['C1'],
+      groups: ['G1'],
+      ims: [],
     })
+    expect(mock.files.info.mock.calls).toEqual([[{ file: 'F123' }]])
   })
 
   it('returns undefined when files.info responds with a null file', async () => {

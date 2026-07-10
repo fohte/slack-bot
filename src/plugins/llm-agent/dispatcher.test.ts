@@ -355,15 +355,12 @@ describe('resolveInlineImageFiles', () => {
       text: 'F0BG20H5AVA これ昼たべたから記録しといて',
     }
     const result = await resolveInlineImageFiles(env, slackClient, noopLogger)
-    const actual = { result, calls }
-    expect(actual).toEqual({
-      result: {
-        ...TEST_ENV,
-        text: 'これ昼たべたから記録しといて',
-        images: [imageFile],
-      },
-      calls: ['F0BG20H5AVA'],
+    expect(result).toEqual({
+      ...TEST_ENV,
+      text: 'これ昼たべたから記録しといて',
+      images: [imageFile],
     })
+    expect(calls).toEqual(['F0BG20H5AVA'])
   })
 
   it('leaves the text and images unchanged when the resolved file is not an image', async () => {
