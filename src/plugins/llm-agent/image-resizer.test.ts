@@ -66,8 +66,7 @@ describe('createSharpImageResizer', () => {
     const resizer = createSharpImageResizer()
     const outcome = await resizer.resize(source, cap)
 
-    expect(outcome.ok).toBe(true)
-    if (!outcome.ok) return
+    if (!outcome.ok) throw new Error('expected resize to succeed')
 
     const decoded = await sharp(outcome.bytes).metadata()
     const resized = {
