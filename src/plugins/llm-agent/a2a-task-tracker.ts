@@ -6,7 +6,7 @@ import { a2aTask } from '@/db/schema'
 // Caps a single findUnsettled query so a large backlog (e.g. during an
 // extended reconciler outage) cannot pull an unbounded result set into
 // memory; the reconciler picks up any remainder on its next tick.
-const FIND_UNSETTLED_LIMIT = 100
+export const FIND_UNSETTLED_LIMIT = 100
 
 const A2A_TASK_STATES = [
   'submitted',
@@ -155,9 +155,6 @@ const toRow = (row: A2aTaskDbRow): A2aTaskRow => ({
   state: toA2aTaskState(row.state),
 })
 
-// Typed as PostgresJsDatabase (not the more generic PgDatabase) to match
-// event-log-store.ts and thread-session-store.ts; no caller runs this
-// tracker inside a transaction today.
 export const createA2aTaskTracker = (
   db: PostgresJsDatabase,
 ): A2aTaskTracker => ({

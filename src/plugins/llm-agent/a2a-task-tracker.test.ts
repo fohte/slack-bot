@@ -10,6 +10,7 @@ import type {
 import {
   A2A_TASK_ACTIVE_EXECUTION_STATES,
   A2A_TASK_TERMINAL_STATES,
+  FIND_UNSETTLED_LIMIT,
   transitionGuard,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 
@@ -52,6 +53,7 @@ const createInMemoryTracker = (
       return [...rows.values()]
         .filter((row) => !row.settled && row.updatedAt < olderThan)
         .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
+        .slice(0, FIND_UNSETTLED_LIMIT)
     },
     async transition(taskId: string, to: A2aTaskLifecycle) {
       const row = rows.get(taskId)
@@ -163,6 +165,29 @@ describe('findUnsettled', () => {
     await tracker.recordDelegated(newTask())
 
     expect(await tracker.findUnsettled(created)).toEqual([])
+  })
+
+  it('caps the result at FIND_UNSETTLED_LIMIT, keeping the oldest rows', async () => {
+    const base = new Date('2026-01-01T00:00:00Z')
+    const rowAt = (i: number) => new Date(base.getTime() + i * 1000)
+    let tick = base
+    const tracker = createInMemoryTracker({ now: () => tick })
+    const rowCount = FIND_UNSETTLED_LIMIT + 1
+    for (let i = 0; i < rowCount; i++) {
+      tick = rowAt(i)
+      await tracker.recordDelegated(newTask({ taskId: `task-${i}` }))
+    }
+
+    const rows = await tracker.findUnsettled(rowAt(rowCount))
+
+    expect(rows).toEqual(
+      Array.from({ length: FIND_UNSETTLED_LIMIT }, (_, i) => ({
+        ...newTask({ taskId: `task-${i}` }),
+        settled: false,
+        createdAt: rowAt(i),
+        updatedAt: rowAt(i),
+      })),
+    )
   })
 })
 
