@@ -231,9 +231,10 @@ describe('GenAiCallbackHandler', () => {
       captureMessageContent: true,
     })
     // BaseMessage['content'] is typed as string | ContentBlock[], but
-    // messages restored from an older serialized form can still carry a
-    // bare string inside that array; the constructor won't accept this
-    // shape, so it is assigned directly to exercise it.
+    // @langchain/core's own BaseMessage#text getter defensively handles a
+    // bare string inside that array too, so upstream message sources can
+    // still produce this shape; the constructor won't accept it directly,
+    // so it's assigned here to exercise it.
     const humanMessage = new HumanMessage('placeholder')
     Object.assign(humanMessage, { content: ['plain string element'] })
 
