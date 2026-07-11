@@ -760,14 +760,12 @@ describe('submitTask', () => {
     await submitTask({ ...TEST_ENV, images }, deps)
 
     expect(configMapClient.creates).toEqual([])
-    const created = {
-      contextKinds: taskCrClient.creates[0]?.contexts.map((c) => c.kind),
-      description: taskCrClient.creates[0]?.description,
-    }
-    expect(created).toEqual({
-      contextKinds: ['text', 'text'],
-      description:
-        "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
-    })
+    expect(taskCrClient.creates[0]?.contexts.map((c) => c.kind)).toEqual([
+      'text',
+      'text',
+    ])
+    expect(taskCrClient.creates[0]?.description).toBe(
+      "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",
+    )
   })
 })

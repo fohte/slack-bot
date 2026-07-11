@@ -69,16 +69,9 @@ describe('createSharpImageResizer', () => {
     if (!outcome.ok) throw new Error('expected resize to succeed')
 
     const decoded = await sharp(outcome.bytes).metadata()
-    const resized = {
-      ext: outcome.ext,
-      fitsUnderCap: outcome.bytes.byteLength <= cap,
-      decodedFormat: decoded.format,
-    }
-    expect(resized).toEqual({
-      ext: 'jpg',
-      fitsUnderCap: true,
-      decodedFormat: 'jpeg',
-    })
+    expect(outcome.ext).toBe('jpg')
+    expect(outcome.bytes.byteLength).toBeLessThanOrEqual(cap)
+    expect(decoded.format).toBe('jpeg')
   })
 
   it('gives up when the cap is too small for any attempt', async () => {
