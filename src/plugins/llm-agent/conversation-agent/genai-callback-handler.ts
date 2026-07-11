@@ -91,6 +91,9 @@ const contentToGenAiParts = (
     return content === '' ? [] : [{ type: 'text', content }]
   }
   return content.map((block): GenAiMessagePart => {
+    if (typeof block === 'string') {
+      return { type: 'text', content: block }
+    }
     if (isRecord(block) && block['type'] === 'text' && 'text' in block) {
       const text = block['text']
       return { type: 'text', content: typeof text === 'string' ? text : '' }

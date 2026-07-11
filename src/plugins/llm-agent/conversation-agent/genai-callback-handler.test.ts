@@ -225,6 +225,52 @@ describe('GenAiCallbackHandler', () => {
     ])
   })
 
+  it('captures a bare string element inside a content array as text', async () => {
+    const handler = new GenAiCallbackHandler({
+      providerName: 'opencode',
+      captureMessageContent: true,
+    })
+    // BaseMessage['content'] is typed as string | ContentBlock[], but
+    // messages restored from an older serialized form can still carry a
+    // bare string inside that array; the constructor won't accept this
+    // shape, so it is assigned directly to exercise it.
+    const humanMessage = new HumanMessage('placeholder')
+    Object.assign(humanMessage, { content: ['plain string element'] })
+
+    handler.handleChatModelStart(
+      FAKE_SERIALIZED,
+      [[humanMessage]],
+      'run-plain-string',
+      undefined,
+      { invocation_params: { model: 'opencode-go/gpt-5' } },
+    )
+    handler.handleLLMEnd(
+      resultOf([{ text: 'ok', message: new AIMessage('ok') }]),
+      'run-plain-string',
+    )
+
+    expect(await collectSpans()).toEqual([
+      {
+        name: 'chat opencode-go/gpt-5',
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.provider.name': 'opencode',
+          'gen_ai.request.model': 'opencode-go/gpt-5',
+          'gen_ai.input.messages': JSON.stringify([
+            {
+              role: 'user',
+              parts: [{ type: 'text', content: 'plain string element' }],
+            },
+          ]),
+          'gen_ai.output.messages': JSON.stringify([
+            { role: 'assistant', parts: [{ type: 'text', content: 'ok' }] },
+          ]),
+        },
+        statusCode: SpanStatusCode.UNSET,
+      },
+    ])
+  })
+
   it('ignores handleLLMEnd/handleLLMError for an unknown run id', async () => {
     const handler = new GenAiCallbackHandler({ providerName: 'opencode' })
 
