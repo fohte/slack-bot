@@ -332,7 +332,7 @@ describe('wrapOpencodeCall without observability initialized', () => {
       threw = e
     }
 
-    const outcome = { result, threw }
-    expect(outcome).toEqual({ result: { ok: true }, threw: undefined })
+    expect(result).toEqual({ ok: true })
+    expect(threw).toBeUndefined()
   })
 })
