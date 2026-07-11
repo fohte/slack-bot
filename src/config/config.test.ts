@@ -26,6 +26,11 @@ describe('loadConfig', () => {
       taskCrAgentName: undefined,
       opencodeBaseUrl: undefined,
     })
+    expect(config.conversationAgent).toEqual({
+      model: undefined,
+      personaPrompt: undefined,
+      opencodeApiKey: undefined,
+    })
   })
 
   it('reads optional llm-agent env overrides', () => {
@@ -41,6 +46,22 @@ describe('loadConfig', () => {
       taskCrNamespace: 'my-ns',
       taskCrAgentName: 'my-agent',
       opencodeBaseUrl: 'http://localhost:4096',
+    })
+  })
+
+  it('reads optional conversation-agent env overrides', () => {
+    const config = loadConfig({
+      env: {
+        ...baseEnv,
+        SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/claude-sonnet-4-6',
+        SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT: 'Be concise.',
+        OPENCODE_API_KEY: 'sk-test',
+      },
+    })
+    expect(config.conversationAgent).toEqual({
+      model: 'opencode-go/claude-sonnet-4-6',
+      personaPrompt: 'Be concise.',
+      opencodeApiKey: 'sk-test',
     })
   })
 

@@ -20,6 +20,28 @@ export {
   createKubernetesConfigMapClient,
 } from '@/plugins/llm-agent/configmap-client'
 export type {
+  ConversationAgent,
+  ConversationAgentInput,
+  ConversationAgentOptions,
+  ConversationOutcome,
+  ConversationThreadKey,
+  CreateOpenCodeGoChatModelOptions,
+  Delegation,
+  GenAiCallbackHandlerOptions,
+  ImageBlock,
+} from '@/plugins/llm-agent/conversation-agent'
+export {
+  CONVERSATION_CHECKPOINT_SCHEMA,
+  createConversationAgent,
+  createConversationCheckpointer,
+  createOpenCodeGoChatModel,
+  DEFAULT_OPENCODE_GO_BASE_URL,
+  deriveConversationThreadId,
+  GenAiCallbackHandler,
+  imageBlockFromResizedImage,
+  setupConversationCheckpointSchema,
+} from '@/plugins/llm-agent/conversation-agent'
+export type {
   TaskDispatcher,
   TaskDispatcherOptions,
 } from '@/plugins/llm-agent/dispatcher'

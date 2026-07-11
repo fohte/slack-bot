@@ -15,6 +15,15 @@ export interface LlmAgentConfig {
   readonly opencodeBaseUrl: string | undefined
 }
 
+// OPENCODE_API_KEY is unprefixed by design: it names the same LLM provider
+// credential injected into meshi and t-rader-agent (see architecture.md's
+// "OpenCode Go ... 全 agent の推論"), so the three services share one secret.
+export interface ConversationAgentConfig {
+  readonly model: string | undefined
+  readonly personaPrompt: string | undefined
+  readonly opencodeApiKey: string | undefined
+}
+
 export interface Config {
   readonly slackSigningSecret: string
   readonly slackBotToken: string
@@ -25,6 +34,7 @@ export interface Config {
   readonly maxWebApiRetries: number
   readonly logLevel: LogLevel
   readonly llmAgent: LlmAgentConfig
+  readonly conversationAgent: ConversationAgentConfig
   serviceTokenFor(pluginName: string): ServiceTokenPair | undefined
 }
 
@@ -75,6 +85,15 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     ),
   }
 
+  const conversationAgent: ConversationAgentConfig = {
+    model: optionalString(env, 'SLACK_BOT_CONVERSATION_AGENT_MODEL'),
+    personaPrompt: optionalString(
+      env,
+      'SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT',
+    ),
+    opencodeApiKey: optionalString(env, 'OPENCODE_API_KEY'),
+  }
+
   return {
     slackSigningSecret,
     slackBotToken,
@@ -85,6 +104,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     maxWebApiRetries,
     logLevel,
     llmAgent,
+    conversationAgent,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }
 }
