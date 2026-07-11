@@ -3,6 +3,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
 import { a2aTask } from '@/db/schema'
 
+// Caps a single findUnsettled query so a large backlog (e.g. during an
+// extended reconciler outage) cannot pull an unbounded result set into
+// memory; the reconciler picks up any remainder on its next tick.
+const FIND_UNSETTLED_LIMIT = 100
+
 const A2A_TASK_STATES = [
   'submitted',
   'working',
@@ -97,7 +102,8 @@ export interface A2aTaskTracker {
   // of starting a new conversation turn.
   findActiveInputRequired(threadKey: ThreadKey): Promise<A2aTaskRow | undefined>
   // Rows the reconciler should poll tasks/get for, last updated before
-  // `olderThan`.
+  // `olderThan`. Capped at FIND_UNSETTLED_LIMIT rows per call; a caller that
+  // needs the true backlog size must call repeatedly across ticks.
   findUnsettled(olderThan: Date): Promise<readonly A2aTaskRow[]>
   // Conditional UPDATE: only rows not yet settled are affected, so
   // concurrent callers (push notification vs. reconciler) settling the same
@@ -149,6 +155,9 @@ const toRow = (row: A2aTaskDbRow): A2aTaskRow => ({
   state: toA2aTaskState(row.state),
 })
 
+// Typed as PostgresJsDatabase (not the more generic PgDatabase) to match
+// event-log-store.ts and thread-session-store.ts; no caller runs this
+// tracker inside a transaction today.
 export const createA2aTaskTracker = (
   db: PostgresJsDatabase,
 ): A2aTaskTracker => ({
@@ -192,6 +201,7 @@ export const createA2aTaskTracker = (
       .from(a2aTask)
       .where(and(eq(a2aTask.settled, false), lt(a2aTask.updatedAt, olderThan)))
       .orderBy(a2aTask.updatedAt)
+      .limit(FIND_UNSETTLED_LIMIT)
     return rows.map(toRow)
   },
   async transition(taskId, to) {
