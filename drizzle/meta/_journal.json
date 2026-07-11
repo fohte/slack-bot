@@ -15,6 +15,13 @@
       "when": 1783517820707,
       "tag": "0001_busy_jack_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783744977825,
+      "tag": "0002_outgoing_abomination",
+      "breakpoints": true
     }
   ]
 }

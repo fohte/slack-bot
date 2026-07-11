@@ -1,4 +1,16 @@
 export type {
+  A2aTaskLifecycle,
+  A2aTaskRow,
+  A2aTaskState,
+  A2aTaskTracker,
+  NewA2aTask,
+  ThreadKey,
+} from '@/plugins/llm-agent/a2a-task-tracker'
+export {
+  A2A_TASK_ACTIVE_EXECUTION_STATES,
+  createA2aTaskTracker,
+} from '@/plugins/llm-agent/a2a-task-tracker'
+export type {
   AssistantStatusTarget,
   PhaseStatus,
   SetAssistantStatusOptions,
