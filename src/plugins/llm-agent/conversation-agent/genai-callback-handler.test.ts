@@ -148,9 +148,17 @@ describe('GenAiCallbackHandler', () => {
       'run-content',
     )
 
-    const [span] = await collectSpans()
-    expect(span?.attributes['gen_ai.input.messages']).toBeUndefined()
-    expect(span?.attributes['gen_ai.output.messages']).toBeUndefined()
+    expect(await collectSpans()).toEqual([
+      {
+        name: 'chat opencode-go/gpt-5',
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.provider.name': 'opencode',
+          'gen_ai.request.model': 'opencode-go/gpt-5',
+        },
+        statusCode: SpanStatusCode.UNSET,
+      },
+    ])
   })
 
   it('captures redacted message content when opted in', async () => {
@@ -187,31 +195,32 @@ describe('GenAiCallbackHandler', () => {
       'run-capture',
     )
 
-    const [span] = await collectSpans()
-    expect(
-      JSON.parse(
-        (span?.attributes['gen_ai.input.messages'] as string | undefined) ??
-          '[]',
-      ),
-    ).toEqual([
+    expect(await collectSpans()).toEqual([
       {
-        role: 'user',
-        parts: [
-          { type: 'text', content: 'what is this?' },
-          { type: 'text', content: '[image omitted]' },
-        ],
-      },
-    ])
-    expect(
-      JSON.parse(
-        (span?.attributes['gen_ai.output.messages'] as string | undefined) ??
-          '[]',
-      ),
-    ).toEqual([
-      {
-        role: 'assistant',
-        parts: [{ type: 'text', content: 'described the photo' }],
-        finish_reason: 'stop',
+        name: 'chat opencode-go/gpt-5',
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.provider.name': 'opencode',
+          'gen_ai.request.model': 'opencode-go/gpt-5',
+          'gen_ai.response.finish_reasons': ['stop'],
+          'gen_ai.input.messages': JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                { type: 'text', content: 'what is this?' },
+                { type: 'text', content: '[image omitted]' },
+              ],
+            },
+          ]),
+          'gen_ai.output.messages': JSON.stringify([
+            {
+              role: 'assistant',
+              parts: [{ type: 'text', content: 'described the photo' }],
+              finish_reason: 'stop',
+            },
+          ]),
+        },
+        statusCode: SpanStatusCode.UNSET,
       },
     ])
   })

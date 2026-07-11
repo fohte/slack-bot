@@ -9,9 +9,7 @@ import { createAgent } from 'langchain'
 import { GenAiCallbackHandler } from '@/plugins/llm-agent/conversation-agent/genai-callback-handler'
 import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
 
-// OpenCode Go's OpenAI-compatible endpoint, matching meshi's
-// OPENCODE_GO_BASE_URL (duplicated intentionally, not shared: each service
-// owns its own LLM wiring).
+// OpenCode Go's OpenAI-compatible endpoint.
 export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
 
 const GEN_AI_PROVIDER_NAME = 'opencode'
@@ -45,8 +43,7 @@ export interface ConversationOutcome {
   // User-facing reply text; when the turn included a delegation, this is the
   // agent's intermediate response rather than the delegated task's result.
   readonly text: string
-  // Zero delegations means a pure conversational turn. Populated once
-  // delegation tools are wired in (a later change); always empty here.
+  // Empty means a pure conversational turn.
   readonly delegations: readonly Delegation[]
 }
 
@@ -58,6 +55,12 @@ export interface ConversationAgentInput {
 }
 
 export interface ConversationAgent {
+  // Concurrent calls for the same threadId are not serialized against each
+  // other: the checkpointer's read-then-write means two in-flight calls can
+  // both read the same latest checkpoint and each write a child of it, so
+  // only one branch survives as the thread's history and the other turn is
+  // silently dropped. Callers must ensure at most one in-flight respond()
+  // per threadId.
   respond(input: ConversationAgentInput): Promise<ConversationOutcome>
 }
 
@@ -69,8 +72,6 @@ export interface ConversationAgentOptions {
   // Persona/tone only, never domain knowledge (kept out of this repo by
   // design; domain agents live behind A2A delegation).
   readonly personaPrompt?: string | undefined
-  // Empty by default: delegation tools are attached by a later change. Kept
-  // as an option now so that change doesn't need to touch this factory.
   readonly tools?: CreateAgentTools | undefined
   readonly genAiCallbackHandler?: BaseCallbackHandler | undefined
 }

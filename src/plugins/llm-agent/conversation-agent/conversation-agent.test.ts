@@ -37,11 +37,15 @@ describe('createConversationAgent', () => {
     await agent.respond({ threadId, userText: 'first turn', images: [] })
     await agent.respond({ threadId, userText: 'second turn', images: [] })
 
-    expect(model.calls).toHaveLength(2)
-    expect(model.calls[1]?.map((m) => [m.type, m.text])).toEqual([
-      ['human', 'first turn'],
-      ['ai', 'reply-0'],
-      ['human', 'second turn'],
+    expect(
+      model.calls.map((call) => call.map((m) => [m.type, m.text])),
+    ).toEqual([
+      [['human', 'first turn']],
+      [
+        ['human', 'first turn'],
+        ['ai', 'reply-0'],
+        ['human', 'second turn'],
+      ],
     ])
   })
 
@@ -65,9 +69,9 @@ describe('createConversationAgent', () => {
       images: [],
     })
 
-    expect(model.calls[1]?.map((m) => [m.type, m.text])).toEqual([
-      ['human', 'thread two turn'],
-    ])
+    expect(
+      model.calls.map((call) => call.map((m) => [m.type, m.text])),
+    ).toEqual([[['human', 'thread one turn']], [['human', 'thread two turn']]])
   })
 
   it('embeds resized images as base64 content blocks alongside the text', async () => {
@@ -105,9 +109,13 @@ describe('createConversationAgent', () => {
       images: [],
     })
 
-    expect(model.calls[0]?.map((m) => [m.type, m.text])).toEqual([
-      ['system', 'You are a cheerful assistant.'],
-      ['human', 'hi'],
+    expect(
+      model.calls.map((call) => call.map((m) => [m.type, m.text])),
+    ).toEqual([
+      [
+        ['system', 'You are a cheerful assistant.'],
+        ['human', 'hi'],
+      ],
     ])
   })
 })

@@ -15,9 +15,8 @@ export interface LlmAgentConfig {
   readonly opencodeBaseUrl: string | undefined
 }
 
-// OPENCODE_API_KEY is unprefixed by design: it names the same LLM provider
-// credential injected into meshi and t-rader-agent (see architecture.md's
-// "OpenCode Go ... 全 agent の推論"), so the three services share one secret.
+// OPENCODE_API_KEY is unprefixed: multiple services share this credential,
+// so it isn't namespaced per-service like SLACK_BOT_CONVERSATION_AGENT_*.
 export interface ConversationAgentConfig {
   readonly model: string | undefined
   readonly personaPrompt: string | undefined
