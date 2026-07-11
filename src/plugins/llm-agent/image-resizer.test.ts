@@ -58,34 +58,42 @@ const buildOversizedPixelCountPngBytes = async (): Promise<Uint8Array> => {
   return new Uint8Array(buf)
 }
 
+// Both tests below re-encode several resize tiers with mozjpeg, which is
+// CPU-bound enough that slow CI runners can exceed vitest's 5s default.
+const MOZJPEG_RESIZE_TEST_TIMEOUT_MS = 20_000
+
 describe('createSharpImageResizer', () => {
-  it('shrinks a large source image to fit under the byte cap', async () => {
-    const source = await buildNoisyJpegBytes(3000, 2000)
-    const cap = 500 * 1024
+  it(
+    'shrinks a large source image to fit under the byte cap',
+    async () => {
+      const source = await buildNoisyJpegBytes(3000, 2000)
+      const cap = 500 * 1024
 
-    const resizer = createSharpImageResizer()
-    const outcome = await resizer.resize(source, cap)
+      const resizer = createSharpImageResizer()
+      const outcome = await resizer.resize(source, cap)
 
-    if (!outcome.ok) throw new Error('expected resize to succeed')
+      if (!outcome.ok) throw new Error('expected resize to succeed')
 
-    const decoded = await sharp(outcome.bytes).metadata()
-    expect(outcome.ext).toBe('jpg')
-    expect(outcome.bytes.byteLength).toBeLessThanOrEqual(cap)
-    expect(decoded.format).toBe('jpeg')
-  }, // Re-encodes several resize tiers with mozjpeg, which is CPU-bound
-  // enough that slow CI runners can exceed vitest's 5s default.
-  20_000)
+      const decoded = await sharp(outcome.bytes).metadata()
+      expect(outcome.ext).toBe('jpg')
+      expect(outcome.bytes.byteLength).toBeLessThanOrEqual(cap)
+      expect(decoded.format).toBe('jpeg')
+    },
+    MOZJPEG_RESIZE_TEST_TIMEOUT_MS,
+  )
 
-  it('gives up when the cap is too small for any attempt', async () => {
-    const source = await buildNoisyJpegBytes(3000, 2000)
-    const resizer = createSharpImageResizer()
+  it(
+    'gives up when the cap is too small for any attempt',
+    async () => {
+      const source = await buildNoisyJpegBytes(3000, 2000)
+      const resizer = createSharpImageResizer()
 
-    const outcome = await resizer.resize(source, 1000)
+      const outcome = await resizer.resize(source, 1000)
 
-    expect(outcome).toEqual({ ok: false, reason: 'still_too_large' })
-  }, // Same mozjpeg re-encoding cost as the test above, since every tier
-  // is attempted before giving up.
-  20_000)
+      expect(outcome).toEqual({ ok: false, reason: 'still_too_large' })
+    },
+    MOZJPEG_RESIZE_TEST_TIMEOUT_MS,
+  )
 
   it('rejects bytes that are not a decodable image', async () => {
     const resizer = createSharpImageResizer()
