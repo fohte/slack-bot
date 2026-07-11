@@ -760,9 +760,19 @@ describe('submitTask', () => {
     await submitTask({ ...TEST_ENV, images }, deps)
 
     expect(configMapClient.creates).toEqual([])
-    expect(taskCrClient.creates[0]?.contexts.map((c) => c.kind)).toEqual([
-      'text',
-      'text',
+    expect(taskCrClient.creates[0]?.contexts).toEqual([
+      {
+        kind: 'text',
+        name: 'slack-channel',
+        mountPath: 'slack-context/channel',
+        text: 'C1',
+      },
+      {
+        kind: 'text',
+        name: 'slack-thread-ts',
+        mountPath: 'slack-context/thread-ts',
+        text: '111.222',
+      },
     ])
     expect(taskCrClient.creates[0]?.description).toBe(
       "Note: 1 attached image(s) could not be loaded (download failed, or the file was too large/corrupted to resize into the workspace size budget) and are not available. Tell the user you couldn't read those images.\n\nhello bot",

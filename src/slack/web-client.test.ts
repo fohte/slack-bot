@@ -268,8 +268,10 @@ describe('SlackWebClient', () => {
         auth: 'Bearer xoxb-secret',
       },
     ])
-    expect(result.contentType).toBe('image/png')
-    expect(Array.from(result.bytes)).toEqual([0x89, 0x50, 0x4e, 0x47])
+    expect(result).toEqual({
+      contentType: 'image/png',
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    })
   })
 
   it('refuses to download from a non-Slack host without calling fetch', async () => {
