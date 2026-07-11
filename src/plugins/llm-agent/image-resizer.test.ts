@@ -72,7 +72,9 @@ describe('createSharpImageResizer', () => {
     expect(outcome.ext).toBe('jpg')
     expect(outcome.bytes.byteLength).toBeLessThanOrEqual(cap)
     expect(decoded.format).toBe('jpeg')
-  })
+  }, // Re-encodes several resize tiers with mozjpeg, which is CPU-bound
+  // enough that slow CI runners can exceed vitest's 5s default.
+  20_000)
 
   it('gives up when the cap is too small for any attempt', async () => {
     const source = await buildNoisyJpegBytes(3000, 2000)
@@ -81,7 +83,9 @@ describe('createSharpImageResizer', () => {
     const outcome = await resizer.resize(source, 1000)
 
     expect(outcome).toEqual({ ok: false, reason: 'still_too_large' })
-  })
+  }, // Same mozjpeg re-encoding cost as the test above, since every tier
+  // is attempted before giving up.
+  20_000)
 
   it('rejects bytes that are not a decodable image', async () => {
     const resizer = createSharpImageResizer()
