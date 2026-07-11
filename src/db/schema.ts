@@ -1,5 +1,7 @@
+import { sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   index,
   pgTable,
   primaryKey,
@@ -87,6 +89,15 @@ export const a2aTask = pgTable(
       table.slackChannelId,
       table.threadRootTs,
     ),
-    index('a2a_task_unsettled_idx').on(table.settled, table.updatedAt),
+    // Partial: every reader of this index (findUnsettled, transition,
+    // findActiveInputRequired) filters on settled = false, and settled rows
+    // never get looked up by it again.
+    index('a2a_task_unsettled_idx')
+      .on(table.updatedAt)
+      .where(sql`${table.settled} = false`),
+    check(
+      'a2a_task_state_check',
+      sql`${table.state} in ('submitted','working','input-required','completed','failed','canceled','rejected')`,
+    ),
   ],
 )

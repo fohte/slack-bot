@@ -5,10 +5,13 @@ export type {
   A2aTaskTracker,
   NewA2aTask,
   ThreadKey,
+  TransitionGuard,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 export {
   A2A_TASK_ACTIVE_EXECUTION_STATES,
+  A2A_TASK_TERMINAL_STATES,
   createA2aTaskTracker,
+  transitionGuard,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 export type {
   AssistantStatusTarget,

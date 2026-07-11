@@ -7,11 +7,18 @@ import type {
   NewA2aTask,
   ThreadKey,
 } from '@/plugins/llm-agent/a2a-task-tracker'
-import { A2A_TASK_ACTIVE_EXECUTION_STATES } from '@/plugins/llm-agent/a2a-task-tracker'
+import {
+  A2A_TASK_ACTIVE_EXECUTION_STATES,
+  A2A_TASK_TERMINAL_STATES,
+  transitionGuard,
+} from '@/plugins/llm-agent/a2a-task-tracker'
 
 // Reference implementation used to pin down the contract a real store must
 // satisfy, since exercising conditional-UPDATE semantics needs a real
-// Postgres connection this test environment does not have.
+// Postgres connection this test environment does not have. It delegates the
+// guard/settled decisions to the production functions it imports above, so
+// only the persistence plumbing itself (plain Map reads/writes vs. SQL) is
+// duplicated.
 const createInMemoryTracker = (
   options: { now?: () => Date } = {},
 ): A2aTaskTracker => {
@@ -20,6 +27,7 @@ const createInMemoryTracker = (
 
   return {
     async recordDelegated(rec: NewA2aTask) {
+      if (rows.has(rec.taskId)) return
       const timestamp = now()
       rows.set(rec.taskId, {
         ...rec,
@@ -48,16 +56,23 @@ const createInMemoryTracker = (
     async transition(taskId: string, to: A2aTaskLifecycle) {
       const row = rows.get(taskId)
       if (row === undefined || row.settled) return { updated: false }
+      const guard = transitionGuard(to)
       if (
-        to.state === 'failed' &&
-        !A2A_TASK_ACTIVE_EXECUTION_STATES.includes(row.state)
+        guard.requireStates !== undefined &&
+        !guard.requireStates.includes(row.state)
+      ) {
+        return { updated: false }
+      }
+      if (
+        to.ifDeadlineAtOrBefore !== undefined &&
+        row.deadlineAt > to.ifDeadlineAtOrBefore
       ) {
         return { updated: false }
       }
       rows.set(taskId, {
         ...row,
         state: to.state,
-        settled: to.settled,
+        settled: A2A_TASK_TERMINAL_STATES.includes(to.state),
         deadlineAt: to.deadlineAt ?? row.deadlineAt,
         updatedAt: now(),
       })
@@ -93,6 +108,18 @@ const newTask = (override: Partial<NewA2aTask> = {}): NewA2aTask => ({
   deadlineAt: new Date('2026-01-01T00:10:00Z'),
   ...THREAD,
   ...override,
+})
+
+describe('transitionGuard', () => {
+  it('requires the task still be actively executing when failing it', () => {
+    expect(transitionGuard({ state: 'failed' })).toEqual({
+      requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES,
+    })
+  })
+
+  it('does not restrict other transitions', () => {
+    expect(transitionGuard({ state: 'completed' })).toEqual({})
+  })
 })
 
 describe('recordDelegated / findActiveInputRequired', () => {
@@ -140,13 +167,17 @@ describe('findUnsettled', () => {
 })
 
 describe('transition', () => {
-  it('elects exactly one winner when two callers settle the same task concurrently', async () => {
+  it('lets only one of two racing settle attempts succeed', async () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'working' }))
 
+    // The in-memory fake's transition has no internal await, so this pins
+    // the settled-guard's outcome (one winner, one updated:false) rather
+    // than true thread-level concurrency — a real Postgres UPDATE gets the
+    // same outcome via row locks instead.
     const winners = await Promise.all([
-      tracker.transition('task-1', { state: 'completed', settled: true }),
-      tracker.transition('task-1', { state: 'failed', settled: true }),
+      tracker.transition('task-1', { state: 'completed' }),
+      tracker.transition('task-1', { state: 'failed' }),
     ])
 
     expect(winners).toEqual([{ updated: true }, { updated: false }])
@@ -156,41 +187,89 @@ describe('transition', () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'input-required' }))
 
-    expect(
-      await tracker.transition('task-1', { state: 'failed', settled: true }),
-    ).toEqual({ updated: false })
+    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual({
+      updated: false,
+    })
   })
 
   it('fails a task that is still executing', async () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'working' }))
 
-    expect(
-      await tracker.transition('task-1', { state: 'failed', settled: true }),
-    ).toEqual({ updated: true })
+    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual({
+      updated: true,
+    })
   })
 
-  it('resumes an input-required task with a fresh deadline', async () => {
+  it('does not fail a task whose deadline has since moved past a stale snapshot', async () => {
     const tracker = createInMemoryTracker()
-    await tracker.recordDelegated(newTask({ state: 'input-required' }))
+    const staleDeadline = new Date('2026-01-01T00:10:00Z')
+    await tracker.recordDelegated(
+      newTask({ state: 'working', deadlineAt: staleDeadline }),
+    )
+    // A resume (or any deadline rearm) after the caller took its snapshot.
+    await tracker.transition('task-1', {
+      state: 'working',
+      deadlineAt: new Date('2026-01-01T01:00:00Z'),
+    })
 
     expect(
       await tracker.transition('task-1', {
-        state: 'submitted',
-        settled: false,
-        deadlineAt: new Date('2026-01-01T01:00:00Z'),
+        state: 'failed',
+        ifDeadlineAtOrBefore: staleDeadline,
+      }),
+    ).toEqual({ updated: false })
+  })
+
+  it('fails a task whose deadline is still at or before the observed snapshot', async () => {
+    const tracker = createInMemoryTracker()
+    const deadline = new Date('2026-01-01T00:10:00Z')
+    await tracker.recordDelegated(
+      newTask({ state: 'working', deadlineAt: deadline }),
+    )
+
+    expect(
+      await tracker.transition('task-1', {
+        state: 'failed',
+        ifDeadlineAtOrBefore: deadline,
       }),
     ).toEqual({ updated: true })
+  })
+
+  it('resumes an input-required task by arming a fresh deadline', async () => {
+    const created = new Date('2026-01-01T00:00:00Z')
+    const resumedAt = new Date('2026-01-01T00:05:00Z')
+    let tick = created
+    const tracker = createInMemoryTracker({ now: () => tick })
+    await tracker.recordDelegated(newTask({ state: 'input-required' }))
+
+    tick = resumedAt
+    const newDeadline = new Date('2026-01-01T01:00:00Z')
+    await tracker.transition('task-1', {
+      state: 'submitted',
+      deadlineAt: newDeadline,
+    })
+
+    expect(
+      await tracker.findUnsettled(new Date('2026-01-01T02:00:00Z')),
+    ).toEqual([
+      {
+        ...newTask({ state: 'submitted', deadlineAt: newDeadline }),
+        settled: false,
+        createdAt: created,
+        updatedAt: resumedAt,
+      },
+    ])
   })
 
   it('does not transition a task that is already settled', async () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'working' }))
-    await tracker.transition('task-1', { state: 'completed', settled: true })
+    await tracker.transition('task-1', { state: 'completed' })
 
-    expect(
-      await tracker.transition('task-1', { state: 'failed', settled: true }),
-    ).toEqual({ updated: false })
+    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual({
+      updated: false,
+    })
   })
 })
 

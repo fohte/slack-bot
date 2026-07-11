@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
 import { a2aTask } from '@/db/schema'
@@ -32,6 +32,19 @@ export const A2A_TASK_ACTIVE_EXECUTION_STATES: readonly A2aTaskState[] = [
   'working',
 ]
 
+// `settled` is derived from `state` rather than accepted as separate input,
+// so a caller can't produce an inconsistent pair (e.g. completed + unsettled)
+// that would leave a finished task looping in the reconciler's sweep.
+export const A2A_TASK_TERMINAL_STATES: readonly A2aTaskState[] = [
+  'completed',
+  'failed',
+  'canceled',
+  'rejected',
+]
+
+const isTerminalState = (state: A2aTaskState): boolean =>
+  A2A_TASK_TERMINAL_STATES.includes(state)
+
 export interface ThreadKey {
   readonly slackTeamId: string
   readonly slackChannelId: string
@@ -55,12 +68,28 @@ export interface A2aTaskRow extends NewA2aTask {
 
 export interface A2aTaskLifecycle {
   readonly state: A2aTaskState
-  readonly settled: boolean
   // Set when resuming an input-required task, to arm a fresh deadline for
   // the resumed execution. Omitted otherwise, leaving the row's deadline
   // untouched.
   readonly deadlineAt?: Date | undefined
+  // Guards a deadline-driven failure: the transition only applies while the
+  // row's current deadlineAt is still at or before this value, so a resume
+  // that armed a later deadline after the caller observed this task as
+  // overdue is not clobbered by a stale decision.
+  readonly ifDeadlineAtOrBefore?: Date | undefined
 }
+
+export interface TransitionGuard {
+  readonly requireStates?: readonly A2aTaskState[]
+}
+
+// Which extra WHERE condition a transition needs, kept as a pure function
+// separate from the SQL/in-memory execution so it is directly testable and
+// shared between the production store and its test double.
+export const transitionGuard = (to: A2aTaskLifecycle): TransitionGuard =>
+  to.state === 'failed'
+    ? { requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES }
+    : {}
 
 export interface A2aTaskTracker {
   recordDelegated(rec: NewA2aTask): Promise<void>
@@ -124,17 +153,20 @@ export const createA2aTaskTracker = (
   db: PostgresJsDatabase,
 ): A2aTaskTracker => ({
   async recordDelegated(rec) {
-    await db.insert(a2aTask).values({
-      taskId: rec.taskId,
-      contextId: rec.contextId,
-      agentName: rec.agentName,
-      slackTeamId: rec.slackTeamId,
-      slackChannelId: rec.slackChannelId,
-      threadRootTs: rec.threadRootTs,
-      slackEventId: rec.slackEventId,
-      state: rec.state,
-      deadlineAt: rec.deadlineAt,
-    })
+    await db
+      .insert(a2aTask)
+      .values({
+        taskId: rec.taskId,
+        contextId: rec.contextId,
+        agentName: rec.agentName,
+        slackTeamId: rec.slackTeamId,
+        slackChannelId: rec.slackChannelId,
+        threadRootTs: rec.threadRootTs,
+        slackEventId: rec.slackEventId,
+        state: rec.state,
+        deadlineAt: rec.deadlineAt,
+      })
+      .onConflictDoNothing({ target: a2aTask.taskId })
   },
   async findActiveInputRequired(threadKey) {
     const rows = await db
@@ -163,15 +195,19 @@ export const createA2aTaskTracker = (
     return rows.map(toRow)
   },
   async transition(taskId, to) {
+    const guard = transitionGuard(to)
     const conditions = [eq(a2aTask.taskId, taskId), eq(a2aTask.settled, false)]
-    if (to.state === 'failed') {
-      conditions.push(inArray(a2aTask.state, A2A_TASK_ACTIVE_EXECUTION_STATES))
+    if (guard.requireStates !== undefined) {
+      conditions.push(inArray(a2aTask.state, guard.requireStates))
+    }
+    if (to.ifDeadlineAtOrBefore !== undefined) {
+      conditions.push(lte(a2aTask.deadlineAt, to.ifDeadlineAtOrBefore))
     }
     const updated = await db
       .update(a2aTask)
       .set({
         state: to.state,
-        settled: to.settled,
+        settled: isTerminalState(to.state),
         ...(to.deadlineAt !== undefined ? { deadlineAt: to.deadlineAt } : {}),
         updatedAt: sql`now()`,
       })
