@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent/thread-id'
+import {
+  deriveConversationThreadId,
+  parseConversationThreadId,
+} from '@/plugins/llm-agent/conversation-agent/thread-id'
 
 describe('deriveConversationThreadId', () => {
   it('joins team, channel, and thread root ts with colons', () => {
@@ -32,5 +35,18 @@ describe('deriveConversationThreadId', () => {
     expect(
       deriveConversationThreadId({ ...base, threadRootTs: '999.888' }),
     ).not.toBe(baseId)
+  })
+})
+
+describe('parseConversationThreadId', () => {
+  it('inverts deriveConversationThreadId', () => {
+    const key = { teamId: 'T1', channelId: 'C1', threadRootTs: '111.222' }
+    expect(parseConversationThreadId(deriveConversationThreadId(key))).toEqual(
+      key,
+    )
+  })
+
+  it('throws on a thread_id missing a segment', () => {
+    expect(() => parseConversationThreadId('T1:C1')).toThrow()
   })
 })
