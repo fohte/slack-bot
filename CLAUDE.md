@@ -10,7 +10,7 @@ Prefer creating a new focused file over appending to the largest existing one.
 
 ### Keep the README's environment variables table in sync
 
-Whenever `src/config/config.ts` starts reading a new environment variable (or a directly-referenced `process.env` var elsewhere), add a row to the "Environment variables" table in `README.md` in the same change. Removing a variable from the code removes its row too.
+Whenever a change makes `src/config/config.ts` or a plugin's own config module (e.g. `src/plugins/blog/config.ts`) start reading a new environment variable, add a row to the "Environment variables" table in `README.md` in the same change. Removing a variable from the code removes its row too.
 
 ## Test code rules
 
