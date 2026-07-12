@@ -268,13 +268,9 @@ describe('SlackWebClient', () => {
         auth: 'Bearer xoxb-secret',
       },
     ])
-    const downloaded = {
-      contentType: result.contentType,
-      bytes: Array.from(result.bytes),
-    }
-    expect(downloaded).toEqual({
+    expect(result).toEqual({
       contentType: 'image/png',
-      bytes: [0x89, 0x50, 0x4e, 0x47],
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
     })
   })
 

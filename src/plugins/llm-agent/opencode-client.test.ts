@@ -339,11 +339,8 @@ describe('createOpencodeClient', () => {
     const thrown = await client
       .fetchLatestAssistantText('sess_abc')
       .catch((e: unknown) => e)
-    const thrownDetails = {
-      name: (thrown as Error).name,
-      retryAfter: (thrown as { retryAfter?: number }).retryAfter,
-    }
-    expect(thrownDetails).toEqual({ name: 'GoUsageLimitError', retryAfter: 42 })
+    expect((thrown as Error).name).toBe('GoUsageLimitError')
+    expect((thrown as { retryAfter?: number }).retryAfter).toBe(42)
     expect(
       captureSpy.mock.calls.map(([err, ctx]) => [(err as Error).name, ctx]),
     ).toEqual([['GoUsageLimitError', { retryAfter: 42 }]])
@@ -543,11 +540,8 @@ describe('createOpencodeClient', () => {
     const thrown = await client
       .findSessionIdByTitle('slack-target')
       .catch((e: unknown) => e)
-    const thrownDetails = {
-      name: (thrown as Error).name,
-      retryAfter: (thrown as { retryAfter?: number }).retryAfter,
-    }
-    expect(thrownDetails).toEqual({ name: 'GoUsageLimitError', retryAfter: 7 })
+    expect((thrown as Error).name).toBe('GoUsageLimitError')
+    expect((thrown as { retryAfter?: number }).retryAfter).toBe(7)
     expect(
       captureSpy.mock.calls.map(([err, ctx]) => [(err as Error).name, ctx]),
     ).toEqual([['GoUsageLimitError', { retryAfter: 7 }]])
