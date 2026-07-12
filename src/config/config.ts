@@ -15,6 +15,14 @@ export interface LlmAgentConfig {
   readonly opencodeBaseUrl: string | undefined
 }
 
+// OPENCODE_API_KEY is unprefixed: multiple services share this credential,
+// so it isn't namespaced per-service like SLACK_BOT_CONVERSATION_AGENT_*.
+export interface ConversationAgentConfig {
+  readonly model: string | undefined
+  readonly personaPrompt: string | undefined
+  readonly opencodeApiKey: string | undefined
+}
+
 export interface Config {
   readonly slackSigningSecret: string
   readonly slackBotToken: string
@@ -25,6 +33,7 @@ export interface Config {
   readonly maxWebApiRetries: number
   readonly logLevel: LogLevel
   readonly llmAgent: LlmAgentConfig
+  readonly conversationAgent: ConversationAgentConfig
   serviceTokenFor(pluginName: string): ServiceTokenPair | undefined
 }
 
@@ -75,6 +84,15 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     ),
   }
 
+  const conversationAgent: ConversationAgentConfig = {
+    model: optionalString(env, 'SLACK_BOT_CONVERSATION_AGENT_MODEL'),
+    personaPrompt: optionalString(
+      env,
+      'SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT',
+    ),
+    opencodeApiKey: optionalString(env, 'OPENCODE_API_KEY'),
+  }
+
   return {
     slackSigningSecret,
     slackBotToken,
@@ -85,6 +103,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     maxWebApiRetries,
     logLevel,
     llmAgent,
+    conversationAgent,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }
 }
