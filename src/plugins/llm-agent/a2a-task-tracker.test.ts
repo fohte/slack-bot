@@ -122,6 +122,15 @@ describe('transitionGuard', () => {
   it('does not restrict other transitions', () => {
     expect(transitionGuard({ state: 'completed' })).toEqual({})
   })
+
+  it('lets a caller override the required current states', () => {
+    expect(
+      transitionGuard({
+        state: 'failed',
+        requireCurrentStates: ['input-required'],
+      }),
+    ).toEqual({ requireStates: ['input-required'] })
+  })
 })
 
 describe('recordDelegated / findActiveInputRequired', () => {
@@ -285,6 +294,19 @@ describe('transition', () => {
         updatedAt: resumedAt,
       },
     ])
+  })
+
+  it('settles an input-required task directly when requireCurrentStates permits it', async () => {
+    const tracker = createInMemoryTracker()
+    await tracker.recordDelegated(newTask({ state: 'input-required' }))
+
+    expect(
+      await tracker.transition('task-1', {
+        state: 'failed',
+        requireCurrentStates: ['input-required'],
+      }),
+    ).toEqual({ updated: true })
+    expect(await tracker.findActiveInputRequired(THREAD)).toBeUndefined()
   })
 
   it('does not transition a task that is already settled', async () => {

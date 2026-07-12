@@ -1,26 +1,29 @@
+import type { AgentCard, Message, MessageSendParams, Task } from '@a2a-js/sdk'
+import type { Client } from '@a2a-js/sdk/client'
+
 import type { Logger } from '@/logger/logger'
-import type { ConfigMapClient } from '@/plugins/llm-agent/configmap-client'
 import type {
-  EventLogRow,
-  EventLogStore,
-} from '@/plugins/llm-agent/event-log-store'
+  A2aTaskLifecycle,
+  A2aTaskRow,
+  A2aTaskTracker,
+  NewA2aTask,
+  ThreadKey,
+} from '@/plugins/llm-agent/a2a-task-tracker'
+import type {
+  ConversationAgent,
+  ConversationAgentInput,
+  ConversationOutcome,
+} from '@/plugins/llm-agent/conversation-agent'
+import type { SlackEnvelope } from '@/plugins/llm-agent/dispatcher-deps'
+import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type {
   ImageResizer,
   ResizeOutcome,
 } from '@/plugins/llm-agent/image-resizer'
-import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
-import type { SlackEnvelope } from '@/plugins/llm-agent/process-mention'
 import type {
-  TaskCrClient,
-  TaskCrCreateOutcome,
-  TaskCrSpec,
-  TaskCrStatus,
-} from '@/plugins/llm-agent/task-cr-client'
-import type {
-  ThreadSessionKey,
-  ThreadSessionStore,
-  ThreadSessionUpsert,
-} from '@/plugins/llm-agent/thread-session-store'
+  RemoteAgentHandle,
+  RemoteAgentRegistry,
+} from '@/plugins/llm-agent/remote-agent-registry'
 import type { SlackWebClient } from '@/slack/web-client'
 
 export interface SlackCall {
@@ -99,71 +102,33 @@ export const createStubSlackClient = (): StubSlackClient => {
   } as StubSlackClient
 }
 
-export interface ScriptedTaskCrClient extends TaskCrClient {
-  readonly creates: ReadonlyArray<TaskCrSpec>
-  readonly listCount: () => number
-}
-
-// list() returns the next scripted status per call, then clamps to the
-// final element so excess polls keep observing the terminal phase.
-export const createScriptedTaskCrClient = (
-  statuses: readonly TaskCrStatus[],
-  createOutcome: TaskCrCreateOutcome = 'created',
-): ScriptedTaskCrClient => {
-  const creates: TaskCrSpec[] = []
-  let i = 0
-  return {
-    creates,
-    listCount: () => i,
-    async create(task) {
-      creates.push(task)
-      return createOutcome
-    },
-    async list() {
-      const next = statuses[Math.min(i, statuses.length - 1)]
-      i += 1
-      return next === undefined ? [] : [next]
-    },
-  }
-}
-
 export interface ScriptedEventLogStore extends EventLogStore {
-  readonly markedTaskNames: ReadonlyArray<{ id: string; name: string }>
   readonly markedResponded: ReadonlyArray<string>
 }
 
+// markResponded/unmarkResponded model the real store's conditional-UPDATE
+// idempotency (a second markResponded for the same event_id is a no-op);
+// the other EventLogStore methods are unused by the new dispatcher and
+// stubbed only to satisfy the interface.
 export const createScriptedEventLogStore = (
-  options: {
-    findByTaskName?: (taskName: string) => EventLogRow | undefined
-    findDispatchedUnresponded?: (
-      receivedBefore: Date,
-    ) => readonly EventLogRow[] | Promise<readonly EventLogRow[]>
-    alreadyResponded?: boolean
-    markTaskNameError?: Error
-  } = {},
+  options: { alreadyResponded?: boolean } = {},
 ): ScriptedEventLogStore => {
-  const markedTaskNames: Array<{ id: string; name: string }> = []
   const markedResponded: string[] = []
   const responded = new Set<string>()
   return {
-    markedTaskNames,
     markedResponded,
     async recordReceived() {
       return 'accepted'
     },
     async deleteReceived() {},
-    async markTaskName(slackEventId, taskName) {
-      if (options.markTaskNameError !== undefined) {
-        throw options.markTaskNameError
-      }
-      markedTaskNames.push({ id: slackEventId, name: taskName })
-      return { updated: 1 }
+    async markTaskName() {
+      return { updated: 0 }
     },
-    async findByTaskName(taskName) {
-      return options.findByTaskName?.(taskName)
+    async findByTaskName() {
+      return undefined
     },
-    async findDispatchedUnresponded(receivedBefore) {
-      return (await options.findDispatchedUnresponded?.(receivedBefore)) ?? []
+    async findDispatchedUnresponded() {
+      return []
     },
     async markResponded(slackEventId) {
       if (options.alreadyResponded === true || responded.has(slackEventId)) {
@@ -187,39 +152,6 @@ export const createScriptedEventLogStore = (
   }
 }
 
-export interface ScriptedThreadSessionStore extends ThreadSessionStore {
-  readonly upserts: ReadonlyArray<ThreadSessionUpsert>
-}
-
-export const createScriptedThreadSessionStore = (
-  options: { lookup?: (key: ThreadSessionKey) => string | undefined } = {},
-): ScriptedThreadSessionStore => {
-  const upserts: ThreadSessionUpsert[] = []
-  return {
-    upserts,
-    async lookup(key) {
-      return options.lookup?.(key)
-    },
-    async upsert(record) {
-      upserts.push(record)
-    },
-  }
-}
-
-export const fixedOpencodeClient = (
-  options: {
-    sessionId?: string | undefined
-    assistantText?: string | undefined
-  } = {},
-): OpencodeClient => ({
-  async fetchLatestAssistantText() {
-    return options.assistantText
-  },
-  async findSessionIdByTitle() {
-    return options.sessionId
-  },
-})
-
 export const TEST_ENV: SlackEnvelope = {
   eventId: 'Ev1',
   teamId: 'T1',
@@ -227,6 +159,12 @@ export const TEST_ENV: SlackEnvelope = {
   threadRootTs: '111.222',
   text: 'hello bot',
   images: [],
+}
+
+export const TEST_THREAD_KEY: ThreadKey = {
+  slackTeamId: TEST_ENV.teamId,
+  slackChannelId: TEST_ENV.channelId,
+  threadRootTs: TEST_ENV.threadRootTs,
 }
 
 export interface ScriptedImageResizer extends ImageResizer {
@@ -244,15 +182,6 @@ export const createScriptedImageResizer = (
       return resize(bytes, maxBytes)
     },
   }
-}
-
-export const noopConfigMapClient: ConfigMapClient = {
-  async create() {
-    throw new Error('configMapClient.create not implemented for this test')
-  },
-  async delete() {
-    return 'not_found'
-  },
 }
 
 export interface LogEntry {
@@ -282,4 +211,119 @@ export const createRecordingLogger = (): RecordingLogger => {
     },
   }
   return logger
+}
+
+export interface RecordingConversationAgent extends ConversationAgent {
+  readonly calls: ReadonlyArray<ConversationAgentInput>
+}
+
+// Records every respond() call and replies with `reply(input)`, so tests
+// can assert on exactly what the dispatcher sent the conversation agent
+// without a real LangGraph/LLM call.
+export const createFakeConversationAgent = (
+  reply: (
+    input: ConversationAgentInput,
+  ) => ConversationOutcome | Promise<ConversationOutcome>,
+): RecordingConversationAgent => {
+  const calls: ConversationAgentInput[] = []
+  return {
+    calls,
+    async respond(input) {
+      calls.push(input)
+      return reply(input)
+    },
+  }
+}
+
+export const createFakeRemoteAgentRegistry = (
+  handles: readonly RemoteAgentHandle[],
+): RemoteAgentRegistry => ({
+  async listAgents() {
+    return handles
+  },
+})
+
+export const cardFor = (overrides: Partial<AgentCard> = {}): AgentCard => ({
+  protocolVersion: '0.3.0',
+  name: 'meshi',
+  description: 'Tracks meals and food logs.',
+  url: 'https://meshi.example.com',
+  version: '1.0.0',
+  capabilities: {},
+  defaultInputModes: ['text'],
+  defaultOutputModes: ['text'],
+  skills: [],
+  ...overrides,
+})
+
+// Wraps a canned sendMessage response with a call recorder, so tests assert
+// on the params actually sent instead of asserting from inside the stub
+// (which would pass vacuously if sendMessage were never called).
+export const recordingHandleFor = (
+  respond: (params: MessageSendParams) => Promise<Message | Task>,
+  card: AgentCard = cardFor(),
+): {
+  readonly handle: RemoteAgentHandle
+  readonly calls: MessageSendParams[]
+} => {
+  const calls: MessageSendParams[] = []
+  const sendMessage = async (params: MessageSendParams) => {
+    calls.push(params)
+    return respond(params)
+  }
+  return {
+    handle: {
+      name: card.name,
+      card,
+      client: { sendMessage } as unknown as Client,
+    },
+    calls,
+  }
+}
+
+export const taskResult = (overrides: Partial<Task> = {}): Task => ({
+  kind: 'task',
+  id: 'task-1',
+  contextId: 'ctx-1',
+  status: { state: 'submitted' },
+  ...overrides,
+})
+
+export interface RecordingA2aTaskTracker extends A2aTaskTracker {
+  readonly recorded: NewA2aTask[]
+  readonly transitions: ReadonlyArray<{
+    readonly taskId: string
+    readonly to: A2aTaskLifecycle
+  }>
+}
+
+export const createFakeA2aTaskTracker = (
+  options: {
+    readonly activeInputRequired?: A2aTaskRow | undefined
+    readonly contextId?: string | undefined
+    readonly transitionResult?: { updated: boolean } | undefined
+  } = {},
+): RecordingA2aTaskTracker => {
+  const recorded: NewA2aTask[] = []
+  const transitions: Array<{ taskId: string; to: A2aTaskLifecycle }> = []
+  return {
+    recorded,
+    transitions,
+    async recordDelegated(rec) {
+      recorded.push(rec)
+    },
+    async findActiveInputRequired() {
+      return options.activeInputRequired
+    },
+    async findUnsettled() {
+      return []
+    },
+    async transition(taskId, to) {
+      transitions.push({ taskId, to })
+      return options.transitionResult ?? { updated: true }
+    },
+    async lookupContext() {
+      return options.contextId
+    },
+  }
 }

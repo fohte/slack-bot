@@ -27,16 +27,6 @@ export {
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 export type {
-  ConfigMapBinaryEntry,
-  ConfigMapClient,
-  ConfigMapCreateOutcome,
-  ConfigMapSpec,
-} from '@/plugins/llm-agent/configmap-client'
-export {
-  buildConfigMapManifest,
-  createKubernetesConfigMapClient,
-} from '@/plugins/llm-agent/configmap-client'
-export type {
   ConversationAgent,
   ConversationAgentInput,
   ConversationAgentOptions,
@@ -67,6 +57,15 @@ export {
   envelopeFromAccepted,
 } from '@/plugins/llm-agent/dispatcher'
 export type {
+  DispatcherDeps,
+  ResolvedDispatcherDeps,
+  SlackEnvelope,
+} from '@/plugins/llm-agent/dispatcher-deps'
+export {
+  DEFAULT_SUCCESS_FALLBACK,
+  resolveDeps,
+} from '@/plugins/llm-agent/dispatcher-deps'
+export type {
   EventLogRetentionHandle,
   EventLogRetentionOptions,
 } from '@/plugins/llm-agent/event-log-retention'
@@ -83,14 +82,6 @@ export type {
 } from '@/plugins/llm-agent/event-log-store'
 export { createEventLogStore } from '@/plugins/llm-agent/event-log-store'
 export type {
-  OpencodeClient,
-  OpencodeClientOptions,
-} from '@/plugins/llm-agent/opencode-client'
-export {
-  createOpencodeClient,
-  DEFAULT_OPENCODE_BASE_URL,
-} from '@/plugins/llm-agent/opencode-client'
-export type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
 } from '@/plugins/llm-agent/plugin'
@@ -101,35 +92,13 @@ export {
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
 export type {
-  ProcessMentionDeps,
-  RespondResult,
-  SlackEnvelope,
-  SubmitTaskResult,
-  TerminalOutcome,
-  WaitForCompletionOptions,
-} from '@/plugins/llm-agent/process-mention'
-export {
-  bubbleForK8sPhase,
-  DEFAULT_POLL_INTERVAL_MS,
-  DEFAULT_SUCCESS_FALLBACK,
-  DEFAULT_TASK_CR_AGENT_NAME,
-  DEFAULT_TASK_CR_NAMESPACE,
-  PREPARING_BUBBLE,
-  processMention,
-  QUEUED_BUBBLE,
-  respond,
-  RUNNING_BUBBLE,
-  submitTask,
-  terminalOutcomeForTaskCrStatus,
-  waitForCompletion,
-} from '@/plugins/llm-agent/process-mention'
-export type {
   DelegationPushNotificationConfig,
   DelegationToolDependencies,
   RemoteAgentHandle,
   RemoteAgentRegistry,
   RemoteAgentRegistryOptions,
   RemoteAgentResolver,
+  SendMessageResult,
 } from '@/plugins/llm-agent/remote-agent-registry'
 export {
   createDelegationTool,
@@ -141,30 +110,17 @@ export {
   delegationToolDescription,
   delegationToolName,
   extractDelegations,
+  SEND_MESSAGE_RESULT_SCHEMA,
 } from '@/plugins/llm-agent/remote-agent-registry'
-export type {
-  ResponseReconcilerHandle,
-  ResponseReconcilerOptions,
-} from '@/plugins/llm-agent/response-reconciler'
+export type { PostFinalResponseResult } from '@/plugins/llm-agent/steps/post-final-response'
+export { postFinalResponse } from '@/plugins/llm-agent/steps/post-final-response'
+export { DISPATCH_FAILURE_TEXT } from '@/plugins/llm-agent/steps/report-dispatch-failure'
+export { resolveImageBlocks } from '@/plugins/llm-agent/steps/resolve-image-blocks'
+export type { ResumeResult } from '@/plugins/llm-agent/steps/resume-active-task'
 export {
-  RESPONSE_RECONCILER_DEFAULT_GRACE_MS,
-  RESPONSE_RECONCILER_DEFAULT_INTERVAL_MS,
-  startResponseReconciler,
-} from '@/plugins/llm-agent/response-reconciler'
-export type {
-  TaskCrClient,
-  TaskCrContext,
-  TaskCrCreateOutcome,
-  TaskCrPhase,
-  TaskCrSpec,
-  TaskCrStatus,
-} from '@/plugins/llm-agent/task-cr-client'
-export {
-  buildTaskCrManifest,
-  createKubernetesTaskCrClient,
-  parseTaskCrItem,
-  taskCrNameForSlackEvent,
-} from '@/plugins/llm-agent/task-cr-client'
+  RESUME_SEND_FAILURE_TEXT,
+  resumeActiveTask,
+} from '@/plugins/llm-agent/steps/resume-active-task'
 export type {
   ThreadSessionKey,
   ThreadSessionStore,

@@ -11,15 +11,17 @@ import type { PluginDeps, PluginInput } from '@/plugin/deps'
 import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
 import {
+  createA2aTaskTracker,
+  createConversationAgent,
+  createConversationCheckpointer,
+  createDelegationTools,
   createEventLogStore,
-  createKubernetesConfigMapClient,
-  createKubernetesTaskCrClient,
   createLlmAgentPlugin,
-  createOpencodeClient,
+  createOpenCodeGoChatModel,
+  createRemoteAgentRegistry,
   createTaskDispatcher,
   createThreadSessionStore,
   startEventLogRetention,
-  startResponseReconciler,
 } from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
@@ -57,6 +59,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
   const db = drizzle(postgresClient)
   const eventLogStore = createEventLogStore(db)
   const threadSessionStore = createThreadSessionStore(db)
+  const a2aTaskTracker = createA2aTaskTracker(db)
   startEventLogRetention({ eventLogStore, logger })
 
   const deps: PluginDeps = {
@@ -67,6 +70,7 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     cfAccess,
     eventLogStore,
     threadSessionStore,
+    a2aTaskTracker,
     inFlightTasks,
   }
 
@@ -117,39 +121,53 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
 
 const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
+  // Loaded again (redundantly but harmlessly) inside bootstrap() below;
+  // needed here to resolve delegation tools before the plugin factory runs,
+  // since createConversationAgent bakes its tool list in at construction
+  // time and PluginFactory itself is synchronous.
+  const config = loadConfig()
+  const remoteAgentRegistry = createRemoteAgentRegistry({
+    agentUrls: config.remoteAgentUrls,
+  })
+  // Resolved once here at startup (with its own TTL cache), then reused —
+  // via the same registry instance's warm cache — by the dispatcher's own
+  // task-resume lookups.
+  const remoteAgentHandles = await remoteAgentRegistry.listAgents()
+  const model = createOpenCodeGoChatModel({
+    apiKey: config.conversationAgent.opencodeApiKey,
+    model: config.conversationAgent.model,
+  })
+  const checkpointer = createConversationCheckpointer(config.databaseUrl)
+
   bootstrap({
     plugins: [
       ({
-        config,
         logger,
         slackClient,
         eventLogStore,
         threadSessionStore,
+        a2aTaskTracker,
         inFlightTasks,
       }) => {
-        const taskCrClient = createKubernetesTaskCrClient()
-        const configMapClient = createKubernetesConfigMapClient()
-        const opencodeClient = createOpencodeClient({
-          baseUrl: config.llmAgent.opencodeBaseUrl,
+        const tools = createDelegationTools(remoteAgentHandles, {
+          a2aTaskTracker,
+          logger,
         })
-        const processMentionDeps = {
-          taskCrClient,
-          configMapClient,
-          opencodeClient,
-          threadSessionStore,
+        const conversationAgent = createConversationAgent({
+          model,
+          checkpointer,
+          personaPrompt: config.conversationAgent.personaPrompt,
+          tools,
+        })
+        const onAccepted = createTaskDispatcher({
+          conversationAgent,
+          remoteAgentRegistry,
+          a2aTaskTracker,
           eventLogStore,
           slackClient,
           logger,
-          namespace: config.llmAgent.taskCrNamespace,
-          agentName: config.llmAgent.taskCrAgentName,
           inFlightTasks,
-        }
-        const onAccepted = createTaskDispatcher(processMentionDeps)
-        // Run once immediately in addition to the interval: on Pod restart
-        // this is the earliest chance to recover a response the previous
-        // Pod's fire-and-forget processMention never got to deliver.
-        const reconciler = startResponseReconciler(processMentionDeps)
-        void reconciler.runOnce()
+        })
         return createLlmAgentPlugin({
           logger,
           eventLogStore,

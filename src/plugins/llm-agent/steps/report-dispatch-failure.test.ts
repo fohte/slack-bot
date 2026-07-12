@@ -2,43 +2,36 @@ import { describe, expect, it } from 'vitest'
 
 import type { RecordingLogger } from '@/plugins/llm-agent/_test-utils'
 import {
+  createFakeA2aTaskTracker,
+  createFakeConversationAgent,
+  createFakeRemoteAgentRegistry,
   createRecordingLogger,
   createScriptedEventLogStore,
-  createScriptedTaskCrClient,
-  createScriptedThreadSessionStore,
   createStubSlackClient,
-  noopConfigMapClient,
   TEST_ENV,
 } from '@/plugins/llm-agent/_test-utils'
-import type { OpencodeClient } from '@/plugins/llm-agent/opencode-client'
-import type { ProcessMentionDeps } from '@/plugins/llm-agent/process-mention-deps'
+import type { ResolvedDispatcherDeps } from '@/plugins/llm-agent/dispatcher-deps'
+import { resolveDeps } from '@/plugins/llm-agent/dispatcher-deps'
 import {
   DISPATCH_FAILURE_TEXT,
   reportDispatchFailure,
 } from '@/plugins/llm-agent/steps/report-dispatch-failure'
 import type { SlackWebClient } from '@/slack/web-client'
 
-const noopOpencodeClient: OpencodeClient = {
-  async fetchLatestAssistantText() {
-    return undefined
-  },
-  async findSessionIdByTitle() {
-    return undefined
-  },
-}
-
 const baseDeps = (
   slackClient: SlackWebClient,
   logger?: RecordingLogger,
-): ProcessMentionDeps => ({
-  configMapClient: noopConfigMapClient,
-  taskCrClient: createScriptedTaskCrClient([]),
-  opencodeClient: noopOpencodeClient,
-  eventLogStore: createScriptedEventLogStore(),
-  threadSessionStore: createScriptedThreadSessionStore(),
-  slackClient,
-  ...(logger !== undefined && { logger }),
-})
+): ResolvedDispatcherDeps =>
+  resolveDeps({
+    conversationAgent: createFakeConversationAgent(() => {
+      throw new Error('not implemented')
+    }),
+    remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
+    a2aTaskTracker: createFakeA2aTaskTracker(),
+    eventLogStore: createScriptedEventLogStore(),
+    slackClient,
+    ...(logger !== undefined && { logger }),
+  })
 
 describe('reportDispatchFailure', () => {
   it('posts the generic failure text and clears the assistant status', async () => {

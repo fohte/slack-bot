@@ -2,10 +2,22 @@ import { SpanStatusCode, trace } from '@opentelemetry/api'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
+import type {
+  A2aTaskRow,
+  ThreadKey,
+} from '@/plugins/llm-agent/a2a-task-tracker'
 import {
   INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
+import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent'
+import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent'
+import type {
+  DispatcherDeps,
+  ResolvedDispatcherDeps,
+  SlackEnvelope,
+} from '@/plugins/llm-agent/dispatcher-deps'
+import { resolveDeps } from '@/plugins/llm-agent/dispatcher-deps'
 import {
   extractInlineFileIds,
   extractSlackImageFiles,
@@ -14,13 +26,10 @@ import {
   stripInlineFileIds,
 } from '@/plugins/llm-agent/files'
 import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
-import { processMention } from '@/plugins/llm-agent/process-mention'
-import type {
-  ProcessMentionDeps,
-  SlackEnvelope,
-} from '@/plugins/llm-agent/process-mention-deps'
+import { postFinalResponse } from '@/plugins/llm-agent/steps/post-final-response'
 import { reportDispatchFailure } from '@/plugins/llm-agent/steps/report-dispatch-failure'
-import { submitTask } from '@/plugins/llm-agent/steps/submit-task'
+import { resolveImageBlocks } from '@/plugins/llm-agent/steps/resolve-image-blocks'
+import { resumeActiveTask } from '@/plugins/llm-agent/steps/resume-active-task'
 import type { InFlightTasks } from '@/server/in-flight-tasks'
 import type { SlackWebClient } from '@/slack/web-client'
 import type { SlackFile } from '@/types/slack-payloads'
@@ -30,10 +39,10 @@ const DISPATCH_SPAN_NAME = 'slack.mention.handle'
 
 export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
-export type TaskDispatcherOptions = ProcessMentionDeps & {
-  // Registers the backgrounded processMention call so a graceful-shutdown
-  // handler can wait for it to finish before the process exits. Omitting
-  // it leaves the call as untracked fire-and-forget.
+export type TaskDispatcherOptions = DispatcherDeps & {
+  // Registers the backgrounded mention-processing call so a graceful-
+  // shutdown handler can wait for it to finish before the process exits.
+  // Omitting it leaves the call as untracked fire-and-forget.
   readonly inFlightTasks?: Pick<InFlightTasks, 'track'> | undefined
 }
 
@@ -155,8 +164,8 @@ export const resolveInlineImageFiles = async (
 
   const resolvedImages: SlackFile[] = []
   const matchedIds: string[] = []
-  // Serial lookup, mirroring downloadImages: issuing every ID in parallel
-  // would 429 the whole batch on a single rate-limit hit.
+  // Serial lookup, mirroring resolveImageBlocks: issuing every ID in
+  // parallel would 429 the whole batch on a single rate-limit hit.
   for (const fileId of fileIds) {
     let file: SlackFile | undefined
     try {
@@ -214,17 +223,49 @@ export const resolveInlineImageFiles = async (
   }
 }
 
-// Exported for direct unit testing of the failure-handling branch.
-export const runProcessMentionInBackground = async (
+const threadKeyFor = (env: SlackEnvelope): ThreadKey => ({
+  slackTeamId: env.teamId,
+  slackChannelId: env.channelId,
+  threadRootTs: env.threadRootTs,
+})
+
+const respondWithConversationAgent = async (
   env: SlackEnvelope,
-  taskName: string,
-  options: TaskDispatcherOptions,
+  resolved: ResolvedDispatcherDeps,
+  images: readonly ImageBlock[],
+): Promise<string> => {
+  const threadId = deriveConversationThreadId({
+    teamId: env.teamId,
+    channelId: env.channelId,
+    threadRootTs: env.threadRootTs,
+  })
+  const outcome = await resolved.conversationAgent.respond({
+    threadId,
+    userText: env.text,
+    images,
+    slackEventId: env.eventId,
+  })
+  const trimmed = outcome.text.trim()
+  return trimmed.length > 0 ? outcome.text : resolved.successFallbackText
+}
+
+// Runs the (potentially slow) LLM/A2A work detached from the Slack HTTP
+// handler: whichever branch runs, it always ends by posting this event's
+// single response. Any unexpected failure falls back to a generic,
+// ungated dispatch-failure notification.
+export const runMentionInBackground = async (
+  env: SlackEnvelope,
+  activeTask: A2aTaskRow | undefined,
+  resolved: ResolvedDispatcherDeps,
   logger: Logger,
 ): Promise<void> => {
   try {
-    await processMention(env, taskName, options, {
-      initialBubble: INITIAL_PHASE_STATUS,
-    })
+    const images = await resolveImageBlocks(resolved, env)
+    const text =
+      activeTask !== undefined
+        ? (await resumeActiveTask(env, activeTask, resolved, images)).text
+        : await respondWithConversationAgent(env, resolved, images)
+    await postFinalResponse(env, text, resolved)
   } catch (error) {
     logger.error(
       {
@@ -232,9 +273,9 @@ export const runProcessMentionInBackground = async (
         event_id: env.eventId,
         err: error,
       },
-      'llm-agent processMention failed',
+      'llm-agent mention processing failed',
     )
-    await reportDispatchFailure(env, options)
+    await reportDispatchFailure(env, resolved)
   }
 }
 
@@ -243,12 +284,13 @@ export const createTaskDispatcher = (
 ): TaskDispatcher => {
   const logger = options.logger ?? noopLogger
   const tracer = trace.getTracer(TRACER_NAME)
+  const resolved = resolveDeps(options)
   return async (accepted) => {
     const baseEnv = envelopeFromAccepted(accepted, logger)
     if (baseEnv === undefined) return
     const env = await resolveInlineImageFiles(
       baseEnv,
-      options.slackClient,
+      resolved.slackClient,
       logger,
     )
     await tracer.startActiveSpan(
@@ -262,23 +304,28 @@ export const createTaskDispatcher = (
       },
       async (span) => {
         try {
-          // Set the indicator before submitTask so a fast-completing Task can
-          // never have its terminal status clear race ahead of our set and
-          // leave a stale indicator sitting in the thread.
+          // Set the indicator before the gating lookup so a fast-completing
+          // background run can never have its terminal status clear race
+          // ahead of our set and leave a stale indicator sitting in the
+          // thread.
           await trySetAssistantStatus({
-            slackClient: options.slackClient,
+            slackClient: resolved.slackClient,
             target: { channelId: env.channelId, threadTs: env.threadRootTs },
             status: INITIAL_PHASE_STATUS.status,
             loadingMessages: INITIAL_PHASE_STATUS.loadingMessages,
             logger,
           })
-          // create() failures must reach onAccepted for the event_log rollback;
-          // downstream steps run detached so the Slack HTTP handler can ack.
-          const { taskName } = await submitTask(env, options)
-          const mentionCompletion = runProcessMentionInBackground(
+          // A failure here must reach onAccepted for the event_log
+          // rollback; the actual LLM/A2A work runs detached so the Slack
+          // HTTP handler can ack quickly.
+          const activeTask =
+            await resolved.a2aTaskTracker.findActiveInputRequired(
+              threadKeyFor(env),
+            )
+          const mentionCompletion = runMentionInBackground(
             env,
-            taskName,
-            options,
+            activeTask,
+            resolved,
             logger,
           )
           void options.inFlightTasks?.track(mentionCompletion)
@@ -289,13 +336,13 @@ export const createTaskDispatcher = (
           span.setStatus({ code: SpanStatusCode.ERROR })
           logger.error(
             {
-              event: 'llm_agent_submit_task_failed',
+              event: 'llm_agent_dispatch_failed',
               event_id: env.eventId,
               err,
             },
-            'llm-agent submitTask failed before dispatch completed',
+            'llm-agent dispatch failed before background processing started',
           )
-          await reportDispatchFailure(env, options)
+          await reportDispatchFailure(env, resolved)
           throw err
         } finally {
           span.end()

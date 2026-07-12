@@ -8,6 +8,8 @@ const baseEnv = {
   SLACK_BOT_TOKEN: 'xoxb-test',
   SLACK_BOT_USER_ID: 'U_BOT',
   DATABASE_URL: 'postgres://localhost/test',
+  SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/gpt-5',
+  OPENCODE_API_KEY: 'sk-test',
 } satisfies NodeJS.ProcessEnv
 
 describe('loadConfig', () => {
@@ -21,33 +23,12 @@ describe('loadConfig', () => {
     expect(config.maxConcurrentTasks).toBe(32)
     expect(config.maxWebApiRetries).toBe(3)
     expect(config.logLevel).toBe('info')
-    expect(config.llmAgent).toEqual({
-      taskCrNamespace: undefined,
-      taskCrAgentName: undefined,
-      opencodeBaseUrl: undefined,
-    })
     expect(config.conversationAgent).toEqual({
-      model: undefined,
+      model: 'opencode-go/gpt-5',
       personaPrompt: undefined,
-      opencodeApiKey: undefined,
+      opencodeApiKey: 'sk-test',
     })
     expect(config.remoteAgentUrls).toEqual([])
-  })
-
-  it('reads optional llm-agent env overrides', () => {
-    const config = loadConfig({
-      env: {
-        ...baseEnv,
-        SLACK_BOT_LLM_AGENT_TASK_CR_NAMESPACE: 'my-ns',
-        SLACK_BOT_LLM_AGENT_TASK_CR_AGENT_NAME: 'my-agent',
-        SLACK_BOT_LLM_AGENT_OPENCODE_BASE_URL: 'http://localhost:4096',
-      },
-    })
-    expect(config.llmAgent).toEqual({
-      taskCrNamespace: 'my-ns',
-      taskCrAgentName: 'my-agent',
-      opencodeBaseUrl: 'http://localhost:4096',
-    })
   })
 
   it('reads optional conversation-agent env overrides', () => {
@@ -114,6 +95,16 @@ describe('loadConfig', () => {
 
   it('throws ConfigLoadError when DATABASE_URL is missing', () => {
     const env = { ...baseEnv, DATABASE_URL: undefined }
+    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
+  })
+
+  it('throws ConfigLoadError when SLACK_BOT_CONVERSATION_AGENT_MODEL is missing', () => {
+    const env = { ...baseEnv, SLACK_BOT_CONVERSATION_AGENT_MODEL: undefined }
+    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
+  })
+
+  it('throws ConfigLoadError when OPENCODE_API_KEY is missing', () => {
+    const env = { ...baseEnv, OPENCODE_API_KEY: undefined }
     expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 

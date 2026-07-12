@@ -22,3 +22,5 @@ export {
   createRemoteAgentRegistry,
   DEFAULT_AGENT_CARD_CACHE_TTL_MS,
 } from '@/plugins/llm-agent/remote-agent-registry/remote-agent-registry'
+export type { SendMessageResult } from '@/plugins/llm-agent/remote-agent-registry/send-message-result'
+export { SEND_MESSAGE_RESULT_SCHEMA } from '@/plugins/llm-agent/remote-agent-registry/send-message-result'
