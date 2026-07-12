@@ -34,6 +34,9 @@ export interface Config {
   readonly logLevel: LogLevel
   readonly llmAgent: LlmAgentConfig
   readonly conversationAgent: ConversationAgentConfig
+  // Delegation targets for RemoteAgentRegistry. Empty means the
+  // conversation agent runs with no delegation tools.
+  readonly remoteAgentUrls: readonly string[]
   serviceTokenFor(pluginName: string): ServiceTokenPair | undefined
 }
 
@@ -93,6 +96,8 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     opencodeApiKey: optionalString(env, 'OPENCODE_API_KEY'),
   }
 
+  const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')
+
   return {
     slackSigningSecret,
     slackBotToken,
@@ -104,6 +109,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     logLevel,
     llmAgent,
     conversationAgent,
+    remoteAgentUrls,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }
 }
@@ -115,6 +121,30 @@ const optionalString = (
   const raw = env[key]
   if (raw === undefined || raw === '') return undefined
   return raw
+}
+
+const optionalUrlList = (
+  env: NodeJS.ProcessEnv,
+  key: string,
+): readonly string[] => {
+  const raw = env[key]
+  if (raw === undefined || raw === '') return []
+  return raw.split(',').map((entry) => {
+    const url = entry.trim()
+    if (url === '') {
+      throw new ConfigLoadError(
+        `Environment variable '${key}' contains an empty URL entry`,
+      )
+    }
+    try {
+      new URL(url)
+    } catch {
+      throw new ConfigLoadError(
+        `Environment variable '${key}' contains an invalid URL entry '${url}'`,
+      )
+    }
+    return url
+  })
 }
 
 const requireEnv = (env: NodeJS.ProcessEnv, key: string): string => {

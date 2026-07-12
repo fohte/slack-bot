@@ -12,6 +12,7 @@ export {
   A2A_TASK_TERMINAL_STATES,
   createA2aTaskTracker,
   FIND_UNSETTLED_LIMIT,
+  isA2aTaskState,
   transitionGuard,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 export type {

@@ -31,6 +31,7 @@ describe('loadConfig', () => {
       personaPrompt: undefined,
       opencodeApiKey: undefined,
     })
+    expect(config.remoteAgentUrls).toEqual([])
   })
 
   it('reads optional llm-agent env overrides', () => {
@@ -63,6 +64,37 @@ describe('loadConfig', () => {
       personaPrompt: 'Be concise.',
       opencodeApiKey: 'sk-test',
     })
+  })
+
+  it('parses REMOTE_AGENT_URLS as a comma-separated, trimmed URL list', () => {
+    const config = loadConfig({
+      env: {
+        ...baseEnv,
+        REMOTE_AGENT_URLS:
+          'https://meshi.example.com, https://t-rader.example.com',
+      },
+    })
+    expect(config.remoteAgentUrls).toEqual([
+      'https://meshi.example.com',
+      'https://t-rader.example.com',
+    ])
+  })
+
+  it('rejects an invalid URL entry in REMOTE_AGENT_URLS', () => {
+    expect(() =>
+      loadConfig({ env: { ...baseEnv, REMOTE_AGENT_URLS: 'not-a-url' } }),
+    ).toThrow(ConfigLoadError)
+  })
+
+  it('rejects an empty entry in REMOTE_AGENT_URLS', () => {
+    expect(() =>
+      loadConfig({
+        env: {
+          ...baseEnv,
+          REMOTE_AGENT_URLS: 'https://meshi.example.com,,',
+        },
+      }),
+    ).toThrow(ConfigLoadError)
   })
 
   it('throws ConfigLoadError when SLACK_SIGNING_SECRET is missing', () => {

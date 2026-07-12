@@ -8,6 +8,17 @@ import { createAgent } from 'langchain'
 
 import { GenAiCallbackHandler } from '@/plugins/llm-agent/conversation-agent/genai-callback-handler'
 import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
+import { parseConversationThreadId } from '@/plugins/llm-agent/conversation-agent/thread-id'
+// Delegation is defined in remote-agent-registry (the tool call that
+// produces it) and re-exported below to keep this module's existing public
+// import path (@/plugins/llm-agent/conversation-agent) unchanged.
+import type { Delegation } from '@/plugins/llm-agent/remote-agent-registry'
+import {
+  DELEGATION_RUNTIME_CONTEXT_SCHEMA,
+  extractDelegations,
+} from '@/plugins/llm-agent/remote-agent-registry'
+
+export type { Delegation } from '@/plugins/llm-agent/remote-agent-registry'
 
 // OpenCode Go's OpenAI-compatible endpoint.
 export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
@@ -33,12 +44,6 @@ export const createOpenCodeGoChatModel = (
     },
   })
 
-export interface Delegation {
-  readonly agentName: string
-  readonly taskId: string
-  readonly contextId: string
-}
-
 export interface ConversationOutcome {
   // User-facing reply text; when the turn included a delegation, this is the
   // agent's intermediate response rather than the delegated task's result.
@@ -52,6 +57,9 @@ export interface ConversationAgentInput {
   readonly threadId: string
   readonly userText: string
   readonly images: readonly ImageBlock[]
+  // Slack event driving this turn; recorded on any a2a_task row a
+  // delegation tool call creates during it.
+  readonly slackEventId: string
 }
 
 export interface ConversationAgent {
@@ -99,27 +107,39 @@ export const createConversationAgent = (
     model: options.model,
     tools: options.tools ?? [],
     checkpointer: options.checkpointer,
+    contextSchema: DELEGATION_RUNTIME_CONTEXT_SCHEMA,
     ...(options.personaPrompt !== undefined && options.personaPrompt !== ''
       ? { systemPrompt: options.personaPrompt }
       : {}),
   })
 
   return {
-    async respond({ threadId, userText, images }) {
+    async respond({ threadId, userText, images, slackEventId }) {
       const message = new HumanMessage({
         content: buildHumanMessageContent(userText, images),
       })
+      const { teamId, channelId, threadRootTs } =
+        parseConversationThreadId(threadId)
       const result = await agent.invoke(
         { messages: [message] },
         {
           configurable: { thread_id: threadId },
+          context: {
+            slackEventId,
+            threadKey: {
+              slackTeamId: teamId,
+              slackChannelId: channelId,
+              threadRootTs,
+            },
+            images: [...images],
+          },
           callbacks: [genAiCallbackHandler],
         },
       )
       const lastMessage = result.messages.at(-1)
       return {
         text: lastMessage?.text ?? '',
-        delegations: [],
+        delegations: extractDelegations(result.messages),
       }
     },
   }

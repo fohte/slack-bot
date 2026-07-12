@@ -20,7 +20,10 @@ const A2A_TASK_STATES = [
 
 export type A2aTaskState = (typeof A2A_TASK_STATES)[number]
 
-const isA2aTaskState = (value: string): value is A2aTaskState =>
+// Exported so callers outside this module (e.g. the delegation tool mapping
+// an A2A SDK TaskState into a row) can narrow an SDK-supplied state string
+// without duplicating A2A_TASK_STATES.
+export const isA2aTaskState = (value: string): value is A2aTaskState =>
   (A2A_TASK_STATES as readonly string[]).includes(value)
 
 const toA2aTaskState = (value: string): A2aTaskState => {
