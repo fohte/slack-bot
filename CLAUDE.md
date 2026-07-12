@@ -8,6 +8,10 @@ When a change would push a file's non-test code past ~500 lines, split it along 
 
 Prefer creating a new focused file over appending to the largest existing one.
 
+### Keep the README's environment variables table in sync
+
+Whenever `src/config/config.ts` starts reading a new environment variable (or a directly-referenced `process.env` var elsewhere), add a row to the "Environment variables" table in `README.md` in the same change. Removing a variable from the code removes its row too.
+
 ## Test code rules
 
 ### Assert on the whole output with a single equality check
