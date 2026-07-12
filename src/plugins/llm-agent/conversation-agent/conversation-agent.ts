@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ContentBlock } from '@langchain/core/messages'
@@ -115,7 +117,13 @@ export const createConversationAgent = (
 
   return {
     async respond({ threadId, userText, images, slackEventId }) {
+      // A stable id lets this turn's own messages be located in the
+      // checkpointer's full thread history below: LangGraph's messages
+      // reducer keys deduplication/append on message id, so this id is
+      // guaranteed to survive into result.messages unchanged.
+      const turnMessageId = randomUUID()
       const message = new HumanMessage({
+        id: turnMessageId,
         content: buildHumanMessageContent(userText, images),
       })
       const { teamId, channelId, threadRootTs } =
@@ -137,9 +145,15 @@ export const createConversationAgent = (
         },
       )
       const lastMessage = result.messages.at(-1)
+      // result.messages is the whole thread history the checkpointer has
+      // accumulated, not just this turn's new messages, so delegations from
+      // earlier turns must be excluded rather than re-reported here.
+      const turnStart = result.messages.findIndex((m) => m.id === turnMessageId)
+      const turnMessages =
+        turnStart === -1 ? result.messages : result.messages.slice(turnStart)
       return {
         text: lastMessage?.text ?? '',
-        delegations: extractDelegations(result.messages),
+        delegations: extractDelegations(turnMessages),
       }
     },
   }

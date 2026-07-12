@@ -136,14 +136,16 @@ describe('createConversationAgent', () => {
     ])
   })
 
-  it('threads slackEventId/threadKey/images into a delegation tool and surfaces its Delegation artifact', async () => {
-    let capturedContext: unknown
-    const delegateTool = tool(
+  // A stub delegation tool exercising the same content_and_artifact
+  // contract real delegation tools use (see remote-agent-registry), without
+  // depending on that module's construction details.
+  const stubDelegationTool = (onInvoke?: (context: unknown) => void) =>
+    tool(
       async (
         _input: { request: string },
         runtime: { context: unknown },
       ): Promise<[string, Record<string, string>]> => {
-        capturedContext = runtime.context
+        onInvoke?.(runtime.context)
         return [
           'delegated',
           { agentName: 'meshi', taskId: 'task-1', contextId: 'ctx-1' },
@@ -156,26 +158,29 @@ describe('createConversationAgent', () => {
         responseFormat: 'content_and_artifact',
       },
     )
+
+  const toolCallReply = {
+    toolCalls: [
+      {
+        name: 'delegate_to_meshi',
+        args: { request: 'log my lunch' },
+        id: 'call-1',
+      },
+    ],
+  }
+
+  it('threads slackEventId/threadKey/images into a delegation tool as runtime context', async () => {
+    let capturedContext: unknown
     const model = createRecordingChatModel((_messages, callIndex) =>
-      callIndex === 0
-        ? {
-            toolCalls: [
-              {
-                name: 'delegate_to_meshi',
-                args: { request: 'log my lunch' },
-                id: 'call-1',
-              },
-            ],
-          }
-        : 'handed off to meshi',
+      callIndex === 0 ? toolCallReply : 'handed off to meshi',
     )
     const agent = createConversationAgent({
       model,
       checkpointer: new MemorySaver(),
-      tools: [delegateTool],
+      tools: [stubDelegationTool((context) => (capturedContext = context))],
     })
 
-    const outcome = await agent.respond({
+    await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'log my lunch',
       images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
@@ -191,11 +196,60 @@ describe('createConversationAgent', () => {
       },
       images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
     })
+  })
+
+  it('surfaces a delegation tool call as a Delegation in the outcome', async () => {
+    const model = createRecordingChatModel((_messages, callIndex) =>
+      callIndex === 0 ? toolCallReply : 'handed off to meshi',
+    )
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+      tools: [stubDelegationTool()],
+    })
+
+    const outcome = await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'log my lunch',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
     expect(outcome).toEqual({
       text: 'handed off to meshi',
       delegations: [
         { agentName: 'meshi', taskId: 'task-1', contextId: 'ctx-1' },
       ],
+    })
+  })
+
+  it('does not re-report a prior turn delegation on a later turn with no new delegation', async () => {
+    const model = createRecordingChatModel((_messages, callIndex) =>
+      callIndex === 0 ? toolCallReply : 'ok, anything else?',
+    )
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+      tools: [stubDelegationTool()],
+    })
+    const threadId = 'T1:C1:111.222'
+
+    await agent.respond({
+      threadId,
+      userText: 'log my lunch',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+    const secondOutcome = await agent.respond({
+      threadId,
+      userText: 'thanks',
+      images: [],
+      slackEventId: 'Ev2',
+    })
+
+    expect(secondOutcome).toEqual({
+      text: 'ok, anything else?',
+      delegations: [],
     })
   })
 })

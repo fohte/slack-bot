@@ -44,14 +44,30 @@ const cardFor = (overrides: Partial<AgentCard> = {}): AgentCard => ({
   ...overrides,
 })
 
-const handleFor = (
-  sendMessage: (params: MessageSendParams) => Promise<Message | Task>,
+// Wraps a canned sendMessage response with a call recorder, so tests assert
+// on the params the tool actually sent instead of asserting from inside the
+// stub (which would pass vacuously if the tool never called sendMessage).
+const recordingHandleFor = (
+  respond: (params: MessageSendParams) => Promise<Message | Task>,
   card: AgentCard = cardFor(),
-): RemoteAgentHandle => ({
-  name: card.name,
-  card,
-  client: { sendMessage } as unknown as Client,
-})
+): {
+  readonly handle: RemoteAgentHandle
+  readonly calls: MessageSendParams[]
+} => {
+  const calls: MessageSendParams[] = []
+  const sendMessage = async (params: MessageSendParams) => {
+    calls.push(params)
+    return respond(params)
+  }
+  return {
+    handle: {
+      name: card.name,
+      card,
+      client: { sendMessage } as unknown as Client,
+    },
+    calls,
+  }
+}
 
 const createFakeTracker = (
   contextId?: string,
@@ -120,21 +136,26 @@ describe('delegationToolName / delegationToolDescription', () => {
 describe('createDelegationTool', () => {
   it('names and describes the tool from the Agent Card', () => {
     const card = cardFor({ name: 'meshi' })
-    const toolInstance = createDelegationTool(
-      handleFor(async () => submittedTask(), card),
-      {
-        a2aTaskTracker: createFakeTracker(),
-      },
-    )
+    const { handle } = recordingHandleFor(async () => submittedTask(), card)
+    const toolInstance = createDelegationTool(handle, {
+      a2aTaskTracker: createFakeTracker(),
+    })
 
     expect(toolInstance.name).toBe('delegate_to_meshi')
     expect(toolInstance.description).toBe(delegationToolDescription(card))
   })
 
-  it('records the delegated task immediately after a successful send and returns taskId/contextId', async () => {
-    const tracker = createFakeTracker()
-    const sendMessage = async (params: MessageSendParams) => {
-      expect(params).toEqual({
+  it('sends a message/send request with blocking:false and no contextId for a first delegation', async () => {
+    const { handle, calls } = recordingHandleFor(async () => submittedTask())
+    const toolInstance = createDelegationTool(handle, {
+      a2aTaskTracker: createFakeTracker(),
+      randomUUID: () => 'generated-id',
+    })
+
+    await invokeDelegationTool(toolInstance, { request: 'log my lunch' })
+
+    expect(calls).toEqual([
+      {
         message: {
           kind: 'message',
           messageId: 'generated-id',
@@ -142,13 +163,18 @@ describe('createDelegationTool', () => {
           parts: [{ kind: 'text', text: 'log my lunch' }],
         },
         configuration: { blocking: false },
-      })
-      return submittedTask({ id: 'task-1', contextId: 'ctx-1' })
-    }
-    const toolInstance = createDelegationTool(handleFor(sendMessage), {
+      },
+    ])
+  })
+
+  it('records the delegated task immediately after a successful send and returns taskId/contextId', async () => {
+    const tracker = createFakeTracker()
+    const { handle } = recordingHandleFor(async () =>
+      submittedTask({ id: 'task-1', contextId: 'ctx-1' }),
+    )
+    const toolInstance = createDelegationTool(handle, {
       a2aTaskTracker: tracker,
       now: () => new Date('2026-01-01T00:00:00Z'),
-      randomUUID: () => 'generated-id',
       taskDeadlineMs: 60_000,
     })
 
@@ -167,35 +193,32 @@ describe('createDelegationTool', () => {
         deadlineAt: new Date('2026-01-01T00:01:00Z'),
       },
     ])
+    expect(message.content).toBe(
+      'Delegated to meshi (taskId=task-1). The task runs asynchronously; ' +
+        "tell the user their request was handed off and they'll get a " +
+        'follow-up when it completes.',
+    )
     expect(message.artifact).toEqual({
       agentName: 'meshi',
       taskId: 'task-1',
       contextId: 'ctx-1',
     } satisfies Delegation)
-    expect(message.content).toContain('task-1')
   })
 
   it('reuses an existing contextId for the same thread/agent instead of starting a new one', async () => {
-    const sendMessage = async (params: MessageSendParams) => {
-      expect(params.message.contextId).toBe('ctx-existing')
-      return submittedTask()
-    }
-    const toolInstance = createDelegationTool(handleFor(sendMessage), {
+    const { handle, calls } = recordingHandleFor(async () => submittedTask())
+    const toolInstance = createDelegationTool(handle, {
       a2aTaskTracker: createFakeTracker('ctx-existing'),
     })
 
     await invokeDelegationTool(toolInstance, { request: 'log my lunch' })
+
+    expect(calls[0]?.message.contextId).toBe('ctx-existing')
   })
 
   it('forwards attached images as A2A FileParts', async () => {
-    const sendMessage = async (params: MessageSendParams) => {
-      expect(params.message.parts).toEqual([
-        { kind: 'text', text: 'what is this?' },
-        { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/jpeg' } },
-      ])
-      return submittedTask()
-    }
-    const toolInstance = createDelegationTool(handleFor(sendMessage), {
+    const { handle, calls } = recordingHandleFor(async () => submittedTask())
+    const toolInstance = createDelegationTool(handle, {
       a2aTaskTracker: createFakeTracker(),
     })
 
@@ -207,17 +230,16 @@ describe('createDelegationTool', () => {
         images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
       },
     )
+
+    expect(calls[0]?.message.parts).toEqual([
+      { kind: 'text', text: 'what is this?' },
+      { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/jpeg' } },
+    ])
   })
 
   it('includes the configured push notification config when sending', async () => {
-    const sendMessage = async (params: MessageSendParams) => {
-      expect(params.configuration?.pushNotificationConfig).toEqual({
-        url: 'https://slack-bot.example.com/api/a2a/notifications',
-        token: 'shared-token',
-      })
-      return submittedTask()
-    }
-    const toolInstance = createDelegationTool(handleFor(sendMessage), {
+    const { handle, calls } = recordingHandleFor(async () => submittedTask())
+    const toolInstance = createDelegationTool(handle, {
       a2aTaskTracker: createFakeTracker(),
       pushNotificationConfig: {
         url: 'https://slack-bot.example.com/api/a2a/notifications',
@@ -226,24 +248,31 @@ describe('createDelegationTool', () => {
     })
 
     await invokeDelegationTool(toolInstance, { request: 'log my lunch' })
+
+    expect(calls[0]?.configuration?.pushNotificationConfig).toEqual({
+      url: 'https://slack-bot.example.com/api/a2a/notifications',
+      token: 'shared-token',
+    })
   })
 
   it('maps a message/send failure to a tool error without recording a task', async () => {
     const tracker = createFakeTracker()
-    const toolInstance = createDelegationTool(
-      handleFor(async () => {
-        throw new Error('connection refused')
-      }),
-      { a2aTaskTracker: tracker },
-    )
+    const { handle } = recordingHandleFor(async () => {
+      throw new Error('connection refused')
+    })
+    const toolInstance = createDelegationTool(handle, {
+      a2aTaskTracker: tracker,
+    })
 
     const message = await invokeDelegationTool(toolInstance, {
       request: 'log my lunch',
     })
 
+    expect(message.content).toBe(
+      'Delegating to meshi failed: connection refused. Tell the user the ' +
+        'request could not be sent.',
+    )
     expect(message.artifact).toBeUndefined()
-    expect(typeof message.content).toBe('string')
-    expect(message.content).toContain('connection refused')
     expect(tracker.recorded).toEqual([])
   })
 
@@ -255,12 +284,10 @@ describe('createDelegationTool', () => {
       role: 'agent',
       parts: [{ kind: 'text', text: 'done, no task needed' }],
     }
-    const toolInstance = createDelegationTool(
-      handleFor(async () => directReply),
-      {
-        a2aTaskTracker: tracker,
-      },
-    )
+    const { handle } = recordingHandleFor(async () => directReply)
+    const toolInstance = createDelegationTool(handle, {
+      a2aTaskTracker: tracker,
+    })
 
     const message = await invokeDelegationTool(toolInstance, {
       request: 'log my lunch',
@@ -273,11 +300,11 @@ describe('createDelegationTool', () => {
 
 describe('createDelegationTools', () => {
   it('generates one tool per remote agent handle, so adding a handle adds a tool with no other change', () => {
-    const meshi = handleFor(
+    const { handle: meshi } = recordingHandleFor(
       async () => submittedTask(),
       cardFor({ name: 'meshi' }),
     )
-    const tRader = handleFor(
+    const { handle: tRader } = recordingHandleFor(
       async () => submittedTask(),
       cardFor({ name: 't-rader' }),
     )
@@ -290,5 +317,22 @@ describe('createDelegationTools', () => {
       'delegate_to_meshi',
       'delegate_to_t_rader',
     ])
+  })
+
+  it('rejects a duplicate delegation tool name instead of leaving a handle unreachable', () => {
+    const { handle: first } = recordingHandleFor(
+      async () => submittedTask(),
+      cardFor({ name: 'meshi' }),
+    )
+    const { handle: second } = recordingHandleFor(
+      async () => submittedTask(),
+      cardFor({ name: 'Meshi' }),
+    )
+
+    expect(() =>
+      createDelegationTools([first, second], {
+        a2aTaskTracker: createFakeTracker(),
+      }),
+    ).toThrow(/duplicate delegation tool name/)
   })
 })

@@ -23,6 +23,17 @@ export interface Delegation {
   readonly contextId: string
 }
 
+const THREAD_KEY_SCHEMA = z.object({
+  slackTeamId: z.string(),
+  slackChannelId: z.string(),
+  threadRootTs: z.string(),
+}) satisfies z.ZodType<ThreadKey>
+
+const IMAGE_BLOCK_SCHEMA = z.object({
+  base64: z.string(),
+  mimeType: z.string(),
+}) satisfies z.ZodType<ImageBlock>
+
 // Per-turn Slack context a delegation tool needs but cannot derive from its
 // own (agent-scoped, bound-once) construction: which event/thread the
 // current conversation turn belongs to, and the images attached to it.
@@ -30,17 +41,12 @@ export interface Delegation {
 // `ConversationAgentOptions.tools` is bound once and reused across turns.
 export const DELEGATION_RUNTIME_CONTEXT_SCHEMA = z.object({
   slackEventId: z.string(),
-  threadKey: z.object({
-    slackTeamId: z.string(),
-    slackChannelId: z.string(),
-    threadRootTs: z.string(),
-  }),
-  images: z.array(z.object({ base64: z.string(), mimeType: z.string() })),
+  threadKey: THREAD_KEY_SCHEMA,
+  images: z.array(IMAGE_BLOCK_SCHEMA),
 })
 
-// Client-side deadline armed on every newly delegated task (see
-// task-lifecycle-reliability.md; tuned further once the reconciler that
-// enforces it ships).
+// Initial client-side deadline armed on every newly delegated task; a
+// reconciler enforces it by failing tasks that miss it (not yet built).
 export const DEFAULT_A2A_TASK_DEADLINE_MS = 15 * 60 * 1000
 
 export interface DelegationPushNotificationConfig {
@@ -119,8 +125,9 @@ export const createDelegationTool = (
       const { slackEventId, threadKey, images } = runtime.context
 
       // New delegations always start a fresh message/send; resuming an
-      // input-required task goes through A2ATaskTracker directly rather
-      // than back through this tool (see design/components.md).
+      // input-required task is a different, tool-independent flow that
+      // sends directly to the existing taskId/contextId instead of coming
+      // back through the model as a tool call.
       const contextId = await deps.a2aTaskTracker.lookupContext(
         threadKey,
         handle.name,
@@ -167,6 +174,13 @@ export const createDelegationTool = (
       }
 
       if (result.kind !== 'task') {
+        logger.warn(
+          {
+            event: 'llm_agent_remote_agent_delegation_non_task_result',
+            agent_name: handle.name,
+          },
+          'llm-agent delegation tool received a non-task message/send result from a remote agent',
+        )
         return [
           `${handle.name} replied without creating a trackable task. Tell ` +
             'the user this delegation could not be tracked and may need to ' +
@@ -175,6 +189,14 @@ export const createDelegationTool = (
         ]
       }
       if (!isA2aTaskState(result.status.state)) {
+        logger.warn(
+          {
+            event: 'llm_agent_remote_agent_delegation_unrecognized_state',
+            agent_name: handle.name,
+            task_state: result.status.state,
+          },
+          'llm-agent delegation tool received an unrecognized task state from a remote agent',
+        )
         return [
           `${handle.name} returned an unrecognized task state ` +
             `(${result.status.state}). Tell the user this delegation failed.`,
@@ -182,26 +204,49 @@ export const createDelegationTool = (
         ]
       }
 
-      const threadKeyForRecord: ThreadKey = threadKey
-      await deps.a2aTaskTracker.recordDelegated({
-        ...threadKeyForRecord,
+      const delegation: Delegation = {
+        agentName: handle.name,
         taskId: result.id,
         contextId: result.contextId,
-        agentName: handle.name,
-        slackEventId,
-        state: result.status.state,
-        deadlineAt: new Date(now().getTime() + deadlineMs),
-      })
+      }
+      const threadKeyForRecord: ThreadKey = threadKey
+      try {
+        await deps.a2aTaskTracker.recordDelegated({
+          ...threadKeyForRecord,
+          taskId: result.id,
+          contextId: result.contextId,
+          agentName: handle.name,
+          slackEventId,
+          state: result.status.state,
+          deadlineAt: new Date(now().getTime() + deadlineMs),
+        })
+      } catch (error) {
+        // The remote agent already started this task; failing to record it
+        // here only breaks slack-bot's own polling/resume tracking for it,
+        // so this still reports success with the real taskId/contextId
+        // rather than telling the user the delegation itself failed.
+        logger.warn(
+          {
+            event: 'llm_agent_remote_agent_delegation_record_failed',
+            agent_name: handle.name,
+            task_id: result.id,
+            err: error,
+          },
+          'llm-agent delegation tool sent a task but failed to record it locally',
+        )
+        return [
+          `Delegated to ${handle.name} (taskId=${result.id}) but this ` +
+            'service failed to record the task locally. Tell the user ' +
+            'follow-up tracking of this request may not work.',
+          delegation,
+        ]
+      }
 
       return [
         `Delegated to ${handle.name} (taskId=${result.id}). The task runs ` +
           'asynchronously; tell the user their request was handed off and ' +
           "they'll get a follow-up when it completes.",
-        {
-          agentName: handle.name,
-          taskId: result.id,
-          contextId: result.contextId,
-        },
+        delegation,
       ]
     },
     {
@@ -216,7 +261,24 @@ export const createDelegationTool = (
 export const createDelegationTools = (
   handles: readonly RemoteAgentHandle[],
   deps: DelegationToolDependencies,
-) => handles.map((handle) => createDelegationTool(handle, deps))
+) => {
+  const seenNames = new Set<string>()
+  return handles.map((handle) => {
+    const toolName = delegationToolName(handle.card)
+    // A collision would leave one of the two agents permanently
+    // unreachable (tool dispatch resolves by name, first match wins) with
+    // no error surfaced anywhere, so this fails loudly instead.
+    if (seenNames.has(toolName)) {
+      throw new Error(
+        `duplicate delegation tool name '${toolName}' for remote agent ` +
+          `'${handle.name}'; Agent Card names must be unique after ` +
+          'slugification',
+      )
+    }
+    seenNames.add(toolName)
+    return createDelegationTool(handle, deps)
+  })
+}
 
 const isDelegation = (value: unknown): value is Delegation =>
   typeof value === 'object' &&

@@ -126,6 +126,34 @@ describe('createRemoteAgentRegistry', () => {
     expect(resolveCount).toBe(1)
   })
 
+  it('dedupes concurrent listAgents() calls onto a single in-flight fetch', async () => {
+    let resolveCount = 0
+    const meshi = handleFor('meshi')
+    let releaseFetch: (() => void) | undefined
+    const fetchGate = new Promise<void>((resolve) => {
+      releaseFetch = resolve
+    })
+    const registry = createRemoteAgentRegistry({
+      agentUrls: ['https://meshi.example.com'],
+      resolver: {
+        async resolve() {
+          resolveCount++
+          await fetchGate
+          return meshi
+        },
+      },
+    })
+
+    const first = registry.listAgents()
+    const second = registry.listAgents()
+    releaseFetch?.()
+    const [firstResult, secondResult] = await Promise.all([first, second])
+
+    expect(resolveCount).toBe(1)
+    expect(firstResult).toEqual([meshi])
+    expect(secondResult).toEqual([meshi])
+  })
+
   it('re-resolves once the TTL has elapsed', async () => {
     let resolveCount = 0
     const meshi = handleFor('meshi')

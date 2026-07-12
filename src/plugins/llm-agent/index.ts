@@ -124,6 +124,25 @@ export {
   waitForCompletion,
 } from '@/plugins/llm-agent/process-mention'
 export type {
+  DelegationPushNotificationConfig,
+  DelegationToolDependencies,
+  RemoteAgentHandle,
+  RemoteAgentRegistry,
+  RemoteAgentRegistryOptions,
+  RemoteAgentResolver,
+} from '@/plugins/llm-agent/remote-agent-registry'
+export {
+  createDelegationTool,
+  createDelegationTools,
+  createRemoteAgentRegistry,
+  DEFAULT_A2A_TASK_DEADLINE_MS,
+  DEFAULT_AGENT_CARD_CACHE_TTL_MS,
+  DELEGATION_RUNTIME_CONTEXT_SCHEMA,
+  delegationToolDescription,
+  delegationToolName,
+  extractDelegations,
+} from '@/plugins/llm-agent/remote-agent-registry'
+export type {
   ResponseReconcilerHandle,
   ResponseReconcilerOptions,
 } from '@/plugins/llm-agent/response-reconciler'
