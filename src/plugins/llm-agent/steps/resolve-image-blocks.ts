@@ -42,9 +42,6 @@ interface FittedImage {
   readonly ext: string
 }
 
-// Returns the bytes unchanged if they already fit perImageCap, otherwise
-// attempts a resize and returns undefined if even that can't bring the
-// image under the cap.
 const fitImageToCap = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
@@ -84,10 +81,8 @@ const fitImageToCap = async (
   return { bytes: outcome.bytes, ext: outcome.ext }
 }
 
-// Downloads and resizes a Slack mention's image attachments into the
-// base64 content blocks ConversationAgent (and A2A FileParts derived from
-// them) consume. Serial: downloadFile does not retry, so issuing all images
-// in parallel would 429 the whole batch on a single rate-limit hit.
+// Serial: downloadFile does not retry, so issuing all images in parallel
+// would 429 the whole batch on a single rate-limit hit.
 export const resolveImageBlocks = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,

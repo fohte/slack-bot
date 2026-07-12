@@ -110,8 +110,7 @@ const transitionBestEffort = async (
   }
 }
 
-// Redelegates as a brand new task under the same contextId, mirroring
-// createDelegationTool's own message/send + recordDelegated pairing.
+// Mirrors createDelegationTool's message/send + recordDelegated pairing.
 const redelegate = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow,
@@ -221,9 +220,6 @@ const settleAndRedelegate = async (
   return redelegate(env, activeTask, handle, resolved, images)
 }
 
-// Sends the next user reply in a thread as an additional message/send to
-// the same taskId + contextId, resuming an input-required A2A task instead
-// of starting a new conversation turn.
 export const resumeActiveTask = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow,
