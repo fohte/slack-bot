@@ -1,4 +1,5 @@
 import type { Client } from '@a2a-js/sdk/client'
+import { ClientFactory } from '@a2a-js/sdk/client'
 import { describe, expect, it, vi } from 'vitest'
 
 import type {
@@ -179,6 +180,34 @@ describe('createRemoteAgentRegistry', () => {
 
     expect(resolveCount).toBe(2)
   })
+
+  it('excludes an agent whose Agent Card fails AGENT_CARD_SCHEMA validation', async () => {
+    const fakeCardClient = {
+      getAgentCard: async () => ({ description: 'missing the name field' }),
+    } as unknown as Client
+    const createFromUrl = vi
+      .spyOn(ClientFactory.prototype, 'createFromUrl')
+      .mockResolvedValue(fakeCardClient)
+    const warn = vi.fn()
+
+    try {
+      const registry = createRemoteAgentRegistry({
+        agentUrls: ['https://broken.example.com'],
+        logger: {
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn,
+          error: vi.fn(),
+          child: vi.fn(),
+        },
+      })
+
+      expect(await registry.listAgents()).toEqual([])
+      expect(warn).toHaveBeenCalledOnce()
+    } finally {
+      createFromUrl.mockRestore()
+    }
+  })
 })
 
 describe('AGENT_CARD_SCHEMA', () => {
@@ -199,5 +228,23 @@ describe('AGENT_CARD_SCHEMA', () => {
     }
 
     expect(() => AGENT_CARD_SCHEMA.parse(withoutName)).toThrow()
+  })
+
+  it('keeps unread skill fields (e.g. id, tags) instead of stripping them', () => {
+    const cardWithExtraSkillFields = {
+      ...validCard,
+      skills: [
+        {
+          name: 'Log a meal',
+          description: 'Records a meal.',
+          id: 'log',
+          tags: [],
+        },
+      ],
+    }
+
+    expect(AGENT_CARD_SCHEMA.parse(cardWithExtraSkillFields)).toEqual(
+      cardWithExtraSkillFields,
+    )
   })
 })

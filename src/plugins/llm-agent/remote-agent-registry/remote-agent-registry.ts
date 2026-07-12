@@ -35,10 +35,12 @@ export const AGENT_CARD_SCHEMA = z
     name: z.string(),
     description: z.string(),
     skills: z.array(
-      z.object({
-        name: z.string(),
-        description: z.string(),
-      }),
+      z
+        .object({
+          name: z.string(),
+          description: z.string(),
+        })
+        .loose(),
     ),
   })
   .loose()

@@ -170,10 +170,9 @@ export const createDelegationTool = (
         },
       }
 
-      let result: z.infer<typeof SEND_MESSAGE_RESULT_SCHEMA>
+      let rawResult: unknown
       try {
-        const rawResult: unknown = await handle.client.sendMessage(params)
-        result = SEND_MESSAGE_RESULT_SCHEMA.parse(rawResult)
+        rawResult = await handle.client.sendMessage(params)
       } catch (error) {
         logger.warn(
           {
@@ -186,6 +185,29 @@ export const createDelegationTool = (
         return [
           `Delegating to ${handle.name} failed: ${describeError(error)}. ` +
             'Tell the user the request could not be sent.',
+          undefined,
+        ]
+      }
+
+      // A schema mismatch here means the request may already have reached
+      // the remote agent (unlike the network failure above), so this is
+      // reported as an untrackable delegation rather than a failed send.
+      let result: z.infer<typeof SEND_MESSAGE_RESULT_SCHEMA>
+      try {
+        result = SEND_MESSAGE_RESULT_SCHEMA.parse(rawResult)
+      } catch (error) {
+        logger.warn(
+          {
+            event: 'llm_agent_remote_agent_delegation_malformed_result',
+            agent_name: handle.name,
+            err: error,
+          },
+          'llm-agent delegation tool received a malformed message/send result from a remote agent',
+        )
+        return [
+          `${handle.name} returned a response that could not be understood. ` +
+            'Tell the user this delegation may have been sent but could not ' +
+            'be tracked.',
           undefined,
         ]
       }

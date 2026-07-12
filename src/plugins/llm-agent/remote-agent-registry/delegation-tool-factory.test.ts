@@ -276,50 +276,43 @@ describe('createDelegationTool', () => {
     expect(tracker.recorded).toEqual([])
   })
 
-  it('maps a malformed task result (missing status) to a tool error without throwing', async () => {
-    const tracker = createFakeTracker()
-    // Simulates a remote agent whose response doesn't match the A2A Task
-    // shape this module relies on (e.g. missing `status`); before response
-    // validation this reached `result.status.state` and threw an uncaught
-    // TypeError instead of surfacing as a tool error.
-    const malformedTask = {
-      kind: 'task',
-      id: 'task-1',
-      contextId: 'ctx-1',
-    } as unknown as Task
-    const { handle } = recordingHandleFor(async () => malformedTask)
-    const toolInstance = createDelegationTool(handle, {
-      a2aTaskTracker: tracker,
-    })
+  it.each<{ scenario: string; result: Message | Task }>([
+    {
+      scenario: 'a non-task message/send result',
+      result: {
+        kind: 'message',
+        messageId: 'reply-1',
+        role: 'agent',
+        parts: [{ kind: 'text', text: 'done, no task needed' }],
+      },
+    },
+    {
+      // Simulates a remote agent whose response doesn't match the A2A Task
+      // shape this module relies on (e.g. missing `status`).
+      scenario: 'a malformed task result (missing status)',
+      result: {
+        kind: 'task',
+        id: 'task-1',
+        contextId: 'ctx-1',
+      } as unknown as Task,
+    },
+  ])(
+    'maps $scenario to a tool error without recording a task',
+    async ({ result }) => {
+      const tracker = createFakeTracker()
+      const { handle } = recordingHandleFor(async () => result)
+      const toolInstance = createDelegationTool(handle, {
+        a2aTaskTracker: tracker,
+      })
 
-    const message = await invokeDelegationTool(toolInstance, {
-      request: 'log my lunch',
-    })
+      const message = await invokeDelegationTool(toolInstance, {
+        request: 'log my lunch',
+      })
 
-    expect(message.artifact).toBeUndefined()
-    expect(tracker.recorded).toEqual([])
-  })
-
-  it('maps a non-task send result to a tool error without recording a task', async () => {
-    const tracker = createFakeTracker()
-    const directReply: Message = {
-      kind: 'message',
-      messageId: 'reply-1',
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'done, no task needed' }],
-    }
-    const { handle } = recordingHandleFor(async () => directReply)
-    const toolInstance = createDelegationTool(handle, {
-      a2aTaskTracker: tracker,
-    })
-
-    const message = await invokeDelegationTool(toolInstance, {
-      request: 'log my lunch',
-    })
-
-    expect(message.artifact).toBeUndefined()
-    expect(tracker.recorded).toEqual([])
-  })
+      expect(message.artifact).toBeUndefined()
+      expect(tracker.recorded).toEqual([])
+    },
+  )
 })
 
 describe('createDelegationTools', () => {
