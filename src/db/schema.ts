@@ -1,4 +1,7 @@
+import { sql } from 'drizzle-orm'
 import {
+  boolean,
+  check,
   index,
   pgTable,
   primaryKey,
@@ -54,6 +57,47 @@ export const eventLog = pgTable(
       table.slackChannelId,
       table.messageTs,
       table.slackTeamId,
+    ),
+  ],
+)
+
+export const a2aTask = pgTable(
+  'a2a_task',
+  {
+    taskId: text('task_id').primaryKey(),
+    contextId: text('context_id').notNull(),
+    agentName: text('agent_name').notNull(),
+    slackTeamId: text('slack_team_id').notNull(),
+    slackChannelId: text('slack_channel_id').notNull(),
+    threadRootTs: text('thread_root_ts').notNull(),
+    // Reference to event_log, kept unenforced (no FK) since the two tables
+    // have independent retention cycles.
+    slackEventId: text('slack_event_id').notNull(),
+    state: text('state').notNull(),
+    settled: boolean('settled').notNull().default(false),
+    deadlineAt: timestamp('deadline_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('a2a_task_thread_idx').on(
+      table.slackTeamId,
+      table.slackChannelId,
+      table.threadRootTs,
+    ),
+    // Partial: every reader of this index (findUnsettled, transition,
+    // findActiveInputRequired) filters on settled = false, and settled rows
+    // never get looked up by it again.
+    index('a2a_task_unsettled_idx')
+      .on(table.updatedAt)
+      .where(sql`${table.settled} = false`),
+    check(
+      'a2a_task_state_check',
+      sql`${table.state} in ('submitted','working','input-required','completed','failed','canceled','rejected')`,
     ),
   ],
 )
