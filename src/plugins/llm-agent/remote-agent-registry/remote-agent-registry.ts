@@ -1,6 +1,7 @@
 import type { AgentCard } from '@a2a-js/sdk'
 import type { Client } from '@a2a-js/sdk/client'
 import { ClientFactory } from '@a2a-js/sdk/client'
+import { z } from 'zod'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
@@ -24,10 +25,35 @@ export interface RemoteAgentResolver {
   resolve(url: string): Promise<RemoteAgentHandle>
 }
 
+// Agent Cards come from remote HTTP servers, so only the fields this module
+// actually reads (name/description/skills, consumed by
+// delegationToolName/delegationToolDescription) are validated; a card
+// failing this parse is treated the same as an unreachable one — excluded
+// with a warning rather than propagating a raw TypeError.
+export const AGENT_CARD_SCHEMA = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    skills: z.array(
+      z.object({
+        name: z.string(),
+        description: z.string(),
+      }),
+    ),
+  })
+  .loose()
+
 const defaultResolver: RemoteAgentResolver = {
   async resolve(url) {
     const client = await new ClientFactory().createFromUrl(url)
-    const card = await client.getAgentCard()
+    const rawCard: unknown = await client.getAgentCard()
+    // AGENT_CARD_SCHEMA (a .loose() object) validates the name/description/
+    // skills fields this module reads and passes the rest of the payload
+    // through unchanged; the remaining AgentCard fields (url, version,
+    // capabilities, ...) are never read here, so this cast only relies on
+    // the fields the schema actually checked.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- AGENT_CARD_SCHEMA already validated every field this module reads
+    const card = AGENT_CARD_SCHEMA.parse(rawCard) as unknown as AgentCard
     return { name: card.name, card, client }
   },
 }

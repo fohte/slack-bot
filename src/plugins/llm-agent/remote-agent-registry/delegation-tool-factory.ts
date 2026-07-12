@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import type { AgentCard, Message, MessageSendParams, Task } from '@a2a-js/sdk'
+import type { AgentCard, Message, MessageSendParams } from '@a2a-js/sdk'
 import type { BaseMessage } from '@langchain/core/messages'
 import { ToolMessage } from '@langchain/core/messages'
 import type { ToolRuntime } from '@langchain/core/tools'
@@ -97,6 +97,22 @@ const toFilePart = (image: ImageBlock) => ({
   file: { bytes: image.base64, mimeType: image.mimeType },
 })
 
+// message/send's response is a remote agent's HTTP payload; only the shape
+// this module reads (the task/message discriminator, and a task's id /
+// contextId / status.state) is validated, so a malformed response is
+// rejected here instead of throwing an uncaught TypeError further down.
+const SEND_MESSAGE_RESULT_SCHEMA = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('message') }).loose(),
+  z
+    .object({
+      kind: z.literal('task'),
+      id: z.string(),
+      contextId: z.string(),
+      status: z.object({ state: z.string() }).loose(),
+    })
+    .loose(),
+])
+
 const DELEGATION_INPUT_SCHEMA = z.object({
   request: z
     .string()
@@ -154,9 +170,10 @@ export const createDelegationTool = (
         },
       }
 
-      let result: Message | Task
+      let result: z.infer<typeof SEND_MESSAGE_RESULT_SCHEMA>
       try {
-        result = await handle.client.sendMessage(params)
+        const rawResult: unknown = await handle.client.sendMessage(params)
+        result = SEND_MESSAGE_RESULT_SCHEMA.parse(rawResult)
       } catch (error) {
         logger.warn(
           {

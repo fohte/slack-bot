@@ -5,7 +5,10 @@ import type {
   RemoteAgentHandle,
   RemoteAgentResolver,
 } from '@/plugins/llm-agent/remote-agent-registry/remote-agent-registry'
-import { createRemoteAgentRegistry } from '@/plugins/llm-agent/remote-agent-registry/remote-agent-registry'
+import {
+  AGENT_CARD_SCHEMA,
+  createRemoteAgentRegistry,
+} from '@/plugins/llm-agent/remote-agent-registry/remote-agent-registry'
 
 // remote-agent-registry.test.ts never calls a handle's client, so a bare
 // stand-in satisfies the Client type without wiring an A2A transport.
@@ -175,5 +178,26 @@ describe('createRemoteAgentRegistry', () => {
     await registry.listAgents()
 
     expect(resolveCount).toBe(2)
+  })
+})
+
+describe('AGENT_CARD_SCHEMA', () => {
+  const validCard = {
+    name: 'meshi',
+    description: 'Tracks meals.',
+    skills: [{ name: 'Log a meal', description: 'Records a meal.' }],
+  }
+
+  it('accepts a payload with the fields this module reads', () => {
+    expect(AGENT_CARD_SCHEMA.parse(validCard)).toEqual(validCard)
+  })
+
+  it('rejects a payload missing a required field instead of silently defaulting', () => {
+    const withoutName = {
+      description: validCard.description,
+      skills: validCard.skills,
+    }
+
+    expect(() => AGENT_CARD_SCHEMA.parse(withoutName)).toThrow()
   })
 })
