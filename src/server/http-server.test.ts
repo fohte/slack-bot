@@ -59,4 +59,27 @@ describe('createHttpServer', () => {
       'idle',
     ])
   })
+
+  it('mounts a plugin-provided route without requiring a Slack signature', async () => {
+    const rejectingVerifier: SignatureVerifier = { verify: () => false }
+    const { app } = createHttpServer({
+      verifier: rejectingVerifier,
+      router: noopRouter,
+      logger: noopLogger,
+      inFlightTasks: createInFlightTasks(),
+      routes: [
+        {
+          path: '/api/a2a/notifications',
+          handler: (c) => Promise.resolve(c.body(null, 204)),
+        },
+      ],
+    })
+
+    const response = await app.request('/api/a2a/notifications', {
+      method: 'POST',
+      body: '{}',
+    })
+
+    expect(response.status).toBe(204)
+  })
 })

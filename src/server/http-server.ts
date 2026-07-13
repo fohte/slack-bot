@@ -22,12 +22,23 @@ type Variables = {
   rawBody: string
 }
 
+// Lets a plugin register its own POST endpoint (e.g. the llm-agent A2A push
+// notification receiver) without this module growing a case per plugin.
+// Not subject to the Slack signature-verification middleware below, since
+// SLACK_PATHS only matches the fixed Slack Request URL paths; a route added
+// here is expected to authenticate itself.
+export interface HttpServerRoute {
+  readonly path: string
+  readonly handler: (c: Context<{ Variables: Variables }>) => Promise<Response>
+}
+
 export interface HttpServerOptions {
   readonly verifier: SignatureVerifier
   readonly router: InteractionRouter
   readonly logger: Logger
   readonly health?: HealthEndpoint | undefined
   readonly inFlightTasks: Pick<InFlightTasks, 'track'>
+  readonly routes?: readonly HttpServerRoute[] | undefined
 }
 
 export interface HttpServer {
@@ -73,6 +84,10 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
     if (health.isReady()) return c.json({ status: 'ok' })
     return c.json({ status: 'initializing' }, 503)
   })
+
+  for (const route of options.routes ?? []) {
+    app.post(route.path, route.handler)
+  }
 
   app.post('/api/slack/commands', async (c) => {
     const rawBody = c.get('rawBody')
