@@ -30,6 +30,10 @@ export interface Config {
   // Delegation targets for RemoteAgentRegistry. Empty means the
   // conversation agent runs with no delegation tools.
   readonly remoteAgentUrls: readonly string[]
+  // Shared secret verified against the X-A2A-Notification-Token header on
+  // POST /api/a2a/notifications, the endpoint remote agents push completed
+  // or failed A2A tasks to.
+  readonly a2aNotificationToken: string
   serviceTokenFor(pluginName: string): ServiceTokenPair | undefined
 }
 
@@ -75,6 +79,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   }
 
   const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')
+  const a2aNotificationToken = requireEnv(env, 'A2A_NOTIFICATION_TOKEN')
 
   return {
     slackSigningSecret,
@@ -87,6 +92,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     logLevel,
     conversationAgent,
     remoteAgentUrls,
+    a2aNotificationToken,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }
 }

@@ -286,6 +286,31 @@ export const recordingHandleFor = (
   }
 }
 
+// Wraps a canned getTask response with a call recorder, mirroring
+// recordingHandleFor but for tasks/get instead of message/send. Used by
+// ResponseFinalizer tests, which only ever call getTask on a handle.
+export const recordingHandleForGetTask = (
+  respond: (taskId: string) => Promise<Task>,
+  card: AgentCard = cardFor(),
+): {
+  readonly handle: RemoteAgentHandle
+  readonly calls: string[]
+} => {
+  const calls: string[] = []
+  const getTask = async (params: { id: string }) => {
+    calls.push(params.id)
+    return respond(params.id)
+  }
+  return {
+    handle: {
+      name: card.name,
+      card,
+      client: { getTask } as unknown as Client,
+    },
+    calls,
+  }
+}
+
 export const taskResult = (overrides: Partial<Task> = {}): Task => ({
   kind: 'task',
   id: 'task-1',

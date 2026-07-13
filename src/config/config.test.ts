@@ -10,6 +10,7 @@ const baseEnv = {
   DATABASE_URL: 'postgres://localhost/test',
   SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/gpt-5',
   OPENCODE_API_KEY: 'sk-test',
+  A2A_NOTIFICATION_TOKEN: 'notif-token',
 } satisfies NodeJS.ProcessEnv
 
 describe('loadConfig', () => {
@@ -29,6 +30,7 @@ describe('loadConfig', () => {
       opencodeApiKey: 'sk-test',
     })
     expect(config.remoteAgentUrls).toEqual([])
+    expect(config.a2aNotificationToken).toBe('notif-token')
   })
 
   it('reads optional conversation-agent env overrides', () => {
@@ -105,6 +107,11 @@ describe('loadConfig', () => {
 
   it('throws ConfigLoadError when OPENCODE_API_KEY is missing', () => {
     const env = { ...baseEnv, OPENCODE_API_KEY: undefined }
+    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
+  })
+
+  it('throws ConfigLoadError when A2A_NOTIFICATION_TOKEN is missing', () => {
+    const env = { ...baseEnv, A2A_NOTIFICATION_TOKEN: undefined }
     expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 

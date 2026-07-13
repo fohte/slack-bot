@@ -10,7 +10,9 @@ import { createLogger } from '@/logger/logger'
 import type { PluginDeps, PluginInput } from '@/plugin/deps'
 import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
+import type { RemoteAgentRegistry } from '@/plugins/llm-agent'
 import {
+  createA2aNotificationHandler,
   createA2aTaskTracker,
   createConversationAgent,
   createConversationCheckpointer,
@@ -19,6 +21,7 @@ import {
   createLlmAgentPlugin,
   createOpenCodeGoChatModel,
   createRemoteAgentRegistry,
+  createResponseFinalizer,
   createTaskDispatcher,
   createThreadSessionStore,
   startEventLogRetention,
@@ -33,9 +36,13 @@ import { createSlackWebClient } from '@/slack/web-client'
 
 export interface BootstrapOptions {
   readonly plugins?: readonly PluginInput[]
+  // Reused (rather than constructed fresh here) so the push notification
+  // endpoint's tasks/get calls share the same Agent Card cache the
+  // conversation agent's delegation tools already warmed at startup.
+  readonly remoteAgentRegistry: RemoteAgentRegistry
 }
 
-export const bootstrap = (options: BootstrapOptions = {}): void => {
+export const bootstrap = (options: BootstrapOptions): void => {
   const config = loadConfig()
   const logger = createLogger({
     level: config.logLevel,
@@ -93,7 +100,27 @@ export const bootstrap = (options: BootstrapOptions = {}): void => {
     slackClient,
     logger,
   })
-  const server = createHttpServer({ verifier, router, logger, inFlightTasks })
+  const responseFinalizer = createResponseFinalizer({
+    a2aTaskTracker,
+    remoteAgentRegistry: options.remoteAgentRegistry,
+    eventLogStore,
+    slackClient,
+    logger,
+  })
+  const a2aNotificationHandler = createA2aNotificationHandler({
+    token: config.a2aNotificationToken,
+    responseFinalizer,
+    logger,
+  })
+  const server = createHttpServer({
+    verifier,
+    router,
+    logger,
+    inFlightTasks,
+    routes: [
+      { path: '/api/a2a/notifications', handler: a2aNotificationHandler },
+    ],
+  })
   server.health.setReady()
 
   const httpServer = serve(
@@ -140,6 +167,7 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   const checkpointer = createConversationCheckpointer(config.databaseUrl)
 
   bootstrap({
+    remoteAgentRegistry,
     plugins: [
       ({
         logger,

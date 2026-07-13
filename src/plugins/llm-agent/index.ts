@@ -91,6 +91,8 @@ export {
   LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
+export type { A2aNotificationHandlerOptions } from '@/plugins/llm-agent/push-notification-endpoint'
+export { createA2aNotificationHandler } from '@/plugins/llm-agent/push-notification-endpoint'
 export type {
   DelegationPushNotificationConfig,
   DelegationToolDependencies,
@@ -112,6 +114,14 @@ export {
   extractDelegations,
   SEND_MESSAGE_RESULT_SCHEMA,
 } from '@/plugins/llm-agent/remote-agent-registry'
+export type {
+  ResponseFinalizer,
+  ResponseFinalizerOptions,
+} from '@/plugins/llm-agent/response-finalizer'
+export {
+  createResponseFinalizer,
+  USAGE_LIMIT_TEXT,
+} from '@/plugins/llm-agent/response-finalizer'
 export type { PostFinalResponseResult } from '@/plugins/llm-agent/steps/post-final-response'
 export { postFinalResponse } from '@/plugins/llm-agent/steps/post-final-response'
 export { DISPATCH_FAILURE_TEXT } from '@/plugins/llm-agent/steps/report-dispatch-failure'
