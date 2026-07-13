@@ -10,10 +10,9 @@ import type { ResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
 
 const NOTIFICATION_TOKEN_HEADER = 'x-a2a-notification-token'
 
-// The push payload is an A2A Task (spec v0.3), but its content is not
-// trusted: v1.0 changes the wire format, and the design decision here is to
-// treat the push as a mere signal and re-fetch authoritative data via
-// tasks/get. Only the taskId is read out of it.
+// The push payload is an A2A Task (spec v0.3), but v1.0 changes the wire
+// format, so its content is not trusted: only the taskId is read out of it,
+// and authoritative state is always re-fetched via tasks/get.
 const PUSH_PAYLOAD_SCHEMA = z.object({ id: z.string() }).loose()
 
 const isValidToken = (
@@ -72,6 +71,7 @@ export const createA2aNotificationHandler = (
       // of the response status, so there is nothing to gain from surfacing
       // this as a 5xx; log it and let the next push or the reconciler pick
       // the task back up.
+      recordA2aPushNotification('error')
       logger.error(
         {
           event: 'llm_agent_a2a_notification_finalize_failed',

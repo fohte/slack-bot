@@ -43,15 +43,26 @@ export const A2A_TASK_ACTIVE_EXECUTION_STATES: readonly A2aTaskState[] = [
 // `settled` is derived from `state` rather than accepted as separate input,
 // so a caller can't produce an inconsistent pair (e.g. completed + unsettled)
 // that would leave a finished task looping in the reconciler's sweep.
-export const A2A_TASK_TERMINAL_STATES: readonly A2aTaskState[] = [
+export const A2A_TASK_TERMINAL_STATES = [
   'completed',
   'failed',
   'canceled',
   'rejected',
-]
+] as const satisfies readonly A2aTaskState[]
 
-const isTerminalState = (state: A2aTaskState): boolean =>
-  A2A_TASK_TERMINAL_STATES.includes(state)
+// Exported so callers that need to narrow to a terminal state (e.g. the
+// response finalizer choosing an outcome label) derive it from this array
+// instead of re-declaring the same four literals.
+export type A2aTaskTerminalState = (typeof A2A_TASK_TERMINAL_STATES)[number]
+
+// Exported for the same reason as isA2aTaskState above: narrows against this
+// module's single list of terminal states instead of a caller-local copy.
+export const isA2aTaskTerminalState = (
+  state: A2aTaskState,
+): state is A2aTaskTerminalState =>
+  (A2A_TASK_TERMINAL_STATES as readonly A2aTaskState[]).includes(state)
+
+const isTerminalState = isA2aTaskTerminalState
 
 export interface ThreadKey {
   readonly slackTeamId: string

@@ -2,6 +2,7 @@ export type {
   A2aTaskLifecycle,
   A2aTaskRow,
   A2aTaskState,
+  A2aTaskTerminalState,
   A2aTaskTracker,
   NewA2aTask,
   ThreadKey,
@@ -13,6 +14,7 @@ export {
   createA2aTaskTracker,
   FIND_UNSETTLED_LIMIT,
   isA2aTaskState,
+  isA2aTaskTerminalState,
   transitionGuard,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 export type {

@@ -8,12 +8,12 @@ import {
 } from '@/observability/a2a-counters'
 import type {
   A2aTaskRow,
-  A2aTaskState,
+  A2aTaskTerminalState,
   A2aTaskTracker,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import {
-  A2A_TASK_TERMINAL_STATES,
   isA2aTaskState,
+  isA2aTaskTerminalState,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type {
@@ -89,20 +89,6 @@ const extractErrorKind = (task: Task): string | undefined => {
   return typeof kind === 'string' ? kind : undefined
 }
 
-// Mirrors A2A_TASK_TERMINAL_STATES's values as a literal union so the
-// isTerminalState guard below actually narrows (that constant is typed as
-// the wider `readonly A2aTaskState[]`, so indexing it can't recover a
-// narrower type on its own).
-type TerminalA2aTaskState = 'completed' | 'failed' | 'canceled' | 'rejected'
-
-const TERMINAL_STATES = new Set<string>(A2A_TASK_TERMINAL_STATES)
-
-// A2A_TASK_TERMINAL_STATES is a readonly A2aTaskState[], which .includes()
-// alone doesn't narrow; this predicate gets the same single source of truth
-// while still narrowing `state` for settleTerminal's outcome parameter.
-const isTerminalState = (state: A2aTaskState): state is TerminalA2aTaskState =>
-  TERMINAL_STATES.has(state)
-
 export const createResponseFinalizer = (
   options: ResponseFinalizerOptions,
 ): ResponseFinalizer => {
@@ -154,7 +140,7 @@ export const createResponseFinalizer = (
   const settleTerminal = async (
     row: A2aTaskRow,
     task: Task,
-    state: TerminalA2aTaskState,
+    state: A2aTaskTerminalState,
   ): Promise<void> => {
     const { updated } = await options.a2aTaskTracker.transition(row.taskId, {
       state,
@@ -169,7 +155,18 @@ export const createResponseFinalizer = (
       errorKind === 'usage_limit' ? USAGE_LIMIT_TEXT : extractTaskText(task)
     const posted = await postToThread(row, text)
     if (!posted) {
-      await options.a2aTaskTracker.unsettle(row.taskId)
+      try {
+        await options.a2aTaskTracker.unsettle(row.taskId)
+      } catch (error) {
+        logger.error(
+          {
+            event: 'llm_agent_a2a_finalize_unsettle_failed',
+            task_id: row.taskId,
+            err: error,
+          },
+          'llm-agent failed to roll back the settled flag after a Slack post failure',
+        )
+      }
       recordA2aPushNotification('error')
       return
     }
@@ -212,7 +209,33 @@ export const createResponseFinalizer = (
       return
     }
     const posted = await postToThread(row, extractTaskText(task))
-    recordA2aPushNotification(posted ? 'input_required' : 'error')
+    if (!posted) {
+      // Unlike settleTerminal, this row never set `settled`, so there is no
+      // flag to unsettle; instead this reverts `state` back to what it was
+      // before this transition, so a later attempt sees an active-execution
+      // row again and transitionGuard permits it to re-enter input-required.
+      // Without this, the row would be stuck at input-required with the
+      // question never having reached Slack, and no future observation
+      // could ever post it.
+      try {
+        await options.a2aTaskTracker.transition(row.taskId, {
+          state: row.state,
+          requireCurrentStates: ['input-required'],
+        })
+      } catch (error) {
+        logger.error(
+          {
+            event: 'llm_agent_a2a_finalize_revert_failed',
+            task_id: row.taskId,
+            err: error,
+          },
+          'llm-agent failed to revert an input-required task after a Slack post failure',
+        )
+      }
+      recordA2aPushNotification('error')
+      return
+    }
+    recordA2aPushNotification('input_required')
   }
 
   const finalizeRow = async (row: A2aTaskRow): Promise<void> => {
@@ -266,7 +289,7 @@ export const createResponseFinalizer = (
       await settleInputRequired(row, task)
       return
     }
-    if (isTerminalState(state)) {
+    if (isA2aTaskTerminalState(state)) {
       await settleTerminal(row, task, state)
       return
     }

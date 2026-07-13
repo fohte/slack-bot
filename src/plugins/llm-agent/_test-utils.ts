@@ -10,8 +10,8 @@ import type {
   ThreadKey,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import {
-  A2A_TASK_TERMINAL_STATES,
   FIND_UNSETTLED_LIMIT,
+  isA2aTaskTerminalState,
   transitionGuard,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import type {
@@ -434,7 +434,7 @@ export const createInMemoryA2aTaskTracker = (
       rows.set(taskId, {
         ...row,
         state: to.state,
-        settled: A2A_TASK_TERMINAL_STATES.includes(to.state),
+        settled: isA2aTaskTerminalState(to.state),
         deadlineAt: to.deadlineAt ?? row.deadlineAt,
         updatedAt: now(),
       })

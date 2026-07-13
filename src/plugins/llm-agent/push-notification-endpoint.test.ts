@@ -112,8 +112,9 @@ describe('createA2aNotificationHandler', () => {
 
   it('still returns 204 when finalize() throws, logging the failure instead of surfacing an error status', async () => {
     const logger = createRecordingLogger()
+    const finalizeError = new Error('db unavailable')
     const finalizer = createFakeResponseFinalizer(async () => {
-      throw new Error('db unavailable')
+      throw finalizeError
     })
     const app = buildApp(finalizer, logger)
 
@@ -124,11 +125,17 @@ describe('createA2aNotificationHandler', () => {
     })
 
     expect(response.status).toBe(204)
-    expect(
-      logger.entries.some(
-        (e) =>
-          e.payload['event'] === 'llm_agent_a2a_notification_finalize_failed',
-      ),
-    ).toBe(true)
+    expect(logger.entries).toEqual([
+      {
+        level: 'error',
+        payload: {
+          event: 'llm_agent_a2a_notification_finalize_failed',
+          task_id: 'task-1',
+          err: finalizeError,
+        },
+        message:
+          'llm-agent failed to finalize a task after receiving a push notification',
+      },
+    ])
   })
 })

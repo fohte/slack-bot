@@ -150,7 +150,16 @@ describe('createResponseFinalizer', () => {
       await finalizer.finalize('task-1')
       await finalizer.finalize('task-1')
 
-      expect(slackClient.calls).toHaveLength(1)
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'done',
+          blocks: [{ type: 'markdown', text: 'done' }],
+          loadingMessages: undefined,
+        },
+      ])
     })
 
     it('settles two tasks delegated under the same Slack event independently', async () => {
@@ -245,7 +254,16 @@ describe('createResponseFinalizer', () => {
       })
       await retryFinalizer.finalize('task-1')
 
-      expect(retryingSlackClient.calls).toHaveLength(1)
+      expect(retryingSlackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'done',
+          blocks: [{ type: 'markdown', text: 'done' }],
+          loadingMessages: undefined,
+        },
+      ])
       expect(await tracker.findByTaskId('task-1')).toEqual({
         ...baseTask(),
         state: 'completed',
@@ -293,6 +311,59 @@ describe('createResponseFinalizer', () => {
       })
     })
 
+    it('reverts to the pre-transition state when the Slack post fails, so a retry can post the question', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask({ state: 'working' }))
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('input-required', textMessage('What did you eat?')),
+      )
+      const failingSlackClient: SlackWebClient = {
+        ...createStubSlackClient(),
+        async postMessage() {
+          throw new Error('rate_limited')
+        },
+      }
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient: failingSlackClient,
+      })
+
+      await finalizer.finalize('task-1')
+
+      // Without the revert, this row would be stuck at input-required
+      // forever: transitionGuard only allows entering input-required from
+      // an active-execution state, so a row already at input-required could
+      // never transition into it again to retry the post.
+      expect(await tracker.findByTaskId('task-1')).toEqual({
+        ...baseTask({ state: 'working' }),
+        settled: false,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+
+      const retryingSlackClient = createStubSlackClient()
+      const retryFinalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient: retryingSlackClient,
+      })
+      await retryFinalizer.finalize('task-1')
+
+      expect(retryingSlackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'What did you eat?',
+          blocks: [{ type: 'markdown', text: 'What did you eat?' }],
+          loadingMessages: undefined,
+        },
+      ])
+    })
+
     it('does not repost the question when the task is still input-required on a later observation', async () => {
       const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
       await tracker.recordDelegated(baseTask({ state: 'working' }))
@@ -313,7 +384,16 @@ describe('createResponseFinalizer', () => {
       // remote state must not duplicate the question in the thread.
       await finalizer.finalize('task-1')
 
-      expect(slackClient.calls).toHaveLength(1)
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'What did you eat?',
+          blocks: [{ type: 'markdown', text: 'What did you eat?' }],
+          loadingMessages: undefined,
+        },
+      ])
     })
   })
 
@@ -367,11 +447,17 @@ describe('createResponseFinalizer', () => {
       await finalizer.finalize('never-recorded')
 
       expect(sleepCalls).toEqual([1234])
-      expect(
-        logger.entries.some(
-          (e) => e.payload['event'] === 'llm_agent_a2a_finalize_unknown_task',
-        ),
-      ).toBe(true)
+      expect(logger.entries).toEqual([
+        {
+          level: 'warn',
+          payload: {
+            event: 'llm_agent_a2a_finalize_unknown_task',
+            task_id: 'never-recorded',
+          },
+          message:
+            'llm-agent received a push notification for an untracked task; discarding',
+        },
+      ])
     })
 
     it('picks up the row if it is recorded during the retry delay', async () => {
@@ -392,7 +478,16 @@ describe('createResponseFinalizer', () => {
 
       await finalizer.finalize('task-1')
 
-      expect(slackClient.calls).toHaveLength(1)
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'done',
+          blocks: [{ type: 'markdown', text: 'done' }],
+          loadingMessages: undefined,
+        },
+      ])
     })
   })
 
@@ -413,12 +508,18 @@ describe('createResponseFinalizer', () => {
       await finalizer.finalize('task-1')
 
       expect(slackClient.calls).toEqual([])
-      expect(
-        logger.entries.some(
-          (e) =>
-            e.payload['event'] === 'llm_agent_a2a_finalize_agent_not_found',
-        ),
-      ).toBe(true)
+      expect(logger.entries).toEqual([
+        {
+          level: 'warn',
+          payload: {
+            event: 'llm_agent_a2a_finalize_agent_not_found',
+            task_id: 'task-1',
+            agent_name: 'meshi',
+          },
+          message:
+            'llm-agent could not finalize a task: its remote agent is no longer registered',
+        },
+      ])
     })
   })
 
@@ -426,8 +527,9 @@ describe('createResponseFinalizer', () => {
     it('logs a warning and does not post when tasks/get fails', async () => {
       const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
       await tracker.recordDelegated(baseTask())
+      const networkError = new Error('network error')
       const { handle } = recordingHandleForGetTask(async () => {
-        throw new Error('network error')
+        throw networkError
       })
       const slackClient = createStubSlackClient()
       const logger = createRecordingLogger()
@@ -442,6 +544,19 @@ describe('createResponseFinalizer', () => {
       await finalizer.finalize('task-1')
 
       expect(slackClient.calls).toEqual([])
+      expect(logger.entries).toEqual([
+        {
+          level: 'warn',
+          payload: {
+            event: 'llm_agent_a2a_finalize_get_task_failed',
+            task_id: 'task-1',
+            agent_name: 'meshi',
+            err: networkError,
+          },
+          message:
+            'llm-agent failed to fetch tasks/get while finalizing a task',
+        },
+      ])
       expect(await tracker.findByTaskId('task-1')).toEqual({
         ...baseTask(),
         settled: false,
