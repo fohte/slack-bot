@@ -15,7 +15,9 @@ import type {
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import { isA2aTaskState } from '@/plugins/llm-agent/a2a-task-tracker'
 import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
+import { toFilePart } from '@/plugins/llm-agent/remote-agent-registry/a2a-message-parts'
 import type { RemoteAgentHandle } from '@/plugins/llm-agent/remote-agent-registry/remote-agent-registry'
+import { SEND_MESSAGE_RESULT_SCHEMA } from '@/plugins/llm-agent/remote-agent-registry/send-message-result'
 
 export interface Delegation {
   readonly agentName: string
@@ -91,27 +93,6 @@ export const delegationToolDescription = (card: AgentCard): string => {
 
 const describeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
-
-const toFilePart = (image: ImageBlock) => ({
-  kind: 'file' as const,
-  file: { bytes: image.base64, mimeType: image.mimeType },
-})
-
-// message/send's response is a remote agent's HTTP payload; only the shape
-// this module reads (the task/message discriminator, and a task's id /
-// contextId / status.state) is validated, so a malformed response is
-// rejected here instead of throwing an uncaught TypeError further down.
-const SEND_MESSAGE_RESULT_SCHEMA = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('message') }).loose(),
-  z
-    .object({
-      kind: z.literal('task'),
-      id: z.string(),
-      contextId: z.string(),
-      status: z.object({ state: z.string() }).loose(),
-    })
-    .loose(),
-])
 
 const DELEGATION_INPUT_SCHEMA = z.object({
   request: z

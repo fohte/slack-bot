@@ -9,6 +9,8 @@ const baseEnv = {
   SLACK_BOT_TOKEN: 'xoxb',
   SLACK_BOT_USER_ID: 'U_BOT',
   DATABASE_URL: 'postgres://localhost/test',
+  SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/gpt-5',
+  OPENCODE_API_KEY: 'sk-test',
 }
 
 describe('CloudflareAccessHttpClient', () => {

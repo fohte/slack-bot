@@ -9,18 +9,12 @@ export interface ServiceTokenPair {
   readonly clientSecret: string
 }
 
-export interface LlmAgentConfig {
-  readonly taskCrNamespace: string | undefined
-  readonly taskCrAgentName: string | undefined
-  readonly opencodeBaseUrl: string | undefined
-}
-
 // OPENCODE_API_KEY is unprefixed: multiple services share this credential,
 // so it isn't namespaced per-service like SLACK_BOT_CONVERSATION_AGENT_*.
 export interface ConversationAgentConfig {
-  readonly model: string | undefined
+  readonly model: string
   readonly personaPrompt: string | undefined
-  readonly opencodeApiKey: string | undefined
+  readonly opencodeApiKey: string
 }
 
 export interface Config {
@@ -32,7 +26,6 @@ export interface Config {
   readonly maxConcurrentTasks: number
   readonly maxWebApiRetries: number
   readonly logLevel: LogLevel
-  readonly llmAgent: LlmAgentConfig
   readonly conversationAgent: ConversationAgentConfig
   // Delegation targets for RemoteAgentRegistry. Empty means the
   // conversation agent runs with no delegation tools.
@@ -72,28 +65,13 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   )
   const logLevel = parseLogLevel(env, 'LOG_LEVEL', DEFAULT_LOG_LEVEL)
 
-  const llmAgent: LlmAgentConfig = {
-    taskCrNamespace: optionalString(
-      env,
-      'SLACK_BOT_LLM_AGENT_TASK_CR_NAMESPACE',
-    ),
-    taskCrAgentName: optionalString(
-      env,
-      'SLACK_BOT_LLM_AGENT_TASK_CR_AGENT_NAME',
-    ),
-    opencodeBaseUrl: optionalString(
-      env,
-      'SLACK_BOT_LLM_AGENT_OPENCODE_BASE_URL',
-    ),
-  }
-
   const conversationAgent: ConversationAgentConfig = {
-    model: optionalString(env, 'SLACK_BOT_CONVERSATION_AGENT_MODEL'),
+    model: requireEnv(env, 'SLACK_BOT_CONVERSATION_AGENT_MODEL'),
     personaPrompt: optionalString(
       env,
       'SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT',
     ),
-    opencodeApiKey: optionalString(env, 'OPENCODE_API_KEY'),
+    opencodeApiKey: requireEnv(env, 'OPENCODE_API_KEY'),
   }
 
   const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')
@@ -107,7 +85,6 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     maxConcurrentTasks,
     maxWebApiRetries,
     logLevel,
-    llmAgent,
     conversationAgent,
     remoteAgentUrls,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),

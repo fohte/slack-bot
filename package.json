@@ -43,7 +43,6 @@
     "@fohte/blog-publisher-contract": "0.1.0",
     "@fohte/service-kit": "0.1.4",
     "@hono/node-server": "2.0.4",
-    "@kubernetes/client-node": "1.4.0",
     "@langchain/core": "1.2.1",
     "@langchain/langgraph": "1.4.7",
     "@langchain/langgraph-checkpoint-postgres": "1.0.4",

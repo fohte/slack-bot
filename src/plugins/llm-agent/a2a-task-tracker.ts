@@ -85,6 +85,12 @@ export interface A2aTaskLifecycle {
   // that armed a later deadline after the caller observed this task as
   // overdue is not clobbered by a stale decision.
   readonly ifDeadlineAtOrBefore?: Date | undefined
+  // Overrides transitionGuard's default state requirement for this call.
+  // The resume flow uses this to settle an input-required row directly
+  // (e.g. to 'failed' when the remote task is gone or already terminal),
+  // which the default 'failed' guard below would otherwise block since
+  // input-required is not an active-execution state.
+  readonly requireCurrentStates?: readonly A2aTaskState[] | undefined
 }
 
 export interface TransitionGuard {
@@ -95,9 +101,11 @@ export interface TransitionGuard {
 // separate from the SQL/in-memory execution so it is directly testable and
 // shared between the production store and its test double.
 export const transitionGuard = (to: A2aTaskLifecycle): TransitionGuard =>
-  to.state === 'failed'
-    ? { requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES }
-    : {}
+  to.requireCurrentStates !== undefined
+    ? { requireStates: to.requireCurrentStates }
+    : to.state === 'failed'
+      ? { requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES }
+      : {}
 
 export interface A2aTaskTracker {
   recordDelegated(rec: NewA2aTask): Promise<void>

@@ -3,15 +3,14 @@ import {
   trySetAssistantStatus,
 } from '@/plugins/llm-agent/assistant-status'
 import type {
-  ProcessMentionDeps,
+  ResolvedDispatcherDeps,
   SlackEnvelope,
-} from '@/plugins/llm-agent/process-mention-deps'
-import { resolveDeps } from '@/plugins/llm-agent/process-mention-deps'
+} from '@/plugins/llm-agent/dispatcher-deps'
 
-// Shown for a dispatch-level failure (Task CR creation itself, or the
-// detached poll/respond chain crashing unexpectedly) rather than a Task
-// CR reporting a Failed phase, so it must stay generic: internal error
-// details (stack traces, Kubernetes object names) must never reach Slack.
+// Shown for a dispatch-level failure (the gating step throwing, or the
+// detached background mention-processing chain crashing unexpectedly)
+// rather than a foreseen A2A outcome, so it must stay generic: internal
+// error details must never reach Slack.
 export const DISPATCH_FAILURE_TEXT =
   'Something went wrong before this request could be completed. Please try again.'
 
@@ -23,9 +22,8 @@ export const DISPATCH_FAILURE_TEXT =
 // independent, so serializing them would only add needless latency.
 export const reportDispatchFailure = async (
   env: SlackEnvelope,
-  deps: ProcessMentionDeps,
+  resolved: ResolvedDispatcherDeps,
 ): Promise<void> => {
-  const resolved = resolveDeps(deps)
   const postPromise = resolved.slackClient
     .postMessage({
       channel: env.channelId,
