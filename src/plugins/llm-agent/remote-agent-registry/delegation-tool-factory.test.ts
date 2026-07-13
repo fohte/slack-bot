@@ -84,7 +84,13 @@ const createFakeTracker = (
     async findUnsettled() {
       return []
     },
+    async findByTaskId() {
+      return undefined
+    },
     async transition() {
+      return { updated: false }
+    },
+    async unsettle() {
       return { updated: false }
     },
     async lookupContext() {

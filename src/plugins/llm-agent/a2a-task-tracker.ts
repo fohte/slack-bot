@@ -100,10 +100,17 @@ export interface TransitionGuard {
 // Which extra WHERE condition a transition needs, kept as a pure function
 // separate from the SQL/in-memory execution so it is directly testable and
 // shared between the production store and its test double.
+//
+// Transitioning into 'input-required' gets the same active-execution guard
+// as 'failed': without it, two concurrent observations of the same
+// input-required task (e.g. a push notification racing a reconciler poll)
+// would both succeed, since input-required never sets `settled` and so
+// can't rely on that flag to elect a single winner the way a terminal
+// transition does.
 export const transitionGuard = (to: A2aTaskLifecycle): TransitionGuard =>
   to.requireCurrentStates !== undefined
     ? { requireStates: to.requireCurrentStates }
-    : to.state === 'failed'
+    : to.state === 'failed' || to.state === 'input-required'
       ? { requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES }
       : {}
 
@@ -116,6 +123,10 @@ export interface A2aTaskTracker {
   // `olderThan`. Capped at FIND_UNSETTLED_LIMIT rows per call; a caller that
   // needs the true backlog size must call repeatedly across ticks.
   findUnsettled(olderThan: Date): Promise<readonly A2aTaskRow[]>
+  // Looks up a single row by its A2A taskId. Used by the push notification
+  // endpoint, which is handed only a taskId (unlike the reconciler, whose
+  // findUnsettled() rows already carry every field a settle decision needs).
+  findByTaskId(taskId: string): Promise<A2aTaskRow | undefined>
   // Conditional UPDATE: only rows not yet settled are affected, so
   // concurrent callers (push notification vs. reconciler) settling the same
   // task elect a single winner.
@@ -123,6 +134,10 @@ export interface A2aTaskTracker {
     taskId: string,
     to: A2aTaskLifecycle,
   ): Promise<{ updated: boolean }>
+  // Reverts a winning transition's settled flag after the Slack post it
+  // gated failed, so the row is picked up again (by a later push or the
+  // reconciler) instead of sitting settled with no post ever delivered.
+  unsettle(taskId: string): Promise<{ updated: boolean }>
   // contextId reuse for a thread/agent pair; undefined means this is the
   // first delegation from this thread to this agent.
   lookupContext(
@@ -212,6 +227,15 @@ export const createA2aTaskTracker = (
       .limit(FIND_UNSETTLED_LIMIT)
     return rows.map(toRow)
   },
+  async findByTaskId(taskId) {
+    const rows = await db
+      .select(ROW_COLUMNS)
+      .from(a2aTask)
+      .where(eq(a2aTask.taskId, taskId))
+      .limit(1)
+    const row = rows[0]
+    return row === undefined ? undefined : toRow(row)
+  },
   async transition(taskId, to) {
     const guard = transitionGuard(to)
     const conditions = [eq(a2aTask.taskId, taskId), eq(a2aTask.settled, false)]
@@ -230,6 +254,14 @@ export const createA2aTaskTracker = (
         updatedAt: sql`now()`,
       })
       .where(and(...conditions))
+      .returning({ taskId: a2aTask.taskId })
+    return { updated: updated.length > 0 }
+  },
+  async unsettle(taskId) {
+    const updated = await db
+      .update(a2aTask)
+      .set({ settled: false, updatedAt: sql`now()` })
+      .where(and(eq(a2aTask.taskId, taskId), eq(a2aTask.settled, true)))
       .returning({ taskId: a2aTask.taskId })
     return { updated: updated.length > 0 }
   },
