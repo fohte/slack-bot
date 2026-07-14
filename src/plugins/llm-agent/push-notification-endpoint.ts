@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 
 import type { Context } from 'hono'
 import { z } from 'zod'
@@ -15,15 +15,17 @@ const NOTIFICATION_TOKEN_HEADER = 'x-a2a-notification-token'
 // and authoritative state is always re-fetched via tasks/get.
 const PUSH_PAYLOAD_SCHEMA = z.object({ id: z.string() }).loose()
 
+// Hashing both sides to a fixed-length digest before comparing means the
+// buffers passed to timingSafeEqual are always equal length, so no length
+// check (and the token-length side-channel it would leak) is needed.
 const isValidToken = (
   expected: string,
   provided: string | undefined,
 ): boolean => {
   if (provided === undefined) return false
-  const expectedBuffer = Buffer.from(expected, 'utf8')
-  const providedBuffer = Buffer.from(provided, 'utf8')
-  if (expectedBuffer.length !== providedBuffer.length) return false
-  return timingSafeEqual(expectedBuffer, providedBuffer)
+  const expectedHash = createHash('sha256').update(expected).digest()
+  const providedHash = createHash('sha256').update(provided).digest()
+  return timingSafeEqual(expectedHash, providedHash)
 }
 
 export interface A2aNotificationHandlerOptions {

@@ -1,4 +1,5 @@
 import type { Part, Task, TextPart } from '@a2a-js/sdk'
+import { z } from 'zod'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
@@ -88,6 +89,15 @@ const extractErrorKind = (task: Task): string | undefined => {
   const kind = task.status.message?.metadata?.['error_kind']
   return typeof kind === 'string' ? kind : undefined
 }
+
+// tasks/get's result is the remote agent's own response, not something this
+// module's own request shaped, so its `status` is validated before treating
+// the result as a Task; the rest of Task (artifacts, contextId, ...) is read
+// defensively elsewhere (optional chaining / ?? fallbacks) and never assumed
+// present here.
+const TASK_SHAPE_SCHEMA = z
+  .object({ status: z.object({ state: z.string() }).loose() })
+  .loose()
 
 export const createResponseFinalizer = (
   options: ResponseFinalizerOptions,
@@ -253,9 +263,9 @@ export const createResponseFinalizer = (
       return
     }
 
-    let task: Task
+    let rawTask: unknown
     try {
-      task = await handle.client.getTask({ id: row.taskId })
+      rawTask = await handle.client.getTask({ id: row.taskId })
     } catch (error) {
       logger.warn(
         {
@@ -269,6 +279,23 @@ export const createResponseFinalizer = (
       recordA2aPushNotification('error')
       return
     }
+
+    if (!TASK_SHAPE_SCHEMA.safeParse(rawTask).success) {
+      logger.warn(
+        {
+          event: 'llm_agent_a2a_finalize_invalid_task_payload',
+          task_id: row.taskId,
+          agent_name: row.agentName,
+        },
+        'llm-agent received a task payload without a usable status from tasks/get',
+      )
+      recordA2aPushNotification('error')
+      return
+    }
+    // TASK_SHAPE_SCHEMA already validated every field this function reads
+    // directly off `status`.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- TASK_SHAPE_SCHEMA already validated every field this module reads directly
+    const task = rawTask as Task
 
     if (!isA2aTaskState(task.status.state)) {
       logger.warn(

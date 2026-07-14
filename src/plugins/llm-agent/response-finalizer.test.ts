@@ -565,4 +565,46 @@ describe('createResponseFinalizer', () => {
       })
     })
   })
+
+  describe('finalize - malformed task payload', () => {
+    it('logs a warning and does not post when tasks/get returns a task without a usable status', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const { handle } = recordingHandleForGetTask(
+        async () =>
+          ({ kind: 'task', id: 'task-1', contextId: 'ctx-1' }) as Task,
+      )
+      const slackClient = createStubSlackClient()
+      const logger = createRecordingLogger()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        logger,
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(slackClient.calls).toEqual([])
+      expect(logger.entries).toEqual([
+        {
+          level: 'warn',
+          payload: {
+            event: 'llm_agent_a2a_finalize_invalid_task_payload',
+            task_id: 'task-1',
+            agent_name: 'meshi',
+          },
+          message:
+            'llm-agent received a task payload without a usable status from tasks/get',
+        },
+      ])
+      expect(await tracker.findByTaskId('task-1')).toEqual({
+        ...baseTask(),
+        settled: false,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    })
+  })
 })

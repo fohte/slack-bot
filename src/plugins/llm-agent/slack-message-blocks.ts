@@ -31,6 +31,10 @@ const truncateForMarkdownBlock = (text: string): string => {
   return `${text.slice(0, end)}…`
 }
 
+// Unlike the legacy mrkdwn text field escapeMrkdwn targets, this block type
+// follows CommonMark (https://docs.slack.dev/reference/block-kit/blocks/markdown-block),
+// where <, >, & do not trigger mention/entity parsing, so its text is not
+// escaped here.
 export const buildMarkdownBlocks = (text: string): SlackMarkdownBlock[] => [
   { type: 'markdown', text: truncateForMarkdownBlock(text) },
 ]
