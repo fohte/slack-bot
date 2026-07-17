@@ -349,3 +349,38 @@ describe('lookupContext', () => {
     expect(await tracker.lookupContext(THREAD, 't-rader')).toBeUndefined()
   })
 })
+
+describe('deleteSettledOlderThan', () => {
+  it('deletes settled rows updated before the cutoff and returns the count', async () => {
+    const created = new Date('2026-01-01T00:00:00Z')
+    const tracker = createInMemoryTracker({ now: () => created })
+    await tracker.recordDelegated(newTask({ state: 'working' }))
+    await tracker.transition('task-1', { state: 'completed' })
+
+    expect(
+      await tracker.deleteSettledOlderThan(new Date('2026-01-01T00:00:01Z')),
+    ).toBe(1)
+    expect(await tracker.findByTaskId('task-1')).toBeUndefined()
+  })
+
+  it('leaves a settled row not yet older than the cutoff', async () => {
+    const created = new Date('2026-01-01T00:00:00Z')
+    const tracker = createInMemoryTracker({ now: () => created })
+    await tracker.recordDelegated(newTask({ state: 'working' }))
+    await tracker.transition('task-1', { state: 'completed' })
+
+    expect(await tracker.deleteSettledOlderThan(created)).toBe(0)
+    expect(await tracker.findByTaskId('task-1')).not.toBeUndefined()
+  })
+
+  it('leaves an unsettled row regardless of age', async () => {
+    const created = new Date('2026-01-01T00:00:00Z')
+    const tracker = createInMemoryTracker({ now: () => created })
+    await tracker.recordDelegated(newTask({ state: 'input-required' }))
+
+    expect(
+      await tracker.deleteSettledOlderThan(new Date('2026-01-02T00:00:00Z')),
+    ).toBe(0)
+    expect(await tracker.findByTaskId('task-1')).not.toBeUndefined()
+  })
+})

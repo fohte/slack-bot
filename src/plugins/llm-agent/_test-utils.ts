@@ -366,6 +366,9 @@ export const createFakeA2aTaskTracker = (
     async lookupContext() {
       return options.contextId
     },
+    async deleteSettledOlderThan() {
+      return 0
+    },
   }
 }
 
@@ -457,6 +460,13 @@ export const createInMemoryA2aTaskTracker = (
         )
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
         ?.contextId
+    },
+    async deleteSettledOlderThan(cutoff) {
+      const toDelete = [...rows.values()].filter(
+        (row) => row.settled && row.updatedAt < cutoff,
+      )
+      for (const row of toDelete) rows.delete(row.taskId)
+      return toDelete.length
     },
   }
 }

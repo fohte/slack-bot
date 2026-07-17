@@ -1,3 +1,5 @@
+import type { SlackWebClient } from '@/slack/web-client'
+
 // Slack mrkdwn would otherwise interpret <, >, & inside the response text as
 // user/channel mentions or HTML entities.
 // https://docs.slack.dev/messaging/formatting-message-text#escaping
@@ -38,3 +40,23 @@ const truncateForMarkdownBlock = (text: string): string => {
 export const buildMarkdownBlocks = (text: string): SlackMarkdownBlock[] => [
   { type: 'markdown', text: truncateForMarkdownBlock(text) },
 ]
+
+export interface ThreadTarget {
+  readonly channel: string
+  readonly threadTs: string
+}
+
+// Shared by response-finalizer.ts and task-reconciler.ts, whose posts to a
+// task's originating thread are otherwise identical; each caller wraps this
+// in its own try/catch so it can log with its own event name on failure.
+export const postThreadMessage = (
+  slackClient: SlackWebClient,
+  target: ThreadTarget,
+  text: string,
+): Promise<unknown> =>
+  slackClient.postMessage({
+    channel: target.channel,
+    thread_ts: target.threadTs,
+    text: escapeMrkdwn(text),
+    blocks: buildMarkdownBlocks(text),
+  })

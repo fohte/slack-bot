@@ -134,6 +134,19 @@ export {
   resumeActiveTask,
 } from '@/plugins/llm-agent/steps/resume-active-task'
 export type {
+  TaskReconcilerHandle,
+  TaskReconcilerOptions,
+  TaskReconcilerResult,
+} from '@/plugins/llm-agent/task-reconciler'
+export {
+  DEADLINE_EXCEEDED_TEXT,
+  startTaskReconciler,
+  TASK_NOT_FOUND_TEXT,
+  TASK_RECONCILER_DEFAULT_GRACE_MS,
+  TASK_RECONCILER_DEFAULT_INTERVAL_MS,
+  TASK_RECONCILER_DEFAULT_RETENTION_MS,
+} from '@/plugins/llm-agent/task-reconciler'
+export type {
   ThreadSessionKey,
   ThreadSessionStore,
   ThreadSessionUpsert,
