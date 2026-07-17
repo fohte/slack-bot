@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@a2a-js/sdk':
-        specifier: 0.3.13
-        version: 0.3.13(@grpc/grpc-js@1.14.4)
+        specifier: 0.3.14
+        version: 0.3.14(@grpc/grpc-js@1.14.4)
       '@fohte/blog-publisher-contract':
         specifier: 0.1.0
         version: 0.1.0
@@ -147,8 +147,8 @@ importers:
 
 packages:
 
-  '@a2a-js/sdk@0.3.13':
-    resolution: {integrity: sha512-BZr0f9JVNQs3GKOM9xINWCh6OKIJWZFPyqqVqTym5mxO2Eemc6I/0zL7zWnljHzGdaf5aZQyQN5xa6PSH62q+A==}
+  '@a2a-js/sdk@0.3.14':
+    resolution: {integrity: sha512-F6Ew1AtPzCLhTn8h9yiqTe7DiDf6XVrSnq9V1YqSl9eWqPm6anMveTiKdCSb/76cW0YiJc24rNaUrVezFFHbqQ==}
     engines: {node: '>=18'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.10.2
@@ -2154,9 +2154,6 @@ packages:
   '@types/mysql@2.15.27':
     resolution: {integrity: sha512-YfWiV16IY0OeBfBCk8+hXKmdTKrKlwKN1MNKAPBu5JYxLwBEZl7QzeEpGnlZb3VMGJrrGmB84gXiH+ofs/TezA==}
 
-  '@types/node@24.13.2':
-    resolution: {integrity: sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA==}
-
   '@types/node@24.13.3':
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
 
@@ -4025,7 +4022,7 @@ packages:
 
 snapshots:
 
-  '@a2a-js/sdk@0.3.13(@grpc/grpc-js@1.14.4)':
+  '@a2a-js/sdk@0.3.14(@grpc/grpc-js@1.14.4)':
     dependencies:
       uuid: 11.1.1
     optionalDependencies:
@@ -5872,10 +5869,6 @@ snapshots:
     dependencies:
       '@types/node': 24.13.3
 
-  '@types/node@24.13.2':
-    dependencies:
-      undici-types: 7.18.2
-
   '@types/node@24.13.3':
     dependencies:
       undici-types: 7.18.2
@@ -5890,7 +5883,7 @@ snapshots:
 
   '@types/pg@8.15.6':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.3
       pg-protocol: 1.15.0
       pg-types: 2.2.0
 
@@ -7217,7 +7210,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 24.13.2
+      '@types/node': 24.13.3
       long: 5.3.2
 
   proxy-from-env@2.1.0: {}
