@@ -9,6 +9,11 @@ import type {
   NewA2aTask,
   ThreadKey,
 } from '@/plugins/llm-agent/a2a-task-tracker'
+import {
+  FIND_UNSETTLED_LIMIT,
+  isA2aTaskTerminalState,
+  transitionGuard,
+} from '@/plugins/llm-agent/a2a-task-tracker'
 import type {
   ConversationAgent,
   ConversationAgentInput,
@@ -281,6 +286,31 @@ export const recordingHandleFor = (
   }
 }
 
+// Wraps a canned getTask response with a call recorder, mirroring
+// recordingHandleFor but for tasks/get instead of message/send. Used by
+// ResponseFinalizer tests, which only ever call getTask on a handle.
+export const recordingHandleForGetTask = (
+  respond: (taskId: string) => Promise<Task>,
+  card: AgentCard = cardFor(),
+): {
+  readonly handle: RemoteAgentHandle
+  readonly calls: string[]
+} => {
+  const calls: string[] = []
+  const getTask = async (params: { id: string }) => {
+    calls.push(params.id)
+    return respond(params.id)
+  }
+  return {
+    handle: {
+      name: card.name,
+      card,
+      client: { getTask } as unknown as Client,
+    },
+    calls,
+  }
+}
+
 export const taskResult = (overrides: Partial<Task> = {}): Task => ({
   kind: 'task',
   id: 'task-1',
@@ -295,6 +325,7 @@ export interface RecordingA2aTaskTracker extends A2aTaskTracker {
     readonly taskId: string
     readonly to: A2aTaskLifecycle
   }>
+  readonly unsettled: string[]
 }
 
 export const createFakeA2aTaskTracker = (
@@ -302,13 +333,16 @@ export const createFakeA2aTaskTracker = (
     readonly activeInputRequired?: A2aTaskRow | undefined
     readonly contextId?: string | undefined
     readonly transitionResult?: { updated: boolean } | undefined
+    readonly rowsByTaskId?: Record<string, A2aTaskRow | undefined> | undefined
   } = {},
 ): RecordingA2aTaskTracker => {
   const recorded: NewA2aTask[] = []
   const transitions: Array<{ taskId: string; to: A2aTaskLifecycle }> = []
+  const unsettled: string[] = []
   return {
     recorded,
     transitions,
+    unsettled,
     async recordDelegated(rec) {
       recorded.push(rec)
     },
@@ -318,12 +352,111 @@ export const createFakeA2aTaskTracker = (
     async findUnsettled() {
       return []
     },
+    async findByTaskId(taskId) {
+      return options.rowsByTaskId?.[taskId]
+    },
     async transition(taskId, to) {
       transitions.push({ taskId, to })
       return options.transitionResult ?? { updated: true }
     },
+    async unsettle(taskId) {
+      unsettled.push(taskId)
+      return { updated: true }
+    },
     async lookupContext() {
       return options.contextId
+    },
+  }
+}
+
+// Full reference implementation of A2aTaskTracker backed by a plain Map,
+// reusing the production guard/settled decisions (transitionGuard,
+// A2A_TASK_TERMINAL_STATES) so its conditional-UPDATE semantics track the
+// real Postgres store. Unlike createFakeA2aTaskTracker above (which just
+// records calls and returns a fixed result), this one is genuinely
+// stateful — needed by tests that exercise a sequence of calls against the
+// same row (e.g. a duplicate push notification, or a reconciler poll after
+// a push already settled it) and assert on how the state evolved.
+export const createInMemoryA2aTaskTracker = (
+  options: { now?: () => Date } = {},
+): A2aTaskTracker => {
+  const now = options.now ?? (() => new Date())
+  const rows = new Map<string, A2aTaskRow>()
+
+  return {
+    async recordDelegated(rec) {
+      if (rows.has(rec.taskId)) return
+      const timestamp = now()
+      rows.set(rec.taskId, {
+        ...rec,
+        settled: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    },
+    async findActiveInputRequired(threadKey) {
+      return [...rows.values()]
+        .filter(
+          (row) =>
+            row.slackTeamId === threadKey.slackTeamId &&
+            row.slackChannelId === threadKey.slackChannelId &&
+            row.threadRootTs === threadKey.threadRootTs &&
+            row.state === 'input-required' &&
+            !row.settled,
+        )
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]
+    },
+    async findUnsettled(olderThan) {
+      return [...rows.values()]
+        .filter((row) => !row.settled && row.updatedAt < olderThan)
+        .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
+        .slice(0, FIND_UNSETTLED_LIMIT)
+    },
+    async findByTaskId(taskId) {
+      return rows.get(taskId)
+    },
+    async transition(taskId, to) {
+      const row = rows.get(taskId)
+      if (row === undefined || row.settled) return { updated: false }
+      const guard = transitionGuard(to)
+      if (
+        guard.requireStates !== undefined &&
+        !guard.requireStates.includes(row.state)
+      ) {
+        return { updated: false }
+      }
+      if (
+        to.ifDeadlineAtOrBefore !== undefined &&
+        row.deadlineAt > to.ifDeadlineAtOrBefore
+      ) {
+        return { updated: false }
+      }
+      rows.set(taskId, {
+        ...row,
+        state: to.state,
+        settled: isA2aTaskTerminalState(to.state),
+        deadlineAt: to.deadlineAt ?? row.deadlineAt,
+        updatedAt: now(),
+      })
+      return { updated: true }
+    },
+    async unsettle(taskId) {
+      const row = rows.get(taskId)
+      if (row === undefined || !row.settled) return { updated: false }
+      rows.set(taskId, { ...row, settled: false, updatedAt: now() })
+      return { updated: true }
+    },
+    async lookupContext(threadKey, agentName) {
+      return [...rows.values()]
+        .filter(
+          (row) =>
+            row.slackTeamId === threadKey.slackTeamId &&
+            row.slackChannelId === threadKey.slackChannelId &&
+            row.threadRootTs === threadKey.threadRootTs &&
+            row.agentName === agentName,
+        )
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+        ?.contextId
     },
   }
 }

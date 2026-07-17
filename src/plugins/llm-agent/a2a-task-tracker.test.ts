@@ -1,99 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
+import { createInMemoryA2aTaskTracker as createInMemoryTracker } from '@/plugins/llm-agent/_test-utils'
 import type {
-  A2aTaskLifecycle,
-  A2aTaskRow,
-  A2aTaskTracker,
   NewA2aTask,
   ThreadKey,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import {
   A2A_TASK_ACTIVE_EXECUTION_STATES,
-  A2A_TASK_TERMINAL_STATES,
   FIND_UNSETTLED_LIMIT,
   transitionGuard,
 } from '@/plugins/llm-agent/a2a-task-tracker'
-
-// Reference implementation used to pin down the contract a real store must
-// satisfy, since exercising conditional-UPDATE semantics needs a real
-// Postgres connection this test environment does not have. It delegates the
-// guard/settled decisions to the production functions it imports above, so
-// only the persistence plumbing itself (plain Map reads/writes vs. SQL) is
-// duplicated.
-const createInMemoryTracker = (
-  options: { now?: () => Date } = {},
-): A2aTaskTracker => {
-  const now = options.now ?? (() => new Date())
-  const rows = new Map<string, A2aTaskRow>()
-
-  return {
-    async recordDelegated(rec: NewA2aTask) {
-      if (rows.has(rec.taskId)) return
-      const timestamp = now()
-      rows.set(rec.taskId, {
-        ...rec,
-        settled: false,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })
-    },
-    async findActiveInputRequired(threadKey: ThreadKey) {
-      return [...rows.values()]
-        .filter(
-          (row) =>
-            row.slackTeamId === threadKey.slackTeamId &&
-            row.slackChannelId === threadKey.slackChannelId &&
-            row.threadRootTs === threadKey.threadRootTs &&
-            row.state === 'input-required' &&
-            !row.settled,
-        )
-        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]
-    },
-    async findUnsettled(olderThan: Date) {
-      return [...rows.values()]
-        .filter((row) => !row.settled && row.updatedAt < olderThan)
-        .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
-        .slice(0, FIND_UNSETTLED_LIMIT)
-    },
-    async transition(taskId: string, to: A2aTaskLifecycle) {
-      const row = rows.get(taskId)
-      if (row === undefined || row.settled) return { updated: false }
-      const guard = transitionGuard(to)
-      if (
-        guard.requireStates !== undefined &&
-        !guard.requireStates.includes(row.state)
-      ) {
-        return { updated: false }
-      }
-      if (
-        to.ifDeadlineAtOrBefore !== undefined &&
-        row.deadlineAt > to.ifDeadlineAtOrBefore
-      ) {
-        return { updated: false }
-      }
-      rows.set(taskId, {
-        ...row,
-        state: to.state,
-        settled: A2A_TASK_TERMINAL_STATES.includes(to.state),
-        deadlineAt: to.deadlineAt ?? row.deadlineAt,
-        updatedAt: now(),
-      })
-      return { updated: true }
-    },
-    async lookupContext(threadKey: ThreadKey, agentName: string) {
-      return [...rows.values()]
-        .filter(
-          (row) =>
-            row.slackTeamId === threadKey.slackTeamId &&
-            row.slackChannelId === threadKey.slackChannelId &&
-            row.threadRootTs === threadKey.threadRootTs &&
-            row.agentName === agentName,
-        )
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
-        ?.contextId
-    },
-  }
-}
 
 const THREAD: ThreadKey = {
   slackTeamId: 'T1',
@@ -130,6 +46,12 @@ describe('transitionGuard', () => {
         requireCurrentStates: ['input-required'],
       }),
     ).toEqual({ requireStates: ['input-required'] })
+  })
+
+  it('requires the task still be actively executing when moving it to input-required', () => {
+    expect(transitionGuard({ state: 'input-required' })).toEqual({
+      requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES,
+    })
   })
 })
 
@@ -317,6 +239,83 @@ describe('transition', () => {
     expect(await tracker.transition('task-1', { state: 'failed' })).toEqual({
       updated: false,
     })
+  })
+
+  it('lets only one of two racing input-required observations succeed', async () => {
+    const tracker = createInMemoryTracker()
+    await tracker.recordDelegated(newTask({ state: 'working' }))
+
+    // Mirrors the "lets only one of two racing settle attempts succeed" test
+    // above, but for input-required, which never sets `settled` and so
+    // relies on transitionGuard's active-execution requirement instead of
+    // the settled flag to elect a single winner.
+    const winners = await Promise.all([
+      tracker.transition('task-1', { state: 'input-required' }),
+      tracker.transition('task-1', { state: 'input-required' }),
+    ])
+
+    expect(winners).toEqual([{ updated: true }, { updated: false }])
+  })
+})
+
+describe('findByTaskId', () => {
+  it('returns the row for a known taskId', async () => {
+    const created = new Date('2026-01-01T00:00:00Z')
+    const tracker = createInMemoryTracker({ now: () => created })
+    await tracker.recordDelegated(newTask())
+
+    expect(await tracker.findByTaskId('task-1')).toEqual({
+      ...newTask(),
+      settled: false,
+      createdAt: created,
+      updatedAt: created,
+    })
+  })
+
+  it('returns undefined for an untracked taskId', async () => {
+    const tracker = createInMemoryTracker()
+
+    expect(await tracker.findByTaskId('unknown-task')).toBeUndefined()
+  })
+})
+
+describe('unsettle', () => {
+  it('reverts a settled row back to unsettled so it is picked up again', async () => {
+    const created = new Date('2026-01-01T00:00:00Z')
+    const settledAt = new Date('2026-01-01T00:05:00Z')
+    const unsettledAt = new Date('2026-01-01T00:06:00Z')
+    let tick = created
+    const tracker = createInMemoryTracker({ now: () => tick })
+    await tracker.recordDelegated(newTask({ state: 'working' }))
+
+    tick = settledAt
+    await tracker.transition('task-1', { state: 'completed' })
+
+    tick = unsettledAt
+    expect(await tracker.unsettle('task-1')).toEqual({ updated: true })
+    expect(
+      await tracker.findUnsettled(new Date('2026-01-01T01:00:00Z')),
+    ).toEqual([
+      {
+        ...newTask({ state: 'completed' }),
+        settled: false,
+        createdAt: created,
+        updatedAt: unsettledAt,
+      },
+    ])
+  })
+
+  it('is a no-op for a row that is not settled', async () => {
+    const tracker = createInMemoryTracker()
+    await tracker.recordDelegated(newTask({ state: 'working' }))
+
+    expect(await tracker.unsettle('task-1')).toEqual({ updated: false })
+  })
+
+  it('is a no-op for an untracked taskId', async () => {
+    const tracker = createInMemoryTracker()
+
+    expect(await tracker.unsettle('unknown-task')).toEqual({ updated: false })
   })
 })
 

@@ -8,13 +8,14 @@ slack-bot is an HTTP-only Request URL receiver for Slack: it does not use Socket
 
 ## Endpoints
 
-| Method | Path                       | Purpose                                                                                   |
-| ------ | -------------------------- | ----------------------------------------------------------------------------------------- |
-| POST   | `/api/slack/commands`      | Slash Commands Request URL.                                                               |
-| POST   | `/api/slack/interactivity` | Interactivity & Shortcuts Request URL (block actions, view submissions, shortcuts, etc.). |
-| POST   | `/api/slack/events`        | Events API Request URL. Also handles the `url_verification` challenge automatically.      |
-| GET    | `/health/live`             | Liveness probe.                                                                           |
-| GET    | `/health/ready`            | Readiness probe. Returns 503 until plugins finish registering and the server is ready.    |
+| Method | Path                       | Purpose                                                                                                                             |
+| ------ | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/slack/commands`      | Slash Commands Request URL.                                                                                                         |
+| POST   | `/api/slack/interactivity` | Interactivity & Shortcuts Request URL (block actions, view submissions, shortcuts, etc.).                                           |
+| POST   | `/api/slack/events`        | Events API Request URL. Also handles the `url_verification` challenge automatically.                                                |
+| GET    | `/health/live`             | Liveness probe.                                                                                                                     |
+| GET    | `/health/ready`            | Readiness probe. Returns 503 until plugins finish registering and the server is ready.                                              |
+| POST   | `/api/a2a/notifications`   | [A2A (Agent2Agent protocol)](https://a2a-protocol.org/) push notification receiver. Requires the `X-A2A-Notification-Token` header. |
 
 ## Environment variables
 
@@ -34,6 +35,7 @@ slack-bot is an HTTP-only Request URL receiver for Slack: it does not use Socket
 | `SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT`        | No       | -        | System prompt applied to the conversation agent when set.                                                                                                                                           |
 | `OPENCODE_API_KEY`                                   | Yes      | -        | API key for OpenCode Go's OpenAI-compatible endpoint. Unprefixed because multiple services share this credential.                                                                                   |
 | `REMOTE_AGENT_URLS`                                  | No       | - (none) | Comma-separated list of base URLs for remote [A2A (Agent2Agent protocol)](https://a2a-protocol.org/) agents, each serving an Agent Card. Each becomes a delegation tool for the conversation agent. |
+| `A2A_NOTIFICATION_TOKEN`                             | Yes      | -        | Shared secret verified against the `X-A2A-Notification-Token` header on `POST /api/a2a/notifications`, the endpoint remote agents push A2A task status updates to.                                  |
 | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | No       | `false`  | When `true`, includes full prompt/completion text content in GenAI OpenTelemetry spans (image content is always redacted). Off by default since it may contain PII.                                 |
 
 Secrets must not be committed. In production they are injected via a Kubernetes Secret. Locally, place them in `.env`, which is gitignored.

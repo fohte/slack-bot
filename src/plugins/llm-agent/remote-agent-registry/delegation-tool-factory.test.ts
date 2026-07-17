@@ -3,11 +3,8 @@ import type { Client } from '@a2a-js/sdk/client'
 import { ToolMessage } from '@langchain/core/messages'
 import { describe, expect, it } from 'vitest'
 
-import type {
-  A2aTaskTracker,
-  NewA2aTask,
-  ThreadKey,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+import { createFakeA2aTaskTracker } from '@/plugins/llm-agent/_test-utils'
+import type { ThreadKey } from '@/plugins/llm-agent/a2a-task-tracker'
 import type { Delegation } from '@/plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
 import {
   createDelegationTool,
@@ -69,29 +66,8 @@ const recordingHandleFor = (
   }
 }
 
-const createFakeTracker = (
-  contextId?: string,
-): A2aTaskTracker & { readonly recorded: NewA2aTask[] } => {
-  const recorded: NewA2aTask[] = []
-  return {
-    recorded,
-    async recordDelegated(rec) {
-      recorded.push(rec)
-    },
-    async findActiveInputRequired() {
-      return undefined
-    },
-    async findUnsettled() {
-      return []
-    },
-    async transition() {
-      return { updated: false }
-    },
-    async lookupContext() {
-      return contextId
-    },
-  }
-}
+const createFakeTracker = (contextId?: string) =>
+  createFakeA2aTaskTracker({ contextId })
 
 const submittedTask = (overrides: Partial<Task> = {}): Task => ({
   kind: 'task',
