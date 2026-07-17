@@ -8,6 +8,8 @@ import type { BaseCheckpointSaver } from '@langchain/langgraph'
 import { ChatOpenAI } from '@langchain/openai'
 import { createAgent } from 'langchain'
 
+import type { Logger } from '@/logger/logger'
+import { noopLogger } from '@/logger/logger'
 import { GenAiCallbackHandler } from '@/plugins/llm-agent/conversation-agent/genai-callback-handler'
 import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
 import { stripThinkBlocks } from '@/plugins/llm-agent/conversation-agent/strip-think-blocks'
@@ -45,12 +47,11 @@ export const createOpenCodeGoChatModel = (
     configuration: {
       baseURL: options.baseUrl ?? DEFAULT_OPENCODE_GO_BASE_URL,
     },
-    // Some models routed through OpenCode Go (e.g. MiniMax) otherwise inline
-    // their reasoning in `content` wrapped in <think> tags; this asks the
-    // upstream API to return it via a separate field instead. Whether
-    // OpenCode Go forwards this to the underlying provider is unconfirmed,
-    // so stripThinkBlocks in respond() below is the actual guarantee.
-    // https://platform.minimax.io/docs/api-reference/text-openai-api
+    // Asks the upstream API to move reasoning out of `content` into a
+    // separate field (see strip-think-blocks.ts for why that matters).
+    // Whether OpenCode Go forwards this to the underlying provider is
+    // unconfirmed, so stripThinkBlocks in respond() below is the actual
+    // guarantee against a <think> leak.
     modelKwargs: { reasoning_split: true },
   })
 
@@ -92,6 +93,7 @@ export interface ConversationAgentOptions {
   readonly personaPrompt?: string | undefined
   readonly tools?: CreateAgentTools | undefined
   readonly genAiCallbackHandler?: BaseCallbackHandler | undefined
+  readonly logger?: Logger | undefined
 }
 
 const buildHumanMessageContent = (
@@ -112,6 +114,7 @@ export const createConversationAgent = (
   const genAiCallbackHandler =
     options.genAiCallbackHandler ??
     new GenAiCallbackHandler({ providerName: GEN_AI_PROVIDER_NAME })
+  const logger = options.logger ?? noopLogger
 
   const agent = createAgent({
     model: options.model,
@@ -159,8 +162,21 @@ export const createConversationAgent = (
       const turnStart = result.messages.findIndex((m) => m.id === turnMessageId)
       const turnMessages =
         turnStart === -1 ? result.messages : result.messages.slice(turnStart)
+      const { text, stripped } = stripThinkBlocks(lastMessage?.text ?? '')
+      if (stripped) {
+        // Signals that reasoning_split (see createOpenCodeGoChatModel above)
+        // wasn't honored end-to-end and this fallback was the only thing
+        // that kept a <think> block out of Slack.
+        logger.warn(
+          {
+            event: 'llm_agent_think_block_leaked',
+            slack_event_id: slackEventId,
+          },
+          'model reply contained a <think> block; stripped it before returning',
+        )
+      }
       return {
-        text: stripThinkBlocks(lastMessage?.text ?? ''),
+        text,
         delegations: extractDelegations(turnMessages),
       }
     },

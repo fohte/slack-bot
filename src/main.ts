@@ -197,6 +197,7 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
           checkpointer,
           personaPrompt: config.conversationAgent.personaPrompt,
           tools,
+          logger,
         })
         const onAccepted = createTaskDispatcher({
           conversationAgent,
