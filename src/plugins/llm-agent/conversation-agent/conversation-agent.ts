@@ -10,6 +10,7 @@ import { createAgent } from 'langchain'
 
 import { GenAiCallbackHandler } from '@/plugins/llm-agent/conversation-agent/genai-callback-handler'
 import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
+import { stripThinkBlocks } from '@/plugins/llm-agent/conversation-agent/strip-think-blocks'
 import { parseConversationThreadId } from '@/plugins/llm-agent/conversation-agent/thread-id'
 // Delegation is defined in remote-agent-registry (the tool call that
 // produces it) and re-exported below to keep this module's existing public
@@ -44,6 +45,13 @@ export const createOpenCodeGoChatModel = (
     configuration: {
       baseURL: options.baseUrl ?? DEFAULT_OPENCODE_GO_BASE_URL,
     },
+    // Some models routed through OpenCode Go (e.g. MiniMax) otherwise inline
+    // their reasoning in `content` wrapped in <think> tags; this asks the
+    // upstream API to return it via a separate field instead. Whether
+    // OpenCode Go forwards this to the underlying provider is unconfirmed,
+    // so stripThinkBlocks in respond() below is the actual guarantee.
+    // https://platform.minimax.io/docs/api-reference/text-openai-api
+    modelKwargs: { reasoning_split: true },
   })
 
 export interface ConversationOutcome {
@@ -152,7 +160,7 @@ export const createConversationAgent = (
       const turnMessages =
         turnStart === -1 ? result.messages : result.messages.slice(turnStart)
       return {
-        text: lastMessage?.text ?? '',
+        text: stripThinkBlocks(lastMessage?.text ?? ''),
         delegations: extractDelegations(turnMessages),
       }
     },

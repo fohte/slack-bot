@@ -27,6 +27,28 @@ describe('createConversationAgent', () => {
     })
   })
 
+  it('strips a <think> block from the model reply before returning it', async () => {
+    const model = createRecordingChatModel(
+      () => '<think>\nreasoning\n</think>\nhello from the model',
+    )
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+    })
+
+    const outcome = await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'hi',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
+    expect(outcome).toEqual({
+      text: 'hello from the model',
+      delegations: [],
+    })
+  })
+
   it('continues multi-turn context via the checkpointer', async () => {
     const model = createRecordingChatModel(
       (_messages, callIndex) => `reply-${String(callIndex)}`,
