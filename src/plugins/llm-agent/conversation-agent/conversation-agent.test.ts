@@ -3,8 +3,27 @@ import { tool } from 'langchain'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import type { LogFields, Logger } from '@/logger/logger'
 import { createRecordingChatModel } from '@/plugins/llm-agent/conversation-agent/_test-utils'
 import { createConversationAgent } from '@/plugins/llm-agent/conversation-agent/conversation-agent'
+
+const createRecordingLogger = (): Logger & {
+  readonly warnCalls: LogFields[]
+} => {
+  const warnCalls: LogFields[] = []
+  return {
+    warnCalls,
+    debug: () => undefined,
+    info: () => undefined,
+    warn: (fields) => {
+      warnCalls.push(fields)
+    },
+    error: () => undefined,
+    child() {
+      return this
+    },
+  }
+}
 
 describe('createConversationAgent', () => {
   it('returns the model reply as text with no delegations', async () => {
@@ -25,6 +44,73 @@ describe('createConversationAgent', () => {
       text: 'hello from the model',
       delegations: [],
     })
+  })
+
+  it('strips a <think> block from the model reply before returning it', async () => {
+    const model = createRecordingChatModel(
+      () => '<think>\nreasoning\n</think>\nhello from the model',
+    )
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+    })
+
+    const outcome = await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'hi',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
+    expect(outcome).toEqual({
+      text: 'hello from the model',
+      delegations: [],
+    })
+  })
+
+  it('logs a warning when a <think> block had to be stripped', async () => {
+    const model = createRecordingChatModel(
+      () => '<think>reasoning</think>hello from the model',
+    )
+    const logger = createRecordingLogger()
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+      logger,
+    })
+
+    await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'hi',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
+    expect(logger.warnCalls).toEqual([
+      {
+        event: 'llm_agent_think_block_leaked',
+        slack_event_id: 'Ev1',
+      },
+    ])
+  })
+
+  it('does not log a warning when the reply has no <think> block', async () => {
+    const model = createRecordingChatModel(() => 'hello from the model')
+    const logger = createRecordingLogger()
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+      logger,
+    })
+
+    await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'hi',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
+    expect(logger.warnCalls).toEqual([])
   })
 
   it('continues multi-turn context via the checkpointer', async () => {
