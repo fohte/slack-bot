@@ -463,6 +463,63 @@ describe('startTaskReconciler', () => {
     expect(result).toEqual({ settled: 1, pruned: 0 })
   })
 
+  it('retries a row stuck failed-but-unsettled from a prior post failure, instead of leaving it stuck forever', async () => {
+    let clock = CREATED_AT
+    const tracker = createInMemoryA2aTaskTracker({ now: () => clock })
+    await tracker.recordDelegated(baseTask({ state: 'working' }))
+    // Simulate a previous tick that failed the row (e.g. via deadline) but
+    // whose Slack post failed and rolled the settled flag back, leaving the
+    // row at state: 'failed', settled: false — a row transitionGuard's
+    // default 'failed' guard (submitted/working only) would otherwise never
+    // let re-settle, since its current state is no longer active-execution.
+    await tracker.transition('task-1', { state: 'failed' })
+    await tracker.unsettle('task-1')
+    clock = NOW
+    const { handle } = recordingHandleForGetTask(async () => {
+      throw new TaskNotFoundError('task-1')
+    })
+    const remoteAgentRegistry = createFakeRemoteAgentRegistry([handle])
+    const eventLogStore = createScriptedEventLogStore()
+    const slackClient = createStubSlackClient()
+    const responseFinalizer = createResponseFinalizer({
+      a2aTaskTracker: tracker,
+      remoteAgentRegistry,
+      eventLogStore,
+      slackClient,
+    })
+    const reconciler = startTaskReconciler({
+      a2aTaskTracker: tracker,
+      remoteAgentRegistry,
+      responseFinalizer,
+      eventLogStore,
+      slackClient,
+      now: () => clock,
+      setIntervalImpl: () => ({}) as unknown as NodeJS.Timeout,
+      clearIntervalImpl: () => {},
+    })
+
+    const result = await reconciler.runOnce()
+
+    expect(await tracker.findByTaskId('task-1')).toEqual({
+      ...baseTask({ state: 'failed' }),
+      settled: true,
+      createdAt: CREATED_AT,
+      updatedAt: NOW,
+    })
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: TASK_NOT_FOUND_TEXT,
+        blocks: [{ type: 'markdown', text: TASK_NOT_FOUND_TEXT }],
+        loadingMessages: undefined,
+      },
+    ])
+    expect(eventLogStore.markedResponded).toEqual(['Ev1'])
+    expect(result).toEqual({ settled: 1, pruned: 0 })
+  })
+
   it('prunes using a cutoff derived from retentionMs, and returns the count', async () => {
     // Row-selection semantics (settled + updatedAt cutoff) are covered by
     // a2a-task-tracker.test.ts's own deleteSettledOlderThan tests; this only

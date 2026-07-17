@@ -14,7 +14,10 @@ import type {
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import { A2A_TASK_ACTIVE_EXECUTION_STATES } from '@/plugins/llm-agent/a2a-task-tracker'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
-import type { RemoteAgentRegistry } from '@/plugins/llm-agent/remote-agent-registry'
+import type {
+  RemoteAgentHandle,
+  RemoteAgentRegistry,
+} from '@/plugins/llm-agent/remote-agent-registry'
 import type { ResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
 import { postThreadMessage } from '@/plugins/llm-agent/slack-message-blocks'
 import type { InFlightTasks } from '@/server/in-flight-tasks'
@@ -155,8 +158,12 @@ export const startTaskReconciler = (
 
   // Returns true when this tick itself decided the row's outcome (deadline
   // failure, TaskNotFound failure, or a poll that observed a terminal
-  // state), for the tick's `settled` count.
-  const reconcileRow = async (row: A2aTaskRow): Promise<boolean> => {
+  // state), for the tick's `settled` count. `handles` is fetched once per
+  // tick by the caller rather than once per row.
+  const reconcileRow = async (
+    row: A2aTaskRow,
+    handles: readonly RemoteAgentHandle[],
+  ): Promise<boolean> => {
     const deadline = now()
     if (
       A2A_TASK_ACTIVE_EXECUTION_STATES.includes(row.state) &&
@@ -171,7 +178,6 @@ export const startTaskReconciler = (
       }
     }
 
-    const handles = await options.remoteAgentRegistry.listAgents()
     const handle = handles.find((h) => h.name === row.agentName)
     if (handle === undefined) {
       logger.warn(
@@ -190,16 +196,17 @@ export const startTaskReconciler = (
       task = await handle.client.getTask({ id: row.taskId })
     } catch (error) {
       if (error instanceof TaskNotFoundError) {
-        // The default 'failed' guard only permits submitted/working rows,
-        // so an input-required row needs requireCurrentStates to opt back
-        // in; without it, a TaskNotFound observed here would leave that
-        // row unsettled (and un-pruned) forever, since no other path
-        // re-polls it once the user has stopped replying.
+        // The default 'failed' guard only permits submitted/working rows, so
+        // any other current state (input-required, or a terminal state left
+        // settled: false by a prior post failure) needs requireCurrentStates
+        // to opt back in; without it, a TaskNotFound observed here would
+        // leave that row unsettled (and un-pruned, and re-polled every tick)
+        // forever, since no other path re-settles it.
         const { updated } = await options.a2aTaskTracker.transition(
           row.taskId,
-          row.state === 'input-required'
-            ? { state: 'failed', requireCurrentStates: ['input-required'] }
-            : { state: 'failed' },
+          A2A_TASK_ACTIVE_EXECUTION_STATES.includes(row.state)
+            ? { state: 'failed' }
+            : { state: 'failed', requireCurrentStates: [row.state] },
         )
         if (updated) {
           return settleFailure(row, 'polling', TASK_NOT_FOUND_TEXT)
@@ -257,18 +264,24 @@ export const startTaskReconciler = (
       }
 
       let settled = 0
-      for (const row of rows) {
-        try {
-          if (await reconcileRow(row)) settled++
-        } catch (error) {
-          logger.error(
-            {
-              event: 'llm_agent_a2a_reconcile_row_failed',
-              task_id: row.taskId,
-              err: error,
-            },
-            'llm-agent reconciler failed to reconcile an unsettled a2a_task row',
-          )
+      if (rows.length > 0) {
+        // Fetched once per tick rather than once per row; RemoteAgentRegistry
+        // caches internally but every row would still pay an async round trip
+        // through that cache check.
+        const handles = await options.remoteAgentRegistry.listAgents()
+        for (const row of rows) {
+          try {
+            if (await reconcileRow(row, handles)) settled++
+          } catch (error) {
+            logger.error(
+              {
+                event: 'llm_agent_a2a_reconcile_row_failed',
+                task_id: row.taskId,
+                err: error,
+              },
+              'llm-agent reconciler failed to reconcile an unsettled a2a_task row',
+            )
+          }
         }
       }
 
