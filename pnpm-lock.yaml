@@ -19,7 +19,7 @@ importers:
         version: 0.1.4(@opentelemetry/api@1.9.1)(@opentelemetry/auto-instrumentations-node@0.77.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1)))(@opentelemetry/exporter-metrics-otlp-proto@0.219.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.8.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.8.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-node@0.219.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.8.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.41.1)(@sentry/node@10.65.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.9.1)))(@sentry/opentelemetry@10.65.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.8.0(@opentelemetry/api@1.9.1)))
       '@hono/node-server':
         specifier: 2.0.8
-        version: 2.0.8(hono@4.12.25)
+        version: 2.0.8(hono@4.12.29)
       '@langchain/core':
         specifier: 1.2.1
         version: 1.2.1(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.8.0(@opentelemetry/api@1.9.1))(openai@6.46.0(zod@4.4.3))
@@ -72,8 +72,8 @@ importers:
         specifier: 0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(pg@8.22.0)(postgres@3.4.9)
       hono:
-        specifier: 4.12.25
-        version: 4.12.25
+        specifier: 4.12.29
+        version: 4.12.29
       langchain:
         specifier: 1.5.2
         version: 1.5.2(@langchain/core@1.2.1(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.8.0(@opentelemetry/api@1.9.1))(openai@6.46.0(zod@4.4.3)))(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.8.0(@opentelemetry/api@1.9.1))(openai@6.46.0(zod@4.4.3))
@@ -3051,8 +3051,8 @@ packages:
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
 
-  hono@4.12.25:
-    resolution: {integrity: sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ==}
+  hono@4.12.29:
+    resolution: {integrity: sha512-1hNiRjawYrLq/4m3DQQjPGFg0VZkk4RjQJDff/excI6Dm9BiL75qxGrd7/c6YOxPdq6AscP3LiXhQ6fKFC1Waw==}
     engines: {node: '>=16.9.0'}
 
   https-proxy-agent@5.0.1:
@@ -4623,9 +4623,9 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@hono/node-server@2.0.8(hono@4.12.25)':
+  '@hono/node-server@2.0.8(hono@4.12.29)':
     dependencies:
-      hono: 4.12.25
+      hono: 4.12.29
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -6748,7 +6748,7 @@ snapshots:
 
   help-me@5.0.0: {}
 
-  hono@4.12.25: {}
+  hono@4.12.29: {}
 
   https-proxy-agent@5.0.1:
     dependencies:
