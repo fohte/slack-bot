@@ -1,7 +1,11 @@
+import type { BaseCheckpointSaver } from '@langchain/langgraph'
+
 import type { EventContext } from '@/interaction/event-context'
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
+import type { A2aTaskTracker } from '@/plugins/llm-agent/a2a-task-tracker'
+import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent'
 import type {
   EventLogOutcome,
   EventLogStore,
@@ -10,7 +14,6 @@ import {
   extractSlackFiles,
   extractSlackImageFiles,
 } from '@/plugins/llm-agent/files'
-import type { ThreadSessionStore } from '@/plugins/llm-agent/thread-session-store'
 import type { SlackEvent } from '@/types/slack-payloads'
 
 export const LLM_AGENT_PLUGIN_NAME = 'llm-agent'
@@ -29,7 +32,8 @@ export interface LlmAgentAcceptedEvent {
 
 export interface LlmAgentPluginOptions {
   readonly eventLogStore: EventLogStore
-  readonly threadSessionStore: ThreadSessionStore
+  readonly checkpointer: BaseCheckpointSaver
+  readonly a2aTaskTracker: A2aTaskTracker
   readonly botUserId: string
   readonly logger?: Logger | undefined
   readonly onAccepted?:
@@ -80,10 +84,11 @@ type GateReason =
   | 'app_mention'
   | 'dm'
   | 'thread_continuation'
+  | 'active_task_resumption'
   | 'mention_with_attachment'
   | 'duplicate_of_app_mention'
   | 'duplicate_of_message'
-  | 'no_mention_no_thread_session'
+  | 'no_mention_no_conversation_context'
   | 'unsupported_message_subtype'
   | 'unsupported_event'
 
@@ -101,8 +106,10 @@ const decideForMessage = async (
   event: SlackEvent,
   fields: ExtractedFields,
   mentionPattern: RegExp,
-  threadSessionStore: ThreadSessionStore,
+  checkpointer: BaseCheckpointSaver,
+  a2aTaskTracker: A2aTaskTracker,
   teamId: string | undefined,
+  logger: Logger,
 ): Promise<GateDecision> => {
   // Other subtypes (message_changed, message_deleted, channel_join, ...)
   // carry user-visible text in a nested field and Slack does not emit a
@@ -146,24 +153,67 @@ const decideForMessage = async (
   }
 
   // Skip the lookup for top-level channel messages: thread_ts is undefined,
-  // so the message is not part of an existing thread and no session can
-  // possibly be mapped to it.
+  // so the message is not part of an existing thread and no conversation
+  // state can possibly be mapped to it.
   if (
     fields.thread_ts !== undefined &&
     teamId !== undefined &&
     fields.channel !== undefined
   ) {
-    const sessionId = await threadSessionStore.lookup({
+    const threadKey = {
       slackTeamId: teamId,
       slackChannelId: fields.channel,
       threadRootTs: fields.thread_ts,
+    }
+    const threadId = deriveConversationThreadId({
+      teamId,
+      channelId: fields.channel,
+      threadRootTs: fields.thread_ts,
     })
-    if (sessionId !== undefined) {
+    // onEvent rejections never reach Slack as a retry (routeEvent logs and
+    // swallows them), so letting either lookup's rejection bubble through
+    // Promise.all would drop the event even when the other lookup found a
+    // hit — silently resurrecting the non-response bug this gate exists to
+    // fix. Each lookup is caught individually and treated as a miss instead.
+    const logLookupFailure = (
+      check: 'active_task' | 'checkpoint',
+      error: unknown,
+    ): void => {
+      logger.warn(
+        {
+          event: 'llm_agent_gate_lookup_failed',
+          check,
+          team_id: teamId,
+          slack_channel_id: fields.channel,
+          thread_root_ts: fields.thread_ts,
+          err: error,
+        },
+        'llm-agent gate lookup failed; treating as not found',
+      )
+    }
+    const [activeTask, checkpoint] = await Promise.all([
+      a2aTaskTracker
+        .findActiveInputRequired(threadKey)
+        .catch((error: unknown) => {
+          logLookupFailure('active_task', error)
+          return undefined
+        }),
+      checkpointer
+        .get({ configurable: { thread_id: threadId } })
+        .catch((error: unknown) => {
+          logLookupFailure('checkpoint', error)
+          return undefined
+        }),
+    ])
+    if (activeTask !== undefined) {
+      return { accept: true, reason: 'active_task_resumption' }
+    }
+    if (checkpoint !== undefined) {
       return { accept: true, reason: 'thread_continuation' }
     }
   }
 
-  return { accept: false, reason: 'no_mention_no_thread_session' }
+  return { accept: false, reason: 'no_mention_no_conversation_context' }
 }
 
 const decideForAppMention = async (
@@ -196,7 +246,8 @@ export const createLlmAgentPlugin = (
   options: LlmAgentPluginOptions,
 ): Plugin => {
   const logger = options.logger ?? noopLogger
-  const { eventLogStore, threadSessionStore, botUserId, onAccepted } = options
+  const { eventLogStore, checkpointer, a2aTaskTracker, botUserId, onAccepted } =
+    options
   // Slack mentions appear as `<@U123>` or `<@U123|label>`.
   const mentionPattern = new RegExp(`<@${botUserId}(?:\\|[^>]*)?>`, 'u')
 
@@ -235,8 +286,10 @@ export const createLlmAgentPlugin = (
           event,
           fields,
           mentionPattern,
-          threadSessionStore,
+          checkpointer,
+          a2aTaskTracker,
           ctx.envelope.team_id,
+          logger,
         )
       } else {
         decision = { accept: false, reason: 'unsupported_event' }
