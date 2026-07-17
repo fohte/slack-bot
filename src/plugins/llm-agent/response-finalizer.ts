@@ -51,7 +51,10 @@ export interface ResponseFinalizer {
   // reconciler's own tasks/get poll, done once so it can also detect
   // TaskNotFound). Skips the handle lookup and getTask call finalizeRow does,
   // and — since no push notification was received — does not record one.
-  finalizeTask(row: A2aTaskRow, task: Task): Promise<void>
+  // Returns the dispatch outcome (rather than void) so the caller can tell
+  // a genuine settle apart from e.g. 'duplicate' (a concurrent push already
+  // won) without re-querying the row and guessing from its resulting state.
+  finalizeTask(row: A2aTaskRow, task: Task): Promise<A2aPushNotificationResult>
 }
 
 export interface ResponseFinalizerOptions {
@@ -330,9 +333,7 @@ export const createResponseFinalizer = (
 
   return {
     finalizeRow,
-    async finalizeTask(row, task) {
-      await dispatchTask(row, task)
-    },
+    finalizeTask: dispatchTask,
     async finalize(taskId) {
       let row = await options.a2aTaskTracker.findByTaskId(taskId)
       if (row === undefined) {

@@ -57,7 +57,7 @@ const getReconcilerSettledCounter = (): Counter => {
     .getMeter(INSTRUMENTATION_NAME)
     .createCounter('llm_agent.a2a.reconciler.settled.count', {
       description:
-        'Delegated A2A tasks settled by the reconciler fallback path (a missed push recovered by polling, or a stale task failed by deadline), partitioned by reason',
+        'delegated A2A tasks settled by the reconciler fallback path (a missed push recovered by polling, or a stale task failed by deadline), partitioned by reason',
       unit: '1',
     })
   return reconcilerSettledCounter

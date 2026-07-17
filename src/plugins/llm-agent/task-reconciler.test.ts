@@ -138,7 +138,6 @@ describe('startTaskReconciler', () => {
       eventLogStore: createScriptedEventLogStore(),
       slackClient,
       now: () => clock,
-      graceMs: TASK_RECONCILER_DEFAULT_GRACE_MS,
       setIntervalImpl: () => ({}) as unknown as NodeJS.Timeout,
       clearIntervalImpl: () => {},
     })
@@ -306,7 +305,9 @@ describe('startTaskReconciler', () => {
       updatedAt: NOW,
     })
     expect(eventLogStore.markedResponded).toEqual([])
-    expect(result).toEqual({ settled: 1, pruned: 0 })
+    // Not counted as settled: the post failed and the row rolled back to
+    // unsettled, so this tick did not actually decide the row's outcome.
+    expect(result).toEqual({ settled: 0, pruned: 0 })
   })
 
   it('excludes an input-required task from deadline failure even past its deadline', async () => {

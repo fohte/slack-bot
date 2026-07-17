@@ -12,10 +12,7 @@ import type {
   A2aTaskRow,
   A2aTaskTracker,
 } from '@/plugins/llm-agent/a2a-task-tracker'
-import {
-  A2A_TASK_ACTIVE_EXECUTION_STATES,
-  isA2aTaskTerminalState,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+import { A2A_TASK_ACTIVE_EXECUTION_STATES } from '@/plugins/llm-agent/a2a-task-tracker'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
 import type { RemoteAgentRegistry } from '@/plugins/llm-agent/remote-agent-registry'
 import type { ResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
@@ -114,11 +111,14 @@ export const startTaskReconciler = (
   // its settleTerminal instead. The caller's transition() already elected
   // this call the winner, so a Slack post failure here rolls the settled
   // flag back for a later retry rather than losing the outcome silently.
+  // Returns whether this call actually settled the row: false when the
+  // Slack post failed and got rolled back, so the caller doesn't count a
+  // tick that will need to retry as if it had decided the outcome.
   const settleFailure = async (
     row: A2aTaskRow,
     reason: A2aReconcilerSettledReason,
     text: string,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const posted = await postToThread(row, text)
     if (!posted) {
       try {
@@ -133,7 +133,7 @@ export const startTaskReconciler = (
           'llm-agent reconciler failed to roll back the settled flag after a Slack post failure',
         )
       }
-      return
+      return false
     }
     try {
       await options.eventLogStore.markResponded(row.slackEventId)
@@ -150,6 +150,7 @@ export const startTaskReconciler = (
     }
     recordA2aTaskSettled(row.agentName, 'failed')
     recordA2aReconcilerSettled(reason)
+    return true
   }
 
   // Returns true when this tick itself decided the row's outcome (deadline
@@ -166,8 +167,7 @@ export const startTaskReconciler = (
         ifDeadlineAtOrBefore: deadline,
       })
       if (updated) {
-        await settleFailure(row, 'deadline', DEADLINE_EXCEEDED_TEXT)
-        return true
+        return settleFailure(row, 'deadline', DEADLINE_EXCEEDED_TEXT)
       }
     }
 
@@ -190,10 +190,11 @@ export const startTaskReconciler = (
       task = await handle.client.getTask({ id: row.taskId })
     } catch (error) {
       if (error instanceof TaskNotFoundError) {
-        // input-required rows are excluded the same way the deadline sweep
-        // excludes them (transitionGuard's default 'failed' guard only
-        // covers submitted/working); a resume attempt handles that case
-        // instead (steps/resume-active-task.ts's own settleAndRedelegate).
+        // The default 'failed' guard only permits submitted/working rows,
+        // so an input-required row needs requireCurrentStates to opt back
+        // in; without it, a TaskNotFound observed here would leave that
+        // row unsettled (and un-pruned) forever, since no other path
+        // re-polls it once the user has stopped replying.
         const { updated } = await options.a2aTaskTracker.transition(
           row.taskId,
           row.state === 'input-required'
@@ -201,8 +202,7 @@ export const startTaskReconciler = (
             : { state: 'failed' },
         )
         if (updated) {
-          await settleFailure(row, 'polling', TASK_NOT_FOUND_TEXT)
-          return true
+          return settleFailure(row, 'polling', TASK_NOT_FOUND_TEXT)
         }
         return false
       }
@@ -223,13 +223,12 @@ export const startTaskReconciler = (
     // produce identical behavior. finalizeTask takes the Task this call
     // already fetched instead of re-fetching it itself, and (since no push
     // was received) does not record a push-notification counter for it.
-    await options.responseFinalizer.finalizeTask(row, task)
-    const after = await options.a2aTaskTracker.findByTaskId(row.taskId)
-    if (
-      after !== undefined &&
-      after.settled &&
-      isA2aTaskTerminalState(after.state)
-    ) {
+    // Its returned outcome — not a re-query of the row — decides the count,
+    // since a concurrent push notification racing this same poll can settle
+    // the row first, in which case finalizeTask reports 'duplicate' even
+    // though the row is now settled.
+    const outcome = await options.responseFinalizer.finalizeTask(row, task)
+    if (outcome === 'settled') {
       recordA2aReconcilerSettled('polling')
       return true
     }
