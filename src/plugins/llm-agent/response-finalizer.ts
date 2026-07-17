@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
+import type { A2aPushNotificationResult } from '@/observability/a2a-counters'
 import {
   recordA2aPushNotification,
   recordA2aTaskSettled,
@@ -21,10 +22,7 @@ import type {
   RemoteAgentHandle,
   RemoteAgentRegistry,
 } from '@/plugins/llm-agent/remote-agent-registry'
-import {
-  buildMarkdownBlocks,
-  escapeMrkdwn,
-} from '@/plugins/llm-agent/slack-message-blocks'
+import { postThreadMessage } from '@/plugins/llm-agent/slack-message-blocks'
 import type { SlackWebClient } from '@/slack/web-client'
 
 // Posted instead of the task's own message when the remote agent's failure
@@ -49,6 +47,14 @@ export interface ResponseFinalizer {
   // Entry point for a caller that already holds the row (e.g. the
   // reconciler's own findUnsettled() query); skips the lookup/retry above.
   finalizeRow(row: A2aTaskRow): Promise<void>
+  // Entry point for a caller that already fetched the Task itself (e.g. the
+  // reconciler's own tasks/get poll, done once so it can also detect
+  // TaskNotFound). Skips the handle lookup and getTask call finalizeRow does,
+  // and — since no push notification was received — does not record one.
+  // Returns the dispatch outcome (rather than void) so the caller can tell
+  // a genuine settle apart from e.g. 'duplicate' (a concurrent push already
+  // won) without re-querying the row and guessing from its resulting state.
+  finalizeTask(row: A2aTaskRow, task: Task): Promise<A2aPushNotificationResult>
 }
 
 export interface ResponseFinalizerOptions {
@@ -121,12 +127,11 @@ export const createResponseFinalizer = (
     text: string,
   ): Promise<boolean> => {
     try {
-      await options.slackClient.postMessage({
-        channel: row.slackChannelId,
-        thread_ts: row.threadRootTs,
-        text: escapeMrkdwn(text),
-        blocks: buildMarkdownBlocks(text),
-      })
+      await postThreadMessage(
+        options.slackClient,
+        { channel: row.slackChannelId, threadTs: row.threadRootTs },
+        text,
+      )
       return true
     } catch (error) {
       logger.error(
@@ -143,22 +148,21 @@ export const createResponseFinalizer = (
   }
 
   // Terminal settle: transition() eagerly flips `settled` before the post is
-  // attempted so concurrent observers (a duplicate push, or the future
-  // reconciler) elect a single winner; if the post itself then fails, the
-  // optimistic settle is rolled back via unsettle() so a later attempt can
-  // retry it.
+  // attempted so concurrent observers (a duplicate push, or the reconciler)
+  // elect a single winner; if the post itself then fails, the optimistic
+  // settle is rolled back via unsettle() so a later attempt can retry it.
+  // Returns the outcome rather than recording a push-notification counter
+  // itself, since a caller other than a push (the reconciler's finalizeTask)
+  // shares this same settle logic without one having been received.
   const settleTerminal = async (
     row: A2aTaskRow,
     task: Task,
     state: A2aTaskTerminalState,
-  ): Promise<void> => {
+  ): Promise<A2aPushNotificationResult> => {
     const { updated } = await options.a2aTaskTracker.transition(row.taskId, {
       state,
     })
-    if (!updated) {
-      recordA2aPushNotification('duplicate')
-      return
-    }
+    if (!updated) return 'duplicate'
 
     const errorKind = extractErrorKind(task)
     const text =
@@ -177,8 +181,7 @@ export const createResponseFinalizer = (
           'llm-agent failed to roll back the settled flag after a Slack post failure',
         )
       }
-      recordA2aPushNotification('error')
-      return
+      return 'error'
     }
 
     try {
@@ -200,7 +203,7 @@ export const createResponseFinalizer = (
     }
 
     recordA2aTaskSettled(row.agentName, state)
-    recordA2aPushNotification('settled')
+    return 'settled'
   }
 
   // input-required transitions are guarded by transitionGuard requiring the
@@ -210,14 +213,11 @@ export const createResponseFinalizer = (
   const settleInputRequired = async (
     row: A2aTaskRow,
     task: Task,
-  ): Promise<void> => {
+  ): Promise<A2aPushNotificationResult> => {
     const { updated } = await options.a2aTaskTracker.transition(row.taskId, {
       state: 'input-required',
     })
-    if (!updated) {
-      recordA2aPushNotification('duplicate')
-      return
-    }
+    if (!updated) return 'duplicate'
     const posted = await postToThread(row, extractTaskText(task))
     if (!posted) {
       // Unlike settleTerminal, this row never set `settled`, so there is no
@@ -242,10 +242,58 @@ export const createResponseFinalizer = (
           'llm-agent failed to revert an input-required task after a Slack post failure',
         )
       }
-      recordA2aPushNotification('error')
-      return
+      return 'error'
     }
-    recordA2aPushNotification('input_required')
+    return 'input_required'
+  }
+
+  // Shared by finalizeRow (a Task fetched from a push-received taskId) and
+  // finalizeTask (a Task the caller already fetched itself): validates the
+  // payload's shape defensively either way, since both ultimately come from
+  // the same untrusted tasks/get response, then dispatches on its state.
+  const dispatchTask = async (
+    row: A2aTaskRow,
+    rawTask: unknown,
+  ): Promise<A2aPushNotificationResult> => {
+    if (!TASK_SHAPE_SCHEMA.safeParse(rawTask).success) {
+      logger.warn(
+        {
+          event: 'llm_agent_a2a_finalize_invalid_task_payload',
+          task_id: row.taskId,
+          agent_name: row.agentName,
+        },
+        'llm-agent received a task payload without a usable status from tasks/get',
+      )
+      return 'error'
+    }
+    // TASK_SHAPE_SCHEMA already validated every field this function reads
+    // directly off `status`.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- TASK_SHAPE_SCHEMA already validated every field this module reads directly
+    const task = rawTask as Task
+
+    if (!isA2aTaskState(task.status.state)) {
+      logger.warn(
+        {
+          event: 'llm_agent_a2a_finalize_unrecognized_state',
+          task_id: row.taskId,
+          agent_name: row.agentName,
+          task_state: task.status.state,
+        },
+        'llm-agent received an unrecognized task state while finalizing a task',
+      )
+      return 'error'
+    }
+
+    const state = task.status.state
+    if (state === 'input-required') return settleInputRequired(row, task)
+    if (isA2aTaskTerminalState(state)) {
+      return settleTerminal(row, task, state)
+    }
+    // submitted / working: a heartbeat observation, not a settle decision.
+    // Refreshes updated_at so the reconciler's stale-row sweep doesn't treat
+    // a live, still-running task as overdue.
+    await options.a2aTaskTracker.transition(row.taskId, { state })
+    return 'heartbeat'
   }
 
   const finalizeRow = async (row: A2aTaskRow): Promise<void> => {
@@ -280,55 +328,12 @@ export const createResponseFinalizer = (
       return
     }
 
-    if (!TASK_SHAPE_SCHEMA.safeParse(rawTask).success) {
-      logger.warn(
-        {
-          event: 'llm_agent_a2a_finalize_invalid_task_payload',
-          task_id: row.taskId,
-          agent_name: row.agentName,
-        },
-        'llm-agent received a task payload without a usable status from tasks/get',
-      )
-      recordA2aPushNotification('error')
-      return
-    }
-    // TASK_SHAPE_SCHEMA already validated every field this function reads
-    // directly off `status`.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- TASK_SHAPE_SCHEMA already validated every field this module reads directly
-    const task = rawTask as Task
-
-    if (!isA2aTaskState(task.status.state)) {
-      logger.warn(
-        {
-          event: 'llm_agent_a2a_finalize_unrecognized_state',
-          task_id: row.taskId,
-          agent_name: row.agentName,
-          task_state: task.status.state,
-        },
-        'llm-agent received an unrecognized task state while finalizing a task',
-      )
-      recordA2aPushNotification('error')
-      return
-    }
-
-    const state = task.status.state
-    if (state === 'input-required') {
-      await settleInputRequired(row, task)
-      return
-    }
-    if (isA2aTaskTerminalState(state)) {
-      await settleTerminal(row, task, state)
-      return
-    }
-    // submitted / working: a heartbeat observation, not a settle decision.
-    // Refreshes updated_at so the (future) reconciler's stale-row sweep
-    // doesn't treat a live, still-running task as overdue.
-    await options.a2aTaskTracker.transition(row.taskId, { state })
-    recordA2aPushNotification('heartbeat')
+    recordA2aPushNotification(await dispatchTask(row, rawTask))
   }
 
   return {
     finalizeRow,
+    finalizeTask: dispatchTask,
     async finalize(taskId) {
       let row = await options.a2aTaskTracker.findByTaskId(taskId)
       if (row === undefined) {

@@ -20,6 +20,9 @@ const createFakeResponseFinalizer = (
     async finalizeRow() {
       throw new Error('not implemented')
     },
+    async finalizeTask() {
+      throw new Error('not implemented')
+    },
   }
 }
 

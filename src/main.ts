@@ -25,6 +25,7 @@ import {
   createTaskDispatcher,
   createThreadSessionStore,
   startEventLogRetention,
+  startTaskReconciler,
 } from '@/plugins/llm-agent'
 import { createInteractionRouter } from '@/router/router'
 import { createScheduler } from '@/scheduler/scheduler'
@@ -112,6 +113,16 @@ export const bootstrap = (options: BootstrapOptions): void => {
     responseFinalizer,
     logger,
   })
+  const taskReconciler = startTaskReconciler({
+    a2aTaskTracker,
+    remoteAgentRegistry: options.remoteAgentRegistry,
+    responseFinalizer,
+    eventLogStore,
+    slackClient,
+    inFlightTasks,
+    logger,
+  })
+  void taskReconciler.runOnce()
   const server = createHttpServer({
     verifier,
     router,

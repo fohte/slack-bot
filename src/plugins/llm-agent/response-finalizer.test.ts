@@ -607,4 +607,43 @@ describe('createResponseFinalizer', () => {
       })
     })
   })
+
+  describe('finalizeTask', () => {
+    it('settles a terminal task the caller already fetched, the same way finalizeRow does', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const slackClient = createStubSlackClient()
+      const eventLogStore = createScriptedEventLogStore()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
+        eventLogStore,
+        slackClient,
+      })
+
+      await finalizer.finalizeTask(
+        (await tracker.findByTaskId('task-1'))!,
+        taskWith('completed', textMessage('Recorded your meal.')),
+      )
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'Recorded your meal.',
+          blocks: [{ type: 'markdown', text: 'Recorded your meal.' }],
+          loadingMessages: undefined,
+        },
+      ])
+      expect(eventLogStore.markedResponded).toEqual(['Ev1'])
+      expect(await tracker.findByTaskId('task-1')).toEqual({
+        ...baseTask(),
+        state: 'completed',
+        settled: true,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    })
+  })
 })

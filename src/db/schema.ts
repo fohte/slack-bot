@@ -95,6 +95,11 @@ export const a2aTask = pgTable(
     index('a2a_task_unsettled_idx')
       .on(table.updatedAt)
       .where(sql`${table.settled} = false`),
+    // Mirrors a2a_task_unsettled_idx for the opposite side: deleteSettledOlderThan
+    // filters on settled = true, and the two conditions never overlap.
+    index('a2a_task_settled_idx')
+      .on(table.updatedAt)
+      .where(sql`${table.settled} = true`),
     check(
       'a2a_task_state_check',
       sql`${table.state} in ('submitted','working','input-required','completed','failed','canceled','rejected')`,

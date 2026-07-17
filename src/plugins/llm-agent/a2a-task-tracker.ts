@@ -155,6 +155,10 @@ export interface A2aTaskTracker {
     threadKey: ThreadKey,
     agentName: string,
   ): Promise<string | undefined>
+  // Retention: deletes settled rows last updated before `cutoff`. Rows still
+  // unsettled (e.g. input-required, awaiting a user reply with no time
+  // limit) are never touched here regardless of age.
+  deleteSettledOlderThan(cutoff: Date): Promise<number>
 }
 
 const ROW_COLUMNS = {
@@ -291,5 +295,12 @@ export const createA2aTaskTracker = (
       .orderBy(desc(a2aTask.createdAt))
       .limit(1)
     return rows[0]?.contextId
+  },
+  async deleteSettledOlderThan(cutoff) {
+    const deleted = await db
+      .delete(a2aTask)
+      .where(and(eq(a2aTask.settled, true), lt(a2aTask.updatedAt, cutoff)))
+      .returning({ taskId: a2aTask.taskId })
+    return deleted.length
   },
 })
