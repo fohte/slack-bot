@@ -198,14 +198,14 @@ describe('createConversationAgent', () => {
     ])
   })
 
-  // Regression test for a bug where images were built into standard content
-  // blocks but attached via HumanMessage's `content` field instead of
-  // `contentBlocks`: @langchain/openai only routes `content` through its
-  // standard-block-aware converter when response_metadata.output_version is
-  // 'v1', which only `contentBlocks` sets. Asserting on the block array
-  // shape alone (as in the test above) can't catch that regression, since
-  // both fields end up holding the same array; this asserts on the actual
-  // OpenAI wire format the image must reach to be visible to the model.
+  // Guards against images silently becoming invisible to the model:
+  // @langchain/openai only routes content through its standard-block-aware
+  // converter when response_metadata.output_version is 'v1', which only
+  // `contentBlocks` (not `content`) sets. The 'embeds resized images as
+  // base64 content blocks alongside the text' test above can't catch that
+  // on its own, since both fields end up holding the same array; this
+  // asserts on the actual OpenAI wire format the image must reach to be
+  // visible to the model.
   it('converts the image content block to an OpenAI image_url part', async () => {
     const model = createRecordingChatModel(() => 'described the photo')
     const agent = createConversationAgent({
