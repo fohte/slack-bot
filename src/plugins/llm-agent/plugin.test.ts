@@ -1,9 +1,13 @@
+import { emptyCheckpoint, MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { EventContext } from '@/interaction/event-context'
 import { noopLogger } from '@/logger/logger'
 import type { Plugin } from '@/plugin/plugin'
 import { createPluginRegistry } from '@/plugin/registry'
+import { createFakeA2aTaskTracker } from '@/plugins/llm-agent/_test-utils'
+import type { A2aTaskRow } from '@/plugins/llm-agent/a2a-task-tracker'
+import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent'
 import type {
   EventLogOutcome,
   EventLogRecord,
@@ -18,10 +22,6 @@ import {
   LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
 } from '@/plugins/llm-agent/plugin'
-import type {
-  ThreadSessionKey,
-  ThreadSessionStore,
-} from '@/plugins/llm-agent/thread-session-store'
 import { createInteractionRouter } from '@/router/router'
 import type { SlackWebClient } from '@/slack/web-client'
 import type {
@@ -102,29 +102,29 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
 
 const BOT_USER_ID = 'U_BOT'
 
-const createStubThreadSessionStore = (
-  sessions: ReadonlyArray<readonly [ThreadSessionKey, string]> = [],
-): ThreadSessionStore => ({
-  async lookup(key) {
-    for (const [k, sessionId] of sessions) {
-      if (
-        k.slackTeamId === key.slackTeamId &&
-        k.slackChannelId === key.slackChannelId &&
-        k.threadRootTs === key.threadRootTs
-      ) {
-        return sessionId
-      }
-    }
-    return undefined
-  },
-  async upsert() {},
-})
+// Marks a thread_id as having existing conversation state, using the real
+// in-memory BaseCheckpointSaver implementation rather than a hand-rolled
+// fake, so a method this suite doesn't stub can't silently no-op.
+const seedCheckpoint = (
+  checkpointer: MemorySaver,
+  threadId: string,
+): Promise<unknown> =>
+  checkpointer.put(
+    { configurable: { thread_id: threadId } },
+    emptyCheckpoint(),
+    {
+      source: 'update',
+      step: -1,
+      parents: {},
+    },
+  )
 
 const buildPluginOptions = (
   overrides: Partial<LlmAgentPluginOptions> = {},
 ): LlmAgentPluginOptions => ({
   eventLogStore: createInMemoryEventLogStore(),
-  threadSessionStore: createStubThreadSessionStore(),
+  checkpointer: new MemorySaver(),
+  a2aTaskTracker: createFakeA2aTaskTracker(),
   botUserId: BOT_USER_ID,
   ...overrides,
 })
@@ -541,21 +541,20 @@ describe('createLlmAgentPlugin', () => {
     expect(onAccepted.mock.calls.length).toBe(1)
   })
 
-  it('accepts mention-less channel messages when the thread already has an opencode session', async () => {
+  it('accepts mention-less channel messages when the thread already has conversation checkpoint state', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
-    const threadSessionStore = createStubThreadSessionStore([
-      [
-        {
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000050',
-        },
-        'ses_abcdef',
-      ],
-    ])
+    const checkpointer = new MemorySaver()
+    await seedCheckpoint(
+      checkpointer,
+      deriveConversationThreadId({
+        teamId: 'T123',
+        channelId: 'C123',
+        threadRootTs: '1700000000.000050',
+      }),
+    )
     const plugin = createLlmAgentPlugin(
-      buildPluginOptions({ eventLogStore, threadSessionStore, onAccepted }),
+      buildPluginOptions({ eventLogStore, checkpointer, onAccepted }),
     )
     const envelope = buildMessageEnvelope('Ev-thread-hit', {
       channel_type: 'channel',
@@ -577,7 +576,142 @@ describe('createLlmAgentPlugin', () => {
     expect(onAccepted.mock.calls.length).toBe(1)
   })
 
-  it('skips mention-less channel messages when no thread session exists', async () => {
+  it('accepts mention-less channel messages when the thread has an active input-required task', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const activeInputRequired: A2aTaskRow = {
+      taskId: 'task-1',
+      contextId: 'ctx-1',
+      agentName: 'meshi',
+      slackTeamId: 'T123',
+      slackChannelId: 'C123',
+      threadRootTs: '1700000000.000050',
+      slackEventId: 'Ev-delegated',
+      state: 'input-required',
+      settled: false,
+      deadlineAt: new Date('2026-01-01T00:00:00Z'),
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    }
+    const a2aTaskTracker = createFakeA2aTaskTracker({ activeInputRequired })
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ eventLogStore, a2aTaskTracker, onAccepted }),
+    )
+    const envelope = buildMessageEnvelope('Ev-task-resume', {
+      channel_type: 'channel',
+      text: 'here is the missing detail',
+      thread_ts: '1700000000.000050',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-task-resume',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
+  })
+
+  it('accepts mention-less channel messages via the active task hit when the checkpoint lookup fails', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const activeInputRequired: A2aTaskRow = {
+      taskId: 'task-1',
+      contextId: 'ctx-1',
+      agentName: 'meshi',
+      slackTeamId: 'T123',
+      slackChannelId: 'C123',
+      threadRootTs: '1700000000.000050',
+      slackEventId: 'Ev-delegated',
+      state: 'input-required',
+      settled: false,
+      deadlineAt: new Date('2026-01-01T00:00:00Z'),
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    }
+    const a2aTaskTracker = createFakeA2aTaskTracker({ activeInputRequired })
+    const checkpointer = new MemorySaver()
+    vi.spyOn(checkpointer, 'get').mockRejectedValue(
+      new Error('checkpoint store unavailable'),
+    )
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({
+        eventLogStore,
+        checkpointer,
+        a2aTaskTracker,
+        onAccepted,
+      }),
+    )
+    const envelope = buildMessageEnvelope('Ev-task-resume-checkpoint-down', {
+      channel_type: 'channel',
+      text: 'here is the missing detail',
+      thread_ts: '1700000000.000050',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-task-resume-checkpoint-down',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
+  })
+
+  it('accepts mention-less channel messages via the checkpoint hit when the active task lookup fails', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const checkpointer = new MemorySaver()
+    await seedCheckpoint(
+      checkpointer,
+      deriveConversationThreadId({
+        teamId: 'T123',
+        channelId: 'C123',
+        threadRootTs: '1700000000.000050',
+      }),
+    )
+    const a2aTaskTracker = createFakeA2aTaskTracker()
+    vi.spyOn(a2aTaskTracker, 'findActiveInputRequired').mockRejectedValue(
+      new Error('a2a_task query failed'),
+    )
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({
+        eventLogStore,
+        checkpointer,
+        a2aTaskTracker,
+        onAccepted,
+      }),
+    )
+    const envelope = buildMessageEnvelope('Ev-thread-hit-task-lookup-down', {
+      channel_type: 'channel',
+      text: 'follow up',
+      thread_ts: '1700000000.000050',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-thread-hit-task-lookup-down',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
+  })
+
+  it('skips mention-less channel messages when no conversation state exists for the thread', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
     const plugin = createLlmAgentPlugin(
@@ -595,13 +729,11 @@ describe('createLlmAgentPlugin', () => {
     expect(onAccepted.mock.calls.length).toBe(0)
   })
 
-  it('skips the thread session lookup for top-level channel messages without thread_ts', async () => {
+  it('rejects top-level channel messages without thread_ts when there is no mention', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
-    const threadSessionStore = createStubThreadSessionStore()
-    const lookupSpy = vi.spyOn(threadSessionStore, 'lookup')
     const plugin = createLlmAgentPlugin(
-      buildPluginOptions({ eventLogStore, threadSessionStore, onAccepted }),
+      buildPluginOptions({ eventLogStore, onAccepted }),
     )
     const envelope = buildMessageEnvelope('Ev-top-level', {
       channel_type: 'channel',
@@ -612,7 +744,28 @@ describe('createLlmAgentPlugin', () => {
 
     expect(eventLogStore.records).toEqual([])
     expect(onAccepted.mock.calls.length).toBe(0)
-    expect(lookupSpy.mock.calls.length).toBe(0)
+  })
+
+  it('skips the conversation state lookups for top-level channel messages without thread_ts', async () => {
+    const checkpointer = new MemorySaver()
+    const a2aTaskTracker = createFakeA2aTaskTracker()
+    const getSpy = vi.spyOn(checkpointer, 'get')
+    const findActiveInputRequiredSpy = vi.spyOn(
+      a2aTaskTracker,
+      'findActiveInputRequired',
+    )
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ checkpointer, a2aTaskTracker }),
+    )
+    const envelope = buildMessageEnvelope('Ev-top-level-lookup', {
+      channel_type: 'channel',
+      text: 'random chatter',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(getSpy.mock.calls.length).toBe(0)
+    expect(findActiveInputRequiredSpy.mock.calls.length).toBe(0)
   })
 
   it('skips message_changed subtype even when the edited body mentions the bot', async () => {
@@ -633,21 +786,20 @@ describe('createLlmAgentPlugin', () => {
     expect(onAccepted.mock.calls.length).toBe(0)
   })
 
-  it('accepts file_share subtype messages when the thread already has an opencode session', async () => {
+  it('accepts file_share subtype messages when the thread already has conversation checkpoint state', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
-    const threadSessionStore = createStubThreadSessionStore([
-      [
-        {
-          slackTeamId: 'T123',
-          slackChannelId: 'C123',
-          threadRootTs: '1700000000.000050',
-        },
-        'ses_abcdef',
-      ],
-    ])
+    const checkpointer = new MemorySaver()
+    await seedCheckpoint(
+      checkpointer,
+      deriveConversationThreadId({
+        teamId: 'T123',
+        channelId: 'C123',
+        threadRootTs: '1700000000.000050',
+      }),
+    )
     const plugin = createLlmAgentPlugin(
-      buildPluginOptions({ eventLogStore, threadSessionStore, onAccepted }),
+      buildPluginOptions({ eventLogStore, checkpointer, onAccepted }),
     )
     const envelope = buildMessageEnvelope('Ev-file-thread-hit', {
       channel_type: 'channel',

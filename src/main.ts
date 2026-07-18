@@ -184,7 +184,6 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
         logger,
         slackClient,
         eventLogStore,
-        threadSessionStore,
         a2aTaskTracker,
         inFlightTasks,
       }) => {
@@ -211,7 +210,8 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
         return createLlmAgentPlugin({
           logger,
           eventLogStore,
-          threadSessionStore,
+          checkpointer,
+          a2aTaskTracker,
           botUserId: config.slackBotUserId,
           onAccepted,
         })
