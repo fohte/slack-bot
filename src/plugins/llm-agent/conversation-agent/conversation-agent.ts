@@ -135,7 +135,13 @@ export const createConversationAgent = (
       const turnMessageId = randomUUID()
       const message = new HumanMessage({
         id: turnMessageId,
-        content: buildHumanMessageContent(userText, images),
+        // contentBlocks (not content) is required for @langchain/openai to
+        // recognize these as standard v1 content blocks: it sets
+        // response_metadata.output_version = 'v1', which is what the
+        // Chat Completions/Responses converters key off of to route
+        // image blocks through the standard-block conversion path instead
+        // of treating them as (unrecognized) provider-native content.
+        contentBlocks: buildHumanMessageContent(userText, images),
       })
       const { teamId, channelId, threadRootTs } =
         parseConversationThreadId(threadId)

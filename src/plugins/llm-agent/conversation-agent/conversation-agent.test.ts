@@ -1,4 +1,5 @@
 import { MemorySaver } from '@langchain/langgraph'
+import { convertMessagesToCompletionsMessageParams } from '@langchain/openai'
 import { tool } from 'langchain'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -194,6 +195,47 @@ describe('createConversationAgent', () => {
     expect(humanMessage?.content).toEqual([
       { type: 'text', text: 'what is this?' },
       { type: 'image', mimeType: 'image/jpeg', data: 'AAAA' },
+    ])
+  })
+
+  // Regression test for a bug where images were built into standard content
+  // blocks but attached via HumanMessage's `content` field instead of
+  // `contentBlocks`: @langchain/openai only routes `content` through its
+  // standard-block-aware converter when response_metadata.output_version is
+  // 'v1', which only `contentBlocks` sets. Asserting on the block array
+  // shape alone (as in the test above) can't catch that regression, since
+  // both fields end up holding the same array; this asserts on the actual
+  // OpenAI wire format the image must reach to be visible to the model.
+  it('converts the image content block to an OpenAI image_url part', async () => {
+    const model = createRecordingChatModel(() => 'described the photo')
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+    })
+
+    await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'what is this?',
+      images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
+      slackEventId: 'Ev1',
+    })
+
+    const [humanMessage] = model.calls[0] ?? []
+    expect(
+      convertMessagesToCompletionsMessageParams({
+        messages: humanMessage ? [humanMessage] : [],
+      }),
+    ).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'what is this?' },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/jpeg;base64,AAAA' },
+          },
+        ],
+      },
     ])
   })
 
