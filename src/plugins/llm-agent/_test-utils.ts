@@ -311,6 +311,33 @@ export const recordingHandleForGetTask = (
   }
 }
 
+// Wraps a handle wired for both message/send and tasks/get, so a single
+// remote agent can carry a task through delegation and settlement in the
+// same test (unlike recordingHandleFor/recordingHandleForGetTask above,
+// which each cover only one leg of that lifecycle).
+export const createStubRemoteAgent = (options: {
+  readonly card?: AgentCard
+  readonly sendResult: (params: MessageSendParams) => Promise<Message | Task>
+  readonly getTaskResult: (taskId: string) => Promise<Task>
+}): { readonly handle: RemoteAgentHandle; readonly getTaskCalls: string[] } => {
+  const getTaskCalls: string[] = []
+  const sendMessage = async (params: MessageSendParams) =>
+    options.sendResult(params)
+  const getTask = async (params: { id: string }) => {
+    getTaskCalls.push(params.id)
+    return options.getTaskResult(params.id)
+  }
+  const card = options.card ?? cardFor()
+  return {
+    handle: {
+      name: card.name,
+      card,
+      client: { sendMessage, getTask } as unknown as Client,
+    },
+    getTaskCalls,
+  }
+}
+
 export const taskResult = (overrides: Partial<Task> = {}): Task => ({
   kind: 'task',
   id: 'task-1',
