@@ -19,6 +19,7 @@ import {
   createDelegationTools,
   createEventLogStore,
   createLlmAgentPlugin,
+  createMcpTools,
   createOpenCodeGoChatModel,
   createRemoteAgentRegistry,
   createResponseFinalizer,
@@ -160,17 +161,25 @@ export const bootstrap = (options: BootstrapOptions): void => {
 const entry = process.argv[1] ?? ''
 if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   // Loaded again (redundantly but harmlessly) inside bootstrap() below;
-  // needed here to resolve delegation tools before the plugin factory runs,
-  // since createConversationAgent bakes its tool list in at construction
-  // time and PluginFactory itself is synchronous.
+  // needed here to resolve delegation and MCP tools before the plugin
+  // factory runs, since createConversationAgent bakes its tool list in at
+  // construction time and PluginFactory itself is synchronous.
   const config = loadConfig()
+  const logger = createLogger({
+    level: config.logLevel,
+    base: { service: 'slack-bot' },
+  })
   const remoteAgentRegistry = createRemoteAgentRegistry({
     agentUrls: config.remoteAgentUrls,
   })
   // Resolved once here at startup (with its own TTL cache), then reused —
   // via the same registry instance's warm cache — by the dispatcher's own
-  // task-resume lookups.
-  const remoteAgentHandles = await remoteAgentRegistry.listAgents()
+  // task-resume lookups. MCP tools have no such reuse elsewhere, so they're
+  // fetched once and passed straight into the tools list below.
+  const [remoteAgentHandles, mcpTools] = await Promise.all([
+    remoteAgentRegistry.listAgents(),
+    createMcpTools({ serverUrls: config.mcpServerUrls, logger }),
+  ])
   const model = createOpenCodeGoChatModel({
     apiKey: config.conversationAgent.opencodeApiKey,
     model: config.conversationAgent.model,
@@ -187,10 +196,13 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
         a2aTaskTracker,
         inFlightTasks,
       }) => {
-        const tools = createDelegationTools(remoteAgentHandles, {
-          a2aTaskTracker,
-          logger,
-        })
+        const tools = [
+          ...createDelegationTools(remoteAgentHandles, {
+            a2aTaskTracker,
+            logger,
+          }),
+          ...mcpTools,
+        ]
         const conversationAgent = createConversationAgent({
           model,
           checkpointer,
