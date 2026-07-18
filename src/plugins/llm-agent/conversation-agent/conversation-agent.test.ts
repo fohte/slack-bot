@@ -1,4 +1,5 @@
 import { MemorySaver } from '@langchain/langgraph'
+import { convertMessagesToCompletionsMessageParams } from '@langchain/openai'
 import { tool } from 'langchain'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -194,6 +195,47 @@ describe('createConversationAgent', () => {
     expect(humanMessage?.content).toEqual([
       { type: 'text', text: 'what is this?' },
       { type: 'image', mimeType: 'image/jpeg', data: 'AAAA' },
+    ])
+  })
+
+  // Guards against images silently becoming invisible to the model:
+  // @langchain/openai only routes content through its standard-block-aware
+  // converter when response_metadata.output_version is 'v1', which only
+  // `contentBlocks` (not `content`) sets. The 'embeds resized images as
+  // base64 content blocks alongside the text' test above can't catch that
+  // on its own, since both fields end up holding the same array; this
+  // asserts on the actual OpenAI wire format the image must reach to be
+  // visible to the model.
+  it('converts the image content block to an OpenAI image_url part', async () => {
+    const model = createRecordingChatModel(() => 'described the photo')
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+    })
+
+    await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'what is this?',
+      images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
+      slackEventId: 'Ev1',
+    })
+
+    const [humanMessage] = model.calls[0] ?? []
+    expect(
+      convertMessagesToCompletionsMessageParams({
+        messages: humanMessage ? [humanMessage] : [],
+      }),
+    ).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'what is this?' },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/jpeg;base64,AAAA' },
+          },
+        ],
+      },
     ])
   })
 
