@@ -30,6 +30,10 @@ export interface Config {
   // Delegation targets for RemoteAgentRegistry. Empty means the
   // conversation agent runs with no delegation tools.
   readonly remoteAgentUrls: readonly string[]
+  // External MCP servers whose tools are fetched at startup and injected
+  // into the conversation agent alongside delegation tools. Empty means no
+  // MCP tools are added.
+  readonly mcpServerUrls: readonly string[]
   // Shared secret verified against the X-A2A-Notification-Token header on
   // POST /api/a2a/notifications, the endpoint remote agents push completed
   // or failed A2A tasks to.
@@ -79,6 +83,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   }
 
   const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')
+  const mcpServerUrls = optionalUrlList(env, 'MCP_SERVER_URLS')
   const a2aNotificationToken = requireEnv(env, 'A2A_NOTIFICATION_TOKEN')
 
   return {
@@ -92,6 +97,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     logLevel,
     conversationAgent,
     remoteAgentUrls,
+    mcpServerUrls,
     a2aNotificationToken,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }

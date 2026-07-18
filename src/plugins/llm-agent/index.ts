@@ -84,6 +84,11 @@ export type {
 } from '@/plugins/llm-agent/event-log-store'
 export { createEventLogStore } from '@/plugins/llm-agent/event-log-store'
 export type {
+  CreateMcpToolsOptions,
+  McpServerResolver,
+} from '@/plugins/llm-agent/mcp-tools'
+export { createMcpTools } from '@/plugins/llm-agent/mcp-tools'
+export type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
 } from '@/plugins/llm-agent/plugin'

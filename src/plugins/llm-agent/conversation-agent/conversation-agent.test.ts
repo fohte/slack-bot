@@ -380,4 +380,53 @@ describe('createConversationAgent', () => {
       delegations: [],
     })
   })
+
+  // MCP tools (see mcp-tools/) are plain tool() functions with no
+  // content_and_artifact contract, so a call that fails throws instead of
+  // returning a description. createAgent's tool-calling node catches that
+  // and reports it back to the model as a tool error.
+  it('reports a thrown tool error back to the model instead of failing the turn', async () => {
+    const failingTool = tool(
+      async (): Promise<string> => {
+        throw new Error('mgmt MCP server unreachable')
+      },
+      {
+        name: 'list_strategies',
+        description: 'List strategies.',
+        schema: z.object({}),
+      },
+    )
+    const model = createRecordingChatModel((_messages, callIndex) =>
+      callIndex === 0
+        ? {
+            toolCalls: [{ name: 'list_strategies', args: {}, id: 'call-1' }],
+          }
+        : 'Sorry, I could not list the strategies just now.',
+    )
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+      tools: [failingTool],
+    })
+
+    const outcome = await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'list my strategies',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
+    expect(outcome).toEqual({
+      text: 'Sorry, I could not list the strategies just now.',
+      delegations: [],
+    })
+    // The exact error-wrapping text (e.g. "Error: ...\n Please fix your
+    // mistakes.") is createAgent's own tool-error formatting, not this
+    // repo's, so only the message sequence is asserted here.
+    expect((model.calls[1] ?? []).map((m) => m.type)).toEqual([
+      'human',
+      'ai',
+      'tool',
+    ])
+  })
 })

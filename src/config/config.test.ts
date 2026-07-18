@@ -30,6 +30,7 @@ describe('loadConfig', () => {
       opencodeApiKey: 'sk-test',
     })
     expect(config.remoteAgentUrls).toEqual([])
+    expect(config.mcpServerUrls).toEqual([])
     expect(config.a2aNotificationToken).toBe('notif-token')
   })
 
@@ -75,6 +76,37 @@ describe('loadConfig', () => {
         env: {
           ...baseEnv,
           REMOTE_AGENT_URLS: 'https://meshi.example.com,,',
+        },
+      }),
+    ).toThrow(ConfigLoadError)
+  })
+
+  it('parses MCP_SERVER_URLS as a comma-separated, trimmed URL list', () => {
+    const config = loadConfig({
+      env: {
+        ...baseEnv,
+        MCP_SERVER_URLS:
+          'https://mgmt-mcp.example.com/mcp, https://other-mcp.example.com/mcp',
+      },
+    })
+    expect(config.mcpServerUrls).toEqual([
+      'https://mgmt-mcp.example.com/mcp',
+      'https://other-mcp.example.com/mcp',
+    ])
+  })
+
+  it('rejects an invalid URL entry in MCP_SERVER_URLS', () => {
+    expect(() =>
+      loadConfig({ env: { ...baseEnv, MCP_SERVER_URLS: 'not-a-url' } }),
+    ).toThrow(ConfigLoadError)
+  })
+
+  it('rejects an empty entry in MCP_SERVER_URLS', () => {
+    expect(() =>
+      loadConfig({
+        env: {
+          ...baseEnv,
+          MCP_SERVER_URLS: 'https://mgmt-mcp.example.com/mcp,,',
         },
       }),
     ).toThrow(ConfigLoadError)
