@@ -38,6 +38,9 @@ slack-bot is an HTTP-only Request URL receiver for Slack: it does not use Socket
 | `MCP_SERVER_URLS`                                    | No       | - (none) | Comma-separated list of base URLs for external MCP servers. Each server's tools are fetched at startup and added to the conversation agent as-is, alongside delegation tools.                       |
 | `A2A_NOTIFICATION_TOKEN`                             | Yes      | -        | Shared secret verified against the `X-A2A-Notification-Token` header on `POST /api/a2a/notifications`, the endpoint remote agents push A2A task status updates to.                                  |
 | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | No       | `false`  | When `true`, includes full prompt/completion text content in GenAI OpenTelemetry spans (image content is always redacted). Off by default since it may contain PII.                                 |
+| `BLOG_SERVICE_URL`                                   | Yes      | -        | Base URL of the blog publisher service the `blog` plugin talks to.                                                                                                                                  |
+| `BLOG_SERVICE_TOKEN`                                 | Yes      | -        | Bearer token for authenticating against the blog publisher service.                                                                                                                                 |
+| `BLOG_ALLOWED_SLACK_USER_IDS`                        | No       | - (none) | Comma-separated Slack user IDs allowed to run the `blog` plugin's commands. Empty means every Slack user is allowed.                                                                                |
 
 Secrets must not be committed. In production they are injected via a Kubernetes Secret. Locally, place them in `.env`, which is gitignored.
 
