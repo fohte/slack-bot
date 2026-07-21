@@ -10,6 +10,7 @@ import { createLogger } from '@/logger/logger'
 import type { PluginDeps, PluginInput } from '@/plugin/deps'
 import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
+import { createBlogPlugin, loadBlogPluginConfig } from '@/plugins/blog'
 import type { RemoteAgentRegistry } from '@/plugins/llm-agent'
 import {
   createA2aNotificationHandler,
@@ -189,6 +190,12 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   bootstrap({
     remoteAgentRegistry,
     plugins: [
+      ({ logger, scheduler }) =>
+        createBlogPlugin({
+          config: loadBlogPluginConfig(),
+          logger,
+          scheduler,
+        }),
       ({
         logger,
         slackClient,
