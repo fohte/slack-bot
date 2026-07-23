@@ -64,7 +64,7 @@ The slash command list can also be generated as a Slack App manifest fragment vi
 2. Enable corepack for pnpm: `corepack enable`.
 3. Install dependencies: `pnpm install`.
 4. Create a `.env` file based on the table above. Do not commit it.
-5. Start the bot: `pnpm start` (runs `tsx src/main.ts`).
+5. Start the bot: `pnpm start` (runs `tsx --import ./otel-register.mjs src/main.ts`).
 6. Expose the local server to Slack with ngrok: `ngrok http 8080`. Use the `https://...ngrok-free.app` URL as the Request URL prefix in the Slack App settings while developing.
 7. Run checks: `pnpm test` (typecheck plus unit) and `pnpm lint`.
 
