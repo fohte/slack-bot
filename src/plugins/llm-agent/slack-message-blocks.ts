@@ -48,8 +48,8 @@ export interface ThreadTarget {
 
 // The single entry point for posting to a task's originating thread, so
 // mrkdwn escaping and markdown-block construction stay consistent across
-// callers; each caller wraps this in its own try/catch so it can log with
-// its own event name on failure.
+// callers. Failure handling is left to each caller: some log locally with
+// their own event name, others propagate the error for an outer layer to log.
 export const postThreadMessage = (
   slackClient: SlackWebClient,
   target: ThreadTarget,
