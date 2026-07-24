@@ -102,3 +102,17 @@ export class SchedulerDuplicateNameError extends Error {
 export class SchedulerInvalidArgumentError extends Error {
   override readonly name = 'SchedulerInvalidArgumentError'
 }
+
+export class EventLogPruneError extends Error {
+  override readonly name = 'EventLogPruneError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
+export class AssistantStatusError extends Error {
+  override readonly name = 'AssistantStatusError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}

@@ -1,6 +1,9 @@
+import { ResultAsync } from 'neverthrow'
+
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import type { SlackWebClient } from '@/slack/web-client'
+import { AssistantStatusError } from '@/types/errors'
 
 // Slack renders this as "<bot name> is thinking..." under the user's
 // message in the Agents & AI Apps split-view.
@@ -54,16 +57,23 @@ export const trySetAssistantStatus = async (
   options: SetAssistantStatusOptions,
 ): Promise<void> => {
   const logger = options.logger ?? noopLogger
-  try {
-    await options.slackClient.setAssistantThreadStatus({
+  const result = await ResultAsync.fromPromise(
+    options.slackClient.setAssistantThreadStatus({
       channel_id: options.target.channelId,
       thread_ts: options.target.threadTs,
       status: options.status,
       ...(options.loadingMessages !== undefined && {
         loading_messages: [...options.loadingMessages],
       }),
-    })
-  } catch (error) {
+    }),
+    (caughtErr) =>
+      new AssistantStatusError(
+        'failed to set assistant thread status',
+        caughtErr,
+      ),
+  )
+
+  if (result.isErr()) {
     const isClear = options.status === CLEAR_STATUS
     const payload = {
       event: isClear
@@ -72,7 +82,7 @@ export const trySetAssistantStatus = async (
       channel_id: options.target.channelId,
       thread_ts: options.target.threadTs,
       status_length: options.status.length,
-      err: error,
+      err: result.error.cause,
     }
     if (isClear) {
       logger.error(
