@@ -102,3 +102,10 @@ export class SchedulerDuplicateNameError extends Error {
 export class SchedulerInvalidArgumentError extends Error {
   override readonly name = 'SchedulerInvalidArgumentError'
 }
+
+export class RemoteAgentResolutionError extends Error {
+  override readonly name = 'RemoteAgentResolutionError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}

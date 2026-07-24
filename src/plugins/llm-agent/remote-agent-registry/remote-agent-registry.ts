@@ -1,10 +1,12 @@
 import type { AgentCard } from '@a2a-js/sdk'
 import type { Client } from '@a2a-js/sdk/client'
 import { ClientFactory } from '@a2a-js/sdk/client'
+import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
+import { RemoteAgentResolutionError } from '@/types/errors'
 
 export interface RemoteAgentHandle {
   // Agent Card's own `name`; also recorded as a2a_task.agent_name and used
@@ -89,21 +91,29 @@ export const createRemoteAgentRegistry = (
 
   const fetchAll = async (): Promise<readonly RemoteAgentHandle[]> => {
     const resolved = await Promise.all(
-      options.agentUrls.map(async (url) => {
-        try {
-          return await resolver.resolve(url)
-        } catch (error) {
-          logger.warn(
-            {
-              event: 'llm_agent_remote_agent_card_fetch_failed',
-              remote_agent_url: url,
-              err: error,
-            },
-            'llm-agent remote agent registry failed to fetch an Agent Card; excluding it from delegation tools',
-          )
-          return undefined
-        }
-      }),
+      options.agentUrls.map((url) =>
+        ResultAsync.fromPromise(
+          resolver.resolve(url),
+          (caughtErr) =>
+            new RemoteAgentResolutionError(
+              `failed to resolve remote agent at ${url}`,
+              caughtErr,
+            ),
+        ).match(
+          (handle) => handle,
+          (error) => {
+            logger.warn(
+              {
+                event: 'llm_agent_remote_agent_card_fetch_failed',
+                remote_agent_url: url,
+                err: error,
+              },
+              'llm-agent remote agent registry failed to fetch an Agent Card; excluding it from delegation tools',
+            )
+            return undefined
+          },
+        ),
+      ),
     )
     return resolved.filter(
       (handle): handle is RemoteAgentHandle => handle !== undefined,
