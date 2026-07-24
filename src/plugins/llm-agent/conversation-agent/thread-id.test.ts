@@ -1,9 +1,11 @@
+import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import {
   deriveConversationThreadId,
   parseConversationThreadId,
 } from '@/plugins/llm-agent/conversation-agent/thread-id'
+import { ConversationThreadIdParseError } from '@/types/errors'
 
 describe('deriveConversationThreadId', () => {
   it('joins team, channel, and thread root ts with colons', () => {
@@ -42,11 +44,13 @@ describe('parseConversationThreadId', () => {
   it('inverts deriveConversationThreadId', () => {
     const key = { teamId: 'T1', channelId: 'C1', threadRootTs: '111.222' }
     expect(parseConversationThreadId(deriveConversationThreadId(key))).toEqual(
-      key,
+      ok(key),
     )
   })
 
-  it('throws on a thread_id missing a segment', () => {
-    expect(() => parseConversationThreadId('T1:C1')).toThrow()
+  it('returns an error for a thread_id missing a segment', () => {
+    expect(parseConversationThreadId('T1:C1')).toEqual(
+      err(new ConversationThreadIdParseError('T1:C1')),
+    )
   })
 })

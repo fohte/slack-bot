@@ -1,4 +1,5 @@
-import sharp, { type Metadata } from 'sharp'
+import { ResultAsync } from 'neverthrow'
+import sharp, { type Metadata, type Sharp } from 'sharp'
 
 export interface ResizedImage {
   readonly bytes: Uint8Array
@@ -38,14 +39,27 @@ const RESIZE_TIERS: ReadonlyArray<{
 
 const RESIZED_EXT = 'jpg'
 
+const decodeMetadata = (
+  pipeline: Sharp,
+): ResultAsync<Metadata, ResizeFailureReason> =>
+  ResultAsync.fromPromise(pipeline.metadata(), () => 'undecodable' as const)
+
+const encodeJpeg = (
+  pipeline: Sharp,
+  quality: number,
+): ResultAsync<Buffer, ResizeFailureReason> =>
+  ResultAsync.fromPromise(
+    pipeline.jpeg({ quality, mozjpeg: true }).toBuffer(),
+    () => 'undecodable' as const,
+  )
+
 export const createSharpImageResizer = (): ImageResizer => ({
   async resize(bytes, maxBytes) {
-    let metadata: Metadata
-    try {
-      metadata = await sharp(bytes).metadata()
-    } catch {
-      return { ok: false, reason: 'undecodable' }
+    const metadataResult = await decodeMetadata(sharp(bytes))
+    if (metadataResult.isErr()) {
+      return { ok: false, reason: metadataResult.error }
     }
+    const metadata = metadataResult.value
     // Re-encoding an animated image as a single JPEG frame would silently
     // drop the animation, so leave those to the caller's fallback path
     // instead.
@@ -63,16 +77,13 @@ export const createSharpImageResizer = (): ImageResizer => ({
         withoutEnlargement: true,
       })
       for (const quality of tier.qualities) {
-        try {
-          const out = await resized
-            .clone()
-            .jpeg({ quality, mozjpeg: true })
-            .toBuffer()
-          if (out.byteLength <= maxBytes) {
-            return { ok: true, bytes: new Uint8Array(out), ext: RESIZED_EXT }
-          }
-        } catch {
-          return { ok: false, reason: 'undecodable' }
+        const encodeResult = await encodeJpeg(resized.clone(), quality)
+        if (encodeResult.isErr()) {
+          return { ok: false, reason: encodeResult.error }
+        }
+        const out = encodeResult.value
+        if (out.byteLength <= maxBytes) {
+          return { ok: true, bytes: new Uint8Array(out), ext: RESIZED_EXT }
         }
       }
     }

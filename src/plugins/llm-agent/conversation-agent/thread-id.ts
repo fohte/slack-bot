@@ -1,3 +1,8 @@
+import type { Result } from 'neverthrow'
+import { err, ok } from 'neverthrow'
+
+import { ConversationThreadIdParseError } from '@/types/errors'
+
 export interface ConversationThreadKey {
   readonly teamId: string
   readonly channelId: string
@@ -15,7 +20,7 @@ export const deriveConversationThreadId = (
 // that only receive the joined thread_id and need the parts back out.
 export const parseConversationThreadId = (
   threadId: string,
-): ConversationThreadKey => {
+): Result<ConversationThreadKey, ConversationThreadIdParseError> => {
   const parts = threadId.split(':')
   const [teamId, channelId, threadRootTs] = parts
   if (
@@ -24,7 +29,7 @@ export const parseConversationThreadId = (
     channelId === undefined ||
     threadRootTs === undefined
   ) {
-    throw new Error(`invalid conversation thread_id: ${threadId}`)
+    return err(new ConversationThreadIdParseError(threadId))
   }
-  return { teamId, channelId, threadRootTs }
+  return ok({ teamId, channelId, threadRootTs })
 }

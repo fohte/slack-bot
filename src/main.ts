@@ -188,7 +188,16 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   // fetched once and passed straight into the tools list below.
   const [remoteAgentHandles, mcpTools] = await Promise.all([
     remoteAgentRegistry.listAgents(),
-    createMcpTools({ serverUrls: config.mcpServerUrls, logger }),
+    // ResultAsync never rejects on its own, so Promise.all would otherwise
+    // wait for listAgents() too before this startup invariant violation
+    // surfaces — match() converts the Err case back into a rejection to
+    // keep the original fail-fast behavior.
+    createMcpTools({ serverUrls: config.mcpServerUrls, logger }).match(
+      (tools) => tools,
+      (error) => {
+        throw error
+      },
+    ),
   ])
   const model = createOpenCodeGoChatModel({
     apiKey: config.conversationAgent.opencodeApiKey,
