@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { noopLogger } from '@/logger/logger'
 import type { InteractionRouter } from '@/router/router'
@@ -6,6 +7,10 @@ import type { SignatureVerifier } from '@/security/signature-verifier'
 import { createDeferred } from '@/server/_test-utils'
 import { createHttpServer } from '@/server/http-server'
 import { createInFlightTasks } from '@/server/in-flight-tasks'
+
+vi.mock('@fohte/service-kit/observability', () => ({
+  captureWithFingerprint: vi.fn(),
+}))
 
 const allowAllVerifier: SignatureVerifier = { verify: () => true }
 
@@ -20,6 +25,48 @@ const noopRouter: InteractionRouter = {
 }
 
 describe('createHttpServer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('reports an unhandled routeEvent failure to Sentry', async () => {
+    const thrown = new Error('boom')
+    const router: InteractionRouter = {
+      ...noopRouter,
+      async routeEvent() {
+        throw thrown
+      },
+    }
+    const errorLog = vi.fn()
+    const inFlightTasks = createInFlightTasks()
+    const { app } = createHttpServer({
+      verifier: allowAllVerifier,
+      router,
+      logger: { ...noopLogger, error: errorLog },
+      inFlightTasks,
+    })
+
+    const response = await app.request('/api/slack/events', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'event_callback',
+        event: { type: 'app_mention' },
+      }),
+    })
+    expect(response.status).toBe(200)
+    await inFlightTasks.waitForIdle()
+
+    expect(errorLog.mock.calls).toEqual([
+      [
+        { event: 'route_event_unhandled', error: 'boom' },
+        'routeEvent threw outside per-plugin handler',
+      ],
+    ])
+    expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+      [thrown, 'server.http-server.route-event-unhandled'],
+    ])
+  })
+
   it('tracks the backgrounded routeEvent() call so it outlives the HTTP response', async () => {
     const routeEventResult = createDeferred<undefined>()
     const router: InteractionRouter = {

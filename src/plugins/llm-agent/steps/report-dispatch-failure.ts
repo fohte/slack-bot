@@ -6,6 +6,7 @@ import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
 } from '@/plugins/llm-agent/dispatcher-deps'
+import { postThreadMessage } from '@/plugins/llm-agent/slack-message-blocks'
 
 // Shown for a dispatch-level failure (the gating step throwing, or the
 // detached background mention-processing chain crashing unexpectedly)
@@ -24,22 +25,20 @@ export const reportDispatchFailure = async (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,
 ): Promise<void> => {
-  const postPromise = resolved.slackClient
-    .postMessage({
-      channel: env.channelId,
-      thread_ts: env.threadRootTs,
-      text: DISPATCH_FAILURE_TEXT,
-    })
-    .catch((postError: unknown) => {
-      resolved.logger.error(
-        {
-          event: 'llm_agent_dispatch_failure_notify_failed',
-          event_id: env.eventId,
-          err: postError,
-        },
-        'failed to notify Slack thread about a dispatch failure',
-      )
-    })
+  const postPromise = postThreadMessage(
+    resolved.slackClient,
+    { channel: env.channelId, threadTs: env.threadRootTs },
+    DISPATCH_FAILURE_TEXT,
+  ).catch((postError: unknown) => {
+    resolved.logger.error(
+      {
+        event: 'llm_agent_dispatch_failure_notify_failed',
+        event_id: env.eventId,
+        err: postError,
+      },
+      'failed to notify Slack thread about a dispatch failure',
+    )
+  })
   const statusPromise = trySetAssistantStatus({
     slackClient: resolved.slackClient,
     target: { channelId: env.channelId, threadTs: env.threadRootTs },

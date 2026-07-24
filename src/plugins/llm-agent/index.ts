@@ -89,6 +89,11 @@ export type {
 } from '@/plugins/llm-agent/mcp-tools'
 export { createMcpTools } from '@/plugins/llm-agent/mcp-tools'
 export type {
+  CreatePersonaParaphraserOptions,
+  PersonaParaphraser,
+} from '@/plugins/llm-agent/persona-paraphraser'
+export { createPersonaParaphraser } from '@/plugins/llm-agent/persona-paraphraser'
+export type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
 } from '@/plugins/llm-agent/plugin'

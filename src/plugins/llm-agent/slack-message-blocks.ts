@@ -46,9 +46,10 @@ export interface ThreadTarget {
   readonly threadTs: string
 }
 
-// Shared by response-finalizer.ts and task-reconciler.ts, whose posts to a
-// task's originating thread are otherwise identical; each caller wraps this
-// in its own try/catch so it can log with its own event name on failure.
+// The single entry point for posting to a task's originating thread, so
+// mrkdwn escaping and markdown-block construction stay consistent across
+// callers. Failure handling is left to each caller: some log locally with
+// their own event name, others propagate the error for an outer layer to log.
 export const postThreadMessage = (
   slackClient: SlackWebClient,
   target: ThreadTarget,
