@@ -111,8 +111,10 @@ export type {
 } from '@/slack/web-client'
 export { createSlackWebClient } from '@/slack/web-client'
 export {
+  AssistantStatusError,
   CfAccessAuthError,
   ConfigLoadError,
+  EventLogPruneError,
   InvalidSignatureError,
   MalformedPayloadError,
   PluginHandlerError,
