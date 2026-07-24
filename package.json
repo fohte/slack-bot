@@ -4,8 +4,8 @@
   "packageManager": "pnpm@11.11.0",
   "type": "module",
   "scripts": {
-    "start": "tsx src/main.ts",
-    "start:prod": "node dist/main.js",
+    "start": "tsx --import ./otel-register.mjs src/main.ts",
+    "start:prod": "node --import ./otel-register.mjs dist/main.js",
     "build": "tsup",
     "lint": "eslint .",
     "format:eslint": "eslint --fix .",
@@ -52,6 +52,7 @@
     "@opentelemetry/auto-instrumentations-node": "0.77.0",
     "@opentelemetry/exporter-metrics-otlp-proto": "0.219.0",
     "@opentelemetry/exporter-trace-otlp-proto": "0.219.0",
+    "@opentelemetry/instrumentation": "0.219.0",
     "@opentelemetry/resources": "2.8.0",
     "@opentelemetry/sdk-metrics": "2.8.0",
     "@opentelemetry/sdk-node": "0.219.0",
