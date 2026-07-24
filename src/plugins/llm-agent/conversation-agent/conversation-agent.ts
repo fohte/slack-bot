@@ -143,8 +143,9 @@ export const createConversationAgent = (
         // of treating them as (unrecognized) provider-native content.
         contentBlocks: buildHumanMessageContent(userText, images),
       })
-      const { teamId, channelId, threadRootTs } =
-        parseConversationThreadId(threadId)
+      const parsedThreadId = parseConversationThreadId(threadId)
+      if (parsedThreadId.isErr()) throw parsedThreadId.error
+      const { teamId, channelId, threadRootTs } = parsedThreadId.value
       const result = await agent.invoke(
         { messages: [message] },
         {

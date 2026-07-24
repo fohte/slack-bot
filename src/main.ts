@@ -11,7 +11,10 @@ import type { PluginDeps, PluginInput } from '@/plugin/deps'
 import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
 import { createBlogPlugin, loadBlogPluginConfig } from '@/plugins/blog'
-import type { RemoteAgentRegistry } from '@/plugins/llm-agent'
+import type {
+  PersonaParaphraser,
+  RemoteAgentRegistry,
+} from '@/plugins/llm-agent'
 import {
   createA2aNotificationHandler,
   createA2aTaskTracker,
@@ -22,6 +25,7 @@ import {
   createLlmAgentPlugin,
   createMcpTools,
   createOpenCodeGoChatModel,
+  createPersonaParaphraser,
   createRemoteAgentRegistry,
   createResponseFinalizer,
   createTaskDispatcher,
@@ -43,6 +47,10 @@ export interface BootstrapOptions {
   // endpoint's tasks/get calls share the same Agent Card cache the
   // conversation agent's delegation tools already warmed at startup.
   readonly remoteAgentRegistry: RemoteAgentRegistry
+  // Reused (rather than constructed fresh here) so responseFinalizer's
+  // persona paraphrase shares the same stateless model instance the
+  // conversation agent uses for live turns.
+  readonly personaParaphraser: PersonaParaphraser
 }
 
 export const bootstrap = (options: BootstrapOptions): void => {
@@ -108,6 +116,7 @@ export const bootstrap = (options: BootstrapOptions): void => {
     remoteAgentRegistry: options.remoteAgentRegistry,
     eventLogStore,
     slackClient,
+    personaParaphraser: options.personaParaphraser,
     logger,
   })
   const a2aNotificationHandler = createA2aNotificationHandler({
@@ -179,16 +188,31 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   // fetched once and passed straight into the tools list below.
   const [remoteAgentHandles, mcpTools] = await Promise.all([
     remoteAgentRegistry.listAgents(),
-    createMcpTools({ serverUrls: config.mcpServerUrls, logger }),
+    // ResultAsync never rejects on its own, so Promise.all would otherwise
+    // wait for listAgents() too before this startup invariant violation
+    // surfaces — match() converts the Err case back into a rejection to
+    // keep the original fail-fast behavior.
+    createMcpTools({ serverUrls: config.mcpServerUrls, logger }).match(
+      (tools) => tools,
+      (error) => {
+        throw error
+      },
+    ),
   ])
   const model = createOpenCodeGoChatModel({
     apiKey: config.conversationAgent.opencodeApiKey,
     model: config.conversationAgent.model,
   })
+  const personaParaphraser = createPersonaParaphraser({
+    model,
+    personaPrompt: config.conversationAgent.personaPrompt,
+    logger,
+  })
   const checkpointer = createConversationCheckpointer(config.databaseUrl)
 
   bootstrap({
     remoteAgentRegistry,
+    personaParaphraser,
     plugins: [
       ({ logger, scheduler }) =>
         createBlogPlugin({

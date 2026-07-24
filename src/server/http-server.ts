@@ -1,3 +1,4 @@
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { type Context, Hono } from 'hono'
 
 import type { Logger } from '@/logger/logger'
@@ -45,6 +46,10 @@ export interface HttpServer {
   readonly app: Hono<{ Variables: Variables }>
   readonly health: HealthEndpoint
 }
+
+// The 200 response to Slack has already gone out by the time this runs, so
+// there is no request left to fail — capture only instead of re-throwing.
+const ROUTE_EVENT_FINGERPRINT = 'server.http-server.route-event-unhandled'
 
 const SLACK_PATHS = new Set([
   '/api/slack/commands',
@@ -166,6 +171,7 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
             },
             'routeEvent threw outside per-plugin handler',
           )
+          captureWithFingerprint(err, ROUTE_EVENT_FINGERPRINT)
         }),
       )
     }

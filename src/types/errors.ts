@@ -116,3 +116,17 @@ export class AssistantStatusError extends Error {
     super(message, cause === undefined ? undefined : { cause })
   }
 }
+
+export class ConversationThreadIdParseError extends Error {
+  override readonly name = 'ConversationThreadIdParseError'
+  constructor(threadId: string) {
+    super(`invalid conversation thread_id: ${threadId}`)
+  }
+}
+
+export class DuplicateMcpToolNameError extends Error {
+  override readonly name = 'DuplicateMcpToolNameError'
+  constructor(toolName: string) {
+    super(`duplicate MCP tool name '${toolName}' across configured MCP servers`)
+  }
+}

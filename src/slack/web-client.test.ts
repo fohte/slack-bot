@@ -1,8 +1,18 @@
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import type { WebClient } from '@slack/web-api'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createSlackWebClient } from '@/slack/web-client'
+import {
+  createSlackWebClient,
+  SLACK_FILE_DOWNLOAD_MAX_BYTES,
+} from '@/slack/web-client'
 import { SlackApiError } from '@/types/errors'
+
+vi.mock('@fohte/service-kit/observability', () => ({
+  captureWithFingerprint: vi.fn(),
+}))
+
+const SLACK_WEB_CLIENT_FINGERPRINT = 'slack.web-client.request-failed'
 
 interface MockWebClient {
   chat: {
@@ -48,7 +58,26 @@ const buildMockClient = (): MockWebClient => ({
 
 const asWebClient = (m: MockWebClient): WebClient => m as unknown as WebClient
 
+// Verifies both halves of the boundary contract for a single failure in one
+// call: the exact error re-thrown to the caller, and the exact Sentry report
+// captured for it (same error instance, same fingerprint, same extras).
+const expectReportedFailure = async (
+  promise: Promise<unknown>,
+  expectedError: SlackApiError,
+  extras: Record<string, unknown>,
+): Promise<void> => {
+  const thrown = await promise.catch((err: unknown) => err)
+  expect(thrown).toEqual(expectedError)
+  expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+    [thrown, SLACK_WEB_CLIENT_FINGERPRINT, { extras }],
+  ])
+}
+
 describe('SlackWebClient', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('forwards postMessage results from underlying client', async () => {
     const mock = buildMockClient()
     mock.chat.postMessage.mockResolvedValue({
@@ -69,7 +98,7 @@ describe('SlackWebClient', () => {
     })
   })
 
-  it('rethrows underlying errors as SlackApiError', async () => {
+  it('rethrows underlying errors as SlackApiError and reports them to Sentry', async () => {
     const mock = buildMockClient()
     const slackErr = new Error('platform error') as Error & {
       data: { error: string }
@@ -81,12 +110,15 @@ describe('SlackWebClient', () => {
       maxRetries: 0,
       client: asWebClient(mock),
     })
-    await expect(
-      client.postMessage({ channel: 'C1', text: 'hi' }),
-    ).rejects.toMatchObject({
-      name: 'SlackApiError',
-      slackError: 'channel_not_found',
-    })
+    const promise = client.postMessage({ channel: 'C1', text: 'hi' })
+    await expectReportedFailure(
+      promise,
+      new SlackApiError('platform error', {
+        slackError: 'channel_not_found',
+        cause: slackErr,
+      }),
+      { method: 'chat.postMessage' },
+    )
   })
 
   it('posts to response_url with JSON body and no Authorization header', async () => {
@@ -120,7 +152,7 @@ describe('SlackWebClient', () => {
     expect(result.messageTs).toBe('12.34')
   })
 
-  it('throws SlackApiError when response_url returns ok:false', async () => {
+  it('throws SlackApiError when response_url returns ok:false and reports it to Sentry without the response_url', async () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify({ ok: false, error: 'expired_url' }), {
@@ -134,11 +166,18 @@ describe('SlackWebClient', () => {
       client: asWebClient(mock),
       fetchImpl,
     })
-    await expect(
-      client.postToResponseUrl('https://hooks.slack.com/actions/abc', {
-        text: 'hi',
+    const promise = client.postToResponseUrl(
+      'https://hooks.slack.com/actions/abc',
+      { text: 'hi' },
+    )
+    await expectReportedFailure(
+      promise,
+      new SlackApiError('response_url returned error: expired_url', {
+        slackError: 'expired_url',
+        status: 200,
       }),
-    ).rejects.toBeInstanceOf(SlackApiError)
+      { method: 'postToResponseUrl' },
+    )
   })
 
   it('forwards setAssistantThreadStatus arguments and result', async () => {
@@ -192,7 +231,7 @@ describe('SlackWebClient', () => {
     ])
   })
 
-  it('rethrows setAssistantThreadStatus failures as SlackApiError', async () => {
+  it('rethrows setAssistantThreadStatus failures as SlackApiError and reports them to Sentry', async () => {
     const mock = buildMockClient()
     const slackErr = new Error('platform error') as Error & {
       data: { error: string }
@@ -204,19 +243,22 @@ describe('SlackWebClient', () => {
       maxRetries: 0,
       client: asWebClient(mock),
     })
-    await expect(
-      client.setAssistantThreadStatus({
-        channel_id: 'C1',
-        thread_ts: '1700000000.000050',
-        status: 'is thinking...',
-      }),
-    ).rejects.toMatchObject({
-      name: 'SlackApiError',
-      slackError: 'channel_not_supported',
+    const promise = client.setAssistantThreadStatus({
+      channel_id: 'C1',
+      thread_ts: '1700000000.000050',
+      status: 'is thinking...',
     })
+    await expectReportedFailure(
+      promise,
+      new SlackApiError('platform error', {
+        slackError: 'channel_not_supported',
+        cause: slackErr,
+      }),
+      { method: 'assistant.threads.setStatus' },
+    )
   })
 
-  it('throws SlackApiError when response_url returns non-2xx', async () => {
+  it('throws SlackApiError when response_url returns non-2xx and reports it to Sentry without the response_url', async () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () => new Response('boom', { status: 500 }),
     )
@@ -227,11 +269,17 @@ describe('SlackWebClient', () => {
       client: asWebClient(mock),
       fetchImpl,
     })
-    await expect(
-      client.postToResponseUrl('https://hooks.slack.com/actions/abc', {
-        text: 'hi',
+    const promise = client.postToResponseUrl(
+      'https://hooks.slack.com/actions/abc',
+      { text: 'hi' },
+    )
+    await expectReportedFailure(
+      promise,
+      new SlackApiError('response_url POST failed with HTTP 500', {
+        status: 500,
       }),
-    ).rejects.toMatchObject({ name: 'SlackApiError', status: 500 })
+      { method: 'postToResponseUrl' },
+    )
   })
 
   it('downloads a Slack file with the bot token as Bearer auth', async () => {
@@ -274,7 +322,7 @@ describe('SlackWebClient', () => {
     })
   })
 
-  it('refuses to download from a non-Slack host without calling fetch', async () => {
+  it('refuses to download from a non-Slack host without calling fetch, and reports it to Sentry', async () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () => new Response('', { status: 200 }),
     )
@@ -285,13 +333,22 @@ describe('SlackWebClient', () => {
       client: asWebClient(mock),
       fetchImpl,
     })
-    await expect(
-      client.downloadFile('https://evil.example.com/files/x.png'),
-    ).rejects.toMatchObject({ name: 'SlackApiError' })
+    const promise = client.downloadFile('https://evil.example.com/files/x.png')
+    await expectReportedFailure(
+      promise,
+      new SlackApiError(
+        'refusing to download non-Slack URL: evil.example.com',
+        {},
+      ),
+      {
+        method: 'downloadFile',
+        url: 'https://evil.example.com/files/x.png',
+      },
+    )
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it('rejects responses whose Content-Length exceeds the OOM guard before buffering', async () => {
+  it('rejects responses whose Content-Length exceeds the OOM guard before buffering, and reports it to Sentry', async () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () =>
         new Response('', {
@@ -306,12 +363,18 @@ describe('SlackWebClient', () => {
       client: asWebClient(mock),
       fetchImpl,
     })
-    await expect(
-      client.downloadFile('https://files.slack.com/big.png'),
-    ).rejects.toMatchObject({ name: 'SlackApiError' })
+    const promise = client.downloadFile('https://files.slack.com/big.png')
+    await expectReportedFailure(
+      promise,
+      new SlackApiError(
+        `slack file too large: ${40 * 1024 * 1024} bytes (cap ${SLACK_FILE_DOWNLOAD_MAX_BYTES})`,
+        { status: 200 },
+      ),
+      { method: 'downloadFile', url: 'https://files.slack.com/big.png' },
+    )
   })
 
-  it('throws SlackApiError when file download returns non-2xx', async () => {
+  it('throws SlackApiError when file download returns non-2xx, and reports it to Sentry', async () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () => new Response('forbidden', { status: 403 }),
     )
@@ -322,9 +385,19 @@ describe('SlackWebClient', () => {
       client: asWebClient(mock),
       fetchImpl,
     })
-    await expect(
-      client.downloadFile('https://files.slack.com/files-pri/T1-F1/x.png'),
-    ).rejects.toMatchObject({ name: 'SlackApiError', status: 403 })
+    const promise = client.downloadFile(
+      'https://files.slack.com/files-pri/T1-F1/x.png',
+    )
+    await expectReportedFailure(
+      promise,
+      new SlackApiError('slack file download failed with HTTP 403', {
+        status: 403,
+      }),
+      {
+        method: 'downloadFile',
+        url: 'https://files.slack.com/files-pri/T1-F1/x.png',
+      },
+    )
   })
 
   it('maps files.info result to a SlackFile', async () => {
@@ -382,7 +455,7 @@ describe('SlackWebClient', () => {
     await expect(client.getFileInfo('F123')).resolves.toBeUndefined()
   })
 
-  it('rethrows files.info failures as SlackApiError', async () => {
+  it('rethrows files.info failures as SlackApiError and reports them to Sentry', async () => {
     const mock = buildMockClient()
     const slackErr = new Error('platform error') as Error & {
       data: { error: string }
@@ -394,9 +467,14 @@ describe('SlackWebClient', () => {
       maxRetries: 0,
       client: asWebClient(mock),
     })
-    await expect(client.getFileInfo('F123')).rejects.toMatchObject({
-      name: 'SlackApiError',
-      slackError: 'file_not_found',
-    })
+    const promise = client.getFileInfo('F123')
+    await expectReportedFailure(
+      promise,
+      new SlackApiError('platform error', {
+        slackError: 'file_not_found',
+        cause: slackErr,
+      }),
+      { method: 'files.info' },
+    )
   })
 })

@@ -10,11 +10,30 @@ import {
   recordingHandleForGetTask,
 } from '@/plugins/llm-agent/_test-utils'
 import type { NewA2aTask } from '@/plugins/llm-agent/a2a-task-tracker'
+import type { PersonaParaphraser } from '@/plugins/llm-agent/persona-paraphraser'
 import {
   createResponseFinalizer,
   USAGE_LIMIT_TEXT,
 } from '@/plugins/llm-agent/response-finalizer'
 import type { SlackWebClient } from '@/slack/web-client'
+
+interface StubPersonaParaphraser extends PersonaParaphraser {
+  readonly calls: readonly string[]
+}
+
+// Records every paraphrase() call and uppercases the text, so tests can
+// assert both that it ran and on exactly what text it was given, without a
+// real LLM call.
+const createStubPersonaParaphraser = (): StubPersonaParaphraser => {
+  const calls: string[] = []
+  return {
+    calls,
+    async paraphrase(text) {
+      calls.push(text)
+      return text.toUpperCase()
+    },
+  }
+}
 
 const NOW = new Date('2026-01-01T00:00:00Z')
 
@@ -131,6 +150,121 @@ describe('createResponseFinalizer', () => {
         createdAt: NOW,
         updatedAt: NOW,
       })
+    })
+
+    it('paraphrases the task text through the persona paraphraser before posting', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('completed', textMessage('Recorded your meal.')),
+      )
+      const slackClient = createStubSlackClient()
+      const personaParaphraser = createStubPersonaParaphraser()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        personaParaphraser,
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(personaParaphraser.calls).toEqual(['Recorded your meal.'])
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'RECORDED YOUR MEAL.',
+          blocks: [{ type: 'markdown', text: 'RECORDED YOUR MEAL.' }],
+          loadingMessages: undefined,
+        },
+      ])
+    })
+
+    it('does not paraphrase the usage_limit message', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith(
+          'failed',
+          textMessage('internal opencode-go 429 detail', {
+            error_kind: 'usage_limit',
+          }),
+        ),
+      )
+      const slackClient = createStubSlackClient()
+      const personaParaphraser = createStubPersonaParaphraser()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        personaParaphraser,
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(personaParaphraser.calls).toEqual([])
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: USAGE_LIMIT_TEXT,
+          blocks: [{ type: 'markdown', text: USAGE_LIMIT_TEXT }],
+          loadingMessages: undefined,
+        },
+      ])
+    })
+
+    it('posts the original text and logs a warning if the persona paraphraser itself rejects', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('completed', textMessage('Recorded your meal.')),
+      )
+      const slackClient = createStubSlackClient()
+      const logger = createRecordingLogger()
+      const boom = new Error('paraphrase blew up')
+      const throwingParaphraser: PersonaParaphraser = {
+        paraphrase: () => Promise.reject(boom),
+      }
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        personaParaphraser: throwingParaphraser,
+        logger,
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'Recorded your meal.',
+          blocks: [{ type: 'markdown', text: 'Recorded your meal.' }],
+          loadingMessages: undefined,
+        },
+      ])
+      expect(logger.entries).toEqual([
+        {
+          level: 'warn',
+          payload: {
+            event: 'llm_agent_a2a_finalize_paraphrase_failed',
+            task_id: 'task-1',
+            agent_name: 'meshi',
+            err: boom,
+          },
+          message:
+            'llm-agent failed to paraphrase a finalized task text; posting the original text',
+        },
+      ])
     })
 
     it('posts only once when the same completed task is observed twice (duplicate push)', async () => {
@@ -309,6 +443,37 @@ describe('createResponseFinalizer', () => {
         createdAt: NOW,
         updatedAt: NOW,
       })
+    })
+
+    it('paraphrases the question through the persona paraphraser before posting', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask({ state: 'working' }))
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('input-required', textMessage('What did you eat?')),
+      )
+      const slackClient = createStubSlackClient()
+      const personaParaphraser = createStubPersonaParaphraser()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        personaParaphraser,
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(personaParaphraser.calls).toEqual(['What did you eat?'])
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'WHAT DID YOU EAT?',
+          blocks: [{ type: 'markdown', text: 'WHAT DID YOU EAT?' }],
+          loadingMessages: undefined,
+        },
+      ])
     })
 
     it('reverts to the pre-transition state when the Slack post fails, so a retry can post the question', async () => {

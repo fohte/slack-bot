@@ -1,11 +1,13 @@
 import type { DynamicStructuredTool } from '@langchain/core/tools'
 import { tool } from 'langchain'
+import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import { createRecordingLogger } from '@/plugins/llm-agent/_test-utils'
 import type { McpServerResolver } from '@/plugins/llm-agent/mcp-tools/mcp-tools'
 import { createMcpTools } from '@/plugins/llm-agent/mcp-tools/mcp-tools'
+import { DuplicateMcpToolNameError } from '@/types/errors'
 
 const fakeTool = (name: string): DynamicStructuredTool =>
   tool(async () => `${name} result`, {
@@ -27,27 +29,27 @@ const resolverFor = (
 
 describe('createMcpTools', () => {
   it('returns no tools when no MCP servers are configured', async () => {
-    expect(await createMcpTools({ serverUrls: [] })).toEqual([])
+    expect(await createMcpTools({ serverUrls: [] })).toEqual(ok([]))
   })
 
   it('fetches the tools served by a single configured MCP server', async () => {
     const mgmtTool = fakeTool('list_strategies')
 
-    const tools = await createMcpTools({
+    const result = await createMcpTools({
       serverUrls: ['https://mgmt-mcp.example.com/mcp'],
       resolver: resolverFor(
         new Map([['https://mgmt-mcp.example.com/mcp', [mgmtTool]]]),
       ),
     })
 
-    expect(tools).toEqual([mgmtTool])
+    expect(result).toEqual(ok([mgmtTool]))
   })
 
   it('adding a URL to serverUrls adds its tools with no other change', async () => {
     const mgmtTool = fakeTool('list_strategies')
     const newTool = fakeTool('new_tool')
 
-    const tools = await createMcpTools({
+    const result = await createMcpTools({
       serverUrls: [
         'https://mgmt-mcp.example.com/mcp',
         'https://new-mcp.example.com/mcp',
@@ -60,14 +62,14 @@ describe('createMcpTools', () => {
       ),
     })
 
-    expect(tools).toEqual([mgmtTool, newTool])
+    expect(result).toEqual(ok([mgmtTool, newTool]))
   })
 
   it('excludes a server whose tool fetch fails, keeping tools from the rest', async () => {
     const mgmtTool = fakeTool('list_strategies')
     const fetchError = new Error('connection refused')
 
-    const tools = await createMcpTools({
+    const result = await createMcpTools({
       serverUrls: [
         'https://mgmt-mcp.example.com/mcp',
         'https://broken-mcp.example.com/mcp',
@@ -80,7 +82,7 @@ describe('createMcpTools', () => {
       ),
     })
 
-    expect(tools).toEqual([mgmtTool])
+    expect(result).toEqual(ok([mgmtTool]))
   })
 
   it('warns when a server fails to fetch tools', async () => {
@@ -110,19 +112,19 @@ describe('createMcpTools', () => {
   })
 
   it('rejects a duplicate tool name across configured MCP servers instead of leaving one unreachable', async () => {
-    await expect(
-      createMcpTools({
-        serverUrls: [
-          'https://mgmt-mcp.example.com/mcp',
-          'https://other-mcp.example.com/mcp',
-        ],
-        resolver: resolverFor(
-          new Map([
-            ['https://mgmt-mcp.example.com/mcp', [fakeTool('search')]],
-            ['https://other-mcp.example.com/mcp', [fakeTool('search')]],
-          ]),
-        ),
-      }),
-    ).rejects.toThrow(/duplicate MCP tool name/)
+    const result = await createMcpTools({
+      serverUrls: [
+        'https://mgmt-mcp.example.com/mcp',
+        'https://other-mcp.example.com/mcp',
+      ],
+      resolver: resolverFor(
+        new Map([
+          ['https://mgmt-mcp.example.com/mcp', [fakeTool('search')]],
+          ['https://other-mcp.example.com/mcp', [fakeTool('search')]],
+        ]),
+      ),
+    })
+
+    expect(result).toEqual(err(new DuplicateMcpToolNameError('search')))
   })
 })
