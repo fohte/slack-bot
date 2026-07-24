@@ -6,10 +6,7 @@ import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
 } from '@/plugins/llm-agent/dispatcher-deps'
-import {
-  buildMarkdownBlocks,
-  escapeMrkdwn,
-} from '@/plugins/llm-agent/slack-message-blocks'
+import { postThreadMessage } from '@/plugins/llm-agent/slack-message-blocks'
 
 export interface PostFinalResponseResult {
   // False when event_log markResponded lost the race to another delivery of
@@ -41,12 +38,11 @@ export const postFinalResponse = async (
   }
 
   try {
-    await resolved.slackClient.postMessage({
-      channel: env.channelId,
-      thread_ts: env.threadRootTs,
-      text: escapeMrkdwn(text),
-      blocks: buildMarkdownBlocks(text),
-    })
+    await postThreadMessage(
+      resolved.slackClient,
+      { channel: env.channelId, threadTs: env.threadRootTs },
+      text,
+    )
   } catch (error) {
     try {
       await resolved.eventLogStore.unmarkResponded(env.eventId)
