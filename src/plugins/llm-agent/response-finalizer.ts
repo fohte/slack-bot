@@ -18,6 +18,7 @@ import {
   isA2aTaskTerminalState,
 } from '@/plugins/llm-agent/a2a-task-tracker'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
+import type { PersonaParaphraser } from '@/plugins/llm-agent/persona-paraphraser'
 import type {
   RemoteAgentHandle,
   RemoteAgentRegistry,
@@ -62,6 +63,11 @@ export interface ResponseFinalizerOptions {
   readonly remoteAgentRegistry: RemoteAgentRegistry
   readonly eventLogStore: EventLogStore
   readonly slackClient: SlackWebClient
+  // Applied to a remote agent's own task text before it's posted, so it
+  // reads in the same persona/tone as the conversation agent's replies in
+  // the same thread. Omitted means the task text is posted as-is (and
+  // USAGE_LIMIT_TEXT is never run through it either way, see settleTerminal).
+  readonly personaParaphraser?: PersonaParaphraser | undefined
   readonly unknownTaskRetryDelayMs?: number | undefined
   readonly sleep?: ((ms: number) => Promise<void>) | undefined
   readonly logger?: Logger | undefined
@@ -122,6 +128,9 @@ export const createResponseFinalizer = (
     return handles.find((handle) => handle.name === agentName)
   }
 
+  const paraphraseText = (text: string): Promise<string> =>
+    options.personaParaphraser?.paraphrase(text) ?? Promise.resolve(text)
+
   const postToThread = async (
     row: A2aTaskRow,
     text: string,
@@ -166,7 +175,9 @@ export const createResponseFinalizer = (
 
     const errorKind = extractErrorKind(task)
     const text =
-      errorKind === 'usage_limit' ? USAGE_LIMIT_TEXT : extractTaskText(task)
+      errorKind === 'usage_limit'
+        ? USAGE_LIMIT_TEXT
+        : await paraphraseText(extractTaskText(task))
     const posted = await postToThread(row, text)
     if (!posted) {
       try {
@@ -218,7 +229,10 @@ export const createResponseFinalizer = (
       state: 'input-required',
     })
     if (!updated) return 'duplicate'
-    const posted = await postToThread(row, extractTaskText(task))
+    const posted = await postToThread(
+      row,
+      await paraphraseText(extractTaskText(task)),
+    )
     if (!posted) {
       // Unlike settleTerminal, this row never set `settled`, so there is no
       // flag to unsettle; instead this reverts `state` back to what it was

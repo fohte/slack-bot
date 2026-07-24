@@ -11,7 +11,10 @@ import type { PluginDeps, PluginInput } from '@/plugin/deps'
 import { resolvePlugin } from '@/plugin/deps'
 import { createPluginRegistry } from '@/plugin/registry'
 import { createBlogPlugin, loadBlogPluginConfig } from '@/plugins/blog'
-import type { RemoteAgentRegistry } from '@/plugins/llm-agent'
+import type {
+  PersonaParaphraser,
+  RemoteAgentRegistry,
+} from '@/plugins/llm-agent'
 import {
   createA2aNotificationHandler,
   createA2aTaskTracker,
@@ -22,6 +25,7 @@ import {
   createLlmAgentPlugin,
   createMcpTools,
   createOpenCodeGoChatModel,
+  createPersonaParaphraser,
   createRemoteAgentRegistry,
   createResponseFinalizer,
   createTaskDispatcher,
@@ -43,6 +47,10 @@ export interface BootstrapOptions {
   // endpoint's tasks/get calls share the same Agent Card cache the
   // conversation agent's delegation tools already warmed at startup.
   readonly remoteAgentRegistry: RemoteAgentRegistry
+  // Reused (rather than constructed fresh here) so responseFinalizer's
+  // persona paraphrase shares the same stateless model instance the
+  // conversation agent uses for live turns.
+  readonly personaParaphraser: PersonaParaphraser
 }
 
 export const bootstrap = (options: BootstrapOptions): void => {
@@ -108,6 +116,7 @@ export const bootstrap = (options: BootstrapOptions): void => {
     remoteAgentRegistry: options.remoteAgentRegistry,
     eventLogStore,
     slackClient,
+    personaParaphraser: options.personaParaphraser,
     logger,
   })
   const a2aNotificationHandler = createA2aNotificationHandler({
@@ -185,10 +194,16 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
     apiKey: config.conversationAgent.opencodeApiKey,
     model: config.conversationAgent.model,
   })
+  const personaParaphraser = createPersonaParaphraser({
+    model,
+    personaPrompt: config.conversationAgent.personaPrompt,
+    logger,
+  })
   const checkpointer = createConversationCheckpointer(config.databaseUrl)
 
   bootstrap({
     remoteAgentRegistry,
+    personaParaphraser,
     plugins: [
       ({ logger, scheduler }) =>
         createBlogPlugin({
