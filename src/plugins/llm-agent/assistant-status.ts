@@ -58,14 +58,15 @@ export const trySetAssistantStatus = async (
 ): Promise<void> => {
   const logger = options.logger ?? noopLogger
   const result = await ResultAsync.fromPromise(
-    options.slackClient.setAssistantThreadStatus({
-      channel_id: options.target.channelId,
-      thread_ts: options.target.threadTs,
-      status: options.status,
-      ...(options.loadingMessages !== undefined && {
-        loading_messages: [...options.loadingMessages],
-      }),
-    }),
+    (async () =>
+      options.slackClient.setAssistantThreadStatus({
+        channel_id: options.target.channelId,
+        thread_ts: options.target.threadTs,
+        status: options.status,
+        ...(options.loadingMessages !== undefined && {
+          loading_messages: [...options.loadingMessages],
+        }),
+      }))(),
     (caughtErr) =>
       new AssistantStatusError(
         'failed to set assistant thread status',
