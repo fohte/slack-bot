@@ -163,6 +163,7 @@ describe('createGenAiTracingMiddleware', () => {
     await wrapModelCall(
       fakeRequest({ model: 'opencode-go/gpt-5' }, [new HumanMessage('hi')]),
       async () => {
+        // eslint-disable-next-line no-restricted-syntax -- simulates a child span (e.g. undici's HTTP span) created synchronously during the handler call, to verify it nests under the chat span's active context
         trace.getTracer('test').startSpan('POST').end()
         return new AIMessage('hello there')
       },

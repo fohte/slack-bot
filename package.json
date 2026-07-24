@@ -21,7 +21,7 @@
   "devDependencies": {
     "@commitlint/cli": "21.2.1",
     "@eslint/eslintrc": "3.3.5",
-    "@fohte/eslint-config": "0.3.6",
+    "@fohte/eslint-config": "0.3.8",
     "@opentelemetry/context-async-hooks": "2.8.0",
     "@opentelemetry/core": "2.8.0",
     "@tsconfig/node-lts": "24.0.0",

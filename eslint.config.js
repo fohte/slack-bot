@@ -1,7 +1,7 @@
 import { config } from '@fohte/eslint-config'
 
 export default config(
-  { typescript: { typeChecked: true } },
+  { typescript: { typeChecked: true }, opentelemetry: { enabled: true } },
   {
     ignores: ['dist/**'],
   },
@@ -19,19 +19,6 @@ export default config(
           ],
         },
       ],
-    },
-  },
-  {
-    // @fohte/eslint-config doesn't enable no-restricted-syntax yet, so the
-    // disable directives guarding these files' manual tracer.startSpan()
-    // calls are (correctly, for now) flagged as unused. Remove this
-    // override once the rule ships upstream.
-    files: [
-      'src/observability/counters.ts',
-      'src/plugins/llm-agent/conversation-agent/genai-tracing-middleware.ts',
-    ],
-    linterOptions: {
-      reportUnusedDisableDirectives: false,
     },
   },
   {

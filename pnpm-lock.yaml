@@ -103,8 +103,8 @@ importers:
         specifier: 3.3.5
         version: 3.3.5
       '@fohte/eslint-config':
-        specifier: 0.3.6
-        version: 0.3.6(805bc9f98db02f990ba225e2f5b20d7b)
+        specifier: 0.3.8
+        version: 0.3.8(805bc9f98db02f990ba225e2f5b20d7b)
       '@opentelemetry/context-async-hooks':
         specifier: 2.8.0
         version: 2.8.0(@opentelemetry/api@1.9.1)
@@ -950,11 +950,12 @@ packages:
   '@fohte/blog-publisher-contract@0.1.0':
     resolution: {integrity: sha512-TnyklTFBcsWxaBDKAiXLBzblm92NLIFSerUHmFbstxBMoI/MQTTA7HTt7NpEHoZYOqtrjwcLjF0Qt8AIG02KQw==}
 
-  '@fohte/eslint-config@0.3.6':
-    resolution: {integrity: sha512-artqgPAhZy2Xxmkz7/teRYmbXPwAYXsRC5+Bl+rXmHxhMxM6MlJB5TGzjHCKqq9JLHEfWWNcZLQ3PWeuNW1/FA==}
+  '@fohte/eslint-config@0.3.8':
+    resolution: {integrity: sha512-kmY5JrzXyVHfpwN2/ZqaMrv4xgXTYVVUP6knrPJIAIcwtTa9+c+tnbogxaPSYy3WagvPsrJMF0VrzWBNFCdydw==}
     engines: {node: '>=20.19.0 || >=22.13.0'}
     peerDependencies:
       '@eslint-community/eslint-plugin-eslint-comments': ^4.0.0
+      '@ninoseki/eslint-plugin-neverthrow': ^0.2.0
       '@typescript-eslint/eslint-plugin': ^8.60.0
       '@typescript-eslint/parser': ^8.60.0
       '@vitest/eslint-plugin': ^1.0.0
@@ -964,6 +965,8 @@ packages:
       eslint-plugin-simple-import-sort: ^13.0.0
       typescript: '>=5.0.0'
     peerDependenciesMeta:
+      '@ninoseki/eslint-plugin-neverthrow':
+        optional: true
       typescript:
         optional: true
 
@@ -4855,7 +4858,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  '@fohte/eslint-config@0.3.6(805bc9f98db02f990ba225e2f5b20d7b)':
+  '@fohte/eslint-config@0.3.8(805bc9f98db02f990ba225e2f5b20d7b)':
     dependencies:
       '@eslint-community/eslint-plugin-eslint-comments': 4.7.2(eslint@10.6.0(jiti@2.6.1))
       '@typescript-eslint/eslint-plugin': 8.63.0(@typescript-eslint/parser@8.63.0(eslint@10.6.0(jiti@2.6.1))(typescript@6.0.3))(eslint@10.6.0(jiti@2.6.1))(typescript@6.0.3)
