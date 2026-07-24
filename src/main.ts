@@ -177,10 +177,12 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
   // via the same registry instance's warm cache — by the dispatcher's own
   // task-resume lookups. MCP tools have no such reuse elsewhere, so they're
   // fetched once and passed straight into the tools list below.
-  const [remoteAgentHandles, mcpTools] = await Promise.all([
+  const [remoteAgentHandles, mcpToolsResult] = await Promise.all([
     remoteAgentRegistry.listAgents(),
     createMcpTools({ serverUrls: config.mcpServerUrls, logger }),
   ])
+  if (mcpToolsResult.isErr()) throw mcpToolsResult.error
+  const mcpTools = mcpToolsResult.value
   const model = createOpenCodeGoChatModel({
     apiKey: config.conversationAgent.opencodeApiKey,
     model: config.conversationAgent.model,
