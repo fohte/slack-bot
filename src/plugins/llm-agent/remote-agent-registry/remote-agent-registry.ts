@@ -6,7 +6,6 @@ import { z } from 'zod'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
-import { RemoteAgentResolutionError } from '@/types/errors'
 
 export interface RemoteAgentHandle {
   // Agent Card's own `name`; also recorded as a2a_task.agent_name and used
@@ -92,14 +91,10 @@ export const createRemoteAgentRegistry = (
   const fetchAll = async (): Promise<readonly RemoteAgentHandle[]> => {
     const resolved = await Promise.all(
       options.agentUrls.map((url) =>
-        ResultAsync.fromPromise(
-          resolver.resolve(url),
-          (caughtErr) =>
-            new RemoteAgentResolutionError(
-              `failed to resolve remote agent at ${url}`,
-              caughtErr,
-            ),
-        ).match(
+        ResultAsync.fromThrowable(
+          () => resolver.resolve(url),
+          (error) => error,
+        )().match(
           (handle) => handle,
           (error) => {
             logger.warn(
