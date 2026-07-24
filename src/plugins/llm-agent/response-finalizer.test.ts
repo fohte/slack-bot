@@ -219,6 +219,54 @@ describe('createResponseFinalizer', () => {
       ])
     })
 
+    it('posts the original text and logs a warning if the persona paraphraser itself rejects', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('completed', textMessage('Recorded your meal.')),
+      )
+      const slackClient = createStubSlackClient()
+      const logger = createRecordingLogger()
+      const boom = new Error('paraphrase blew up')
+      const throwingParaphraser: PersonaParaphraser = {
+        paraphrase: () => Promise.reject(boom),
+      }
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        personaParaphraser: throwingParaphraser,
+        logger,
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'Recorded your meal.',
+          blocks: [{ type: 'markdown', text: 'Recorded your meal.' }],
+          loadingMessages: undefined,
+        },
+      ])
+      expect(logger.entries).toEqual([
+        {
+          level: 'warn',
+          payload: {
+            event: 'llm_agent_a2a_finalize_paraphrase_failed',
+            task_id: 'task-1',
+            agent_name: 'meshi',
+            err: boom,
+          },
+          message:
+            'llm-agent failed to paraphrase a finalized task text; posting the original text',
+        },
+      ])
+    })
+
     it('posts only once when the same completed task is observed twice (duplicate push)', async () => {
       const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
       await tracker.recordDelegated(baseTask())

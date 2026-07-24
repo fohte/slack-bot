@@ -16,6 +16,10 @@ export const PARAPHRASE_INSTRUCTION =
   'nothing else.'
 
 export interface PersonaParaphraser {
+  // Must not reject: implementations are expected to fail open internally
+  // (see createPersonaParaphraser below) since callers use this between an
+  // eager settle and a Slack post, where an uncaught rejection could leave
+  // a task settled with no response ever posted.
   paraphrase(text: string): Promise<string>
 }
 

@@ -8,16 +8,27 @@ import {
 } from '@/plugins/llm-agent/persona-paraphraser'
 
 describe('createPersonaParaphraser', () => {
-  it('sends the persona prompt as a system message and returns the model reply', async () => {
+  it('returns the model reply as the paraphrased text', async () => {
     const model = createRecordingChatModel(() => 'にゃん、了解にゃ')
     const paraphraser = createPersonaParaphraser({
       model,
       personaPrompt: 'You are a cheerful cat persona.',
     })
 
-    const result = await paraphraser.paraphrase('Recorded your meal.')
+    expect(await paraphraser.paraphrase('Recorded your meal.')).toBe(
+      'にゃん、了解にゃ',
+    )
+  })
 
-    expect(result).toBe('にゃん、了解にゃ')
+  it('sends the persona prompt plus the paraphrase instruction as a system message', async () => {
+    const model = createRecordingChatModel(() => 'にゃん、了解にゃ')
+    const paraphraser = createPersonaParaphraser({
+      model,
+      personaPrompt: 'You are a cheerful cat persona.',
+    })
+
+    await paraphraser.paraphrase('Recorded your meal.')
+
     expect(
       model.calls.map((call) => call.map((m) => [m.type, m.text])),
     ).toEqual([

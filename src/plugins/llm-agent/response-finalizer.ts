@@ -128,8 +128,32 @@ export const createResponseFinalizer = (
     return handles.find((handle) => handle.name === agentName)
   }
 
-  const paraphraseText = (text: string): Promise<string> =>
-    options.personaParaphraser?.paraphrase(text) ?? Promise.resolve(text)
+  // Defends the fail-open contract at this call site rather than trusting
+  // it of every PersonaParaphraser implementation: this runs between an
+  // eager settle/state-transition and the Slack post, so an uncaught
+  // rejection here would leave the row settled (or stuck at
+  // input-required) with no post ever having gone out and no way for a
+  // later observation to retry it.
+  const paraphraseText = async (
+    row: A2aTaskRow,
+    text: string,
+  ): Promise<string> => {
+    if (options.personaParaphraser === undefined) return text
+    try {
+      return await options.personaParaphraser.paraphrase(text)
+    } catch (error) {
+      logger.warn(
+        {
+          event: 'llm_agent_a2a_finalize_paraphrase_failed',
+          task_id: row.taskId,
+          agent_name: row.agentName,
+          err: error,
+        },
+        'llm-agent failed to paraphrase a finalized task text; posting the original text',
+      )
+      return text
+    }
+  }
 
   const postToThread = async (
     row: A2aTaskRow,
@@ -177,7 +201,7 @@ export const createResponseFinalizer = (
     const text =
       errorKind === 'usage_limit'
         ? USAGE_LIMIT_TEXT
-        : await paraphraseText(extractTaskText(task))
+        : await paraphraseText(row, extractTaskText(task))
     const posted = await postToThread(row, text)
     if (!posted) {
       try {
@@ -231,7 +255,7 @@ export const createResponseFinalizer = (
     if (!updated) return 'duplicate'
     const posted = await postToThread(
       row,
-      await paraphraseText(extractTaskText(task)),
+      await paraphraseText(row, extractTaskText(task)),
     )
     if (!posted) {
       // Unlike settleTerminal, this row never set `settled`, so there is no
