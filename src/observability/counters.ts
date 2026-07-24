@@ -126,6 +126,7 @@ export async function wrapOpencodeCall<T>(
   classifyResponse: (result: T) => ClassifiedOpencodeResponse,
 ): Promise<T> {
   const tracer = trace.getTracer(INSTRUMENTATION_NAME)
+  // eslint-disable-next-line no-restricted-syntax -- put into the active context via context.with() below, so spans created during fn() nest under it correctly
   const span = tracer.startSpan(SPAN_NAME, {
     attributes: {
       'opencode.session_id': ctx.sessionId,

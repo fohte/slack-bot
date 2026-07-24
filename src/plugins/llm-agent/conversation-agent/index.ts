@@ -11,8 +11,8 @@ export {
   createOpenCodeGoChatModel,
   DEFAULT_OPENCODE_GO_BASE_URL,
 } from '@/plugins/llm-agent/conversation-agent/conversation-agent'
-export type { GenAiCallbackHandlerOptions } from '@/plugins/llm-agent/conversation-agent/genai-callback-handler'
-export { GenAiCallbackHandler } from '@/plugins/llm-agent/conversation-agent/genai-callback-handler'
+export type { GenAiTracingMiddlewareOptions } from '@/plugins/llm-agent/conversation-agent/genai-tracing-middleware'
+export { createGenAiTracingMiddleware } from '@/plugins/llm-agent/conversation-agent/genai-tracing-middleware'
 export type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
 export { imageBlockFromResizedImage } from '@/plugins/llm-agent/conversation-agent/image-block'
 export {

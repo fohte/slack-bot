@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 
-import type { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ContentBlock } from '@langchain/core/messages'
 import { HumanMessage } from '@langchain/core/messages'
@@ -10,7 +9,7 @@ import { createAgent } from 'langchain'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
-import { GenAiCallbackHandler } from '@/plugins/llm-agent/conversation-agent/genai-callback-handler'
+import { createGenAiTracingMiddleware } from '@/plugins/llm-agent/conversation-agent/genai-tracing-middleware'
 import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
 import { stripThinkBlocks } from '@/plugins/llm-agent/conversation-agent/strip-think-blocks'
 import { parseConversationThreadId } from '@/plugins/llm-agent/conversation-agent/thread-id'
@@ -92,7 +91,6 @@ export interface ConversationAgentOptions {
   // design; domain agents live behind A2A delegation).
   readonly personaPrompt?: string | undefined
   readonly tools?: CreateAgentTools | undefined
-  readonly genAiCallbackHandler?: BaseCallbackHandler | undefined
   readonly logger?: Logger | undefined
 }
 
@@ -111,9 +109,6 @@ const buildHumanMessageContent = (
 export const createConversationAgent = (
   options: ConversationAgentOptions,
 ): ConversationAgent => {
-  const genAiCallbackHandler =
-    options.genAiCallbackHandler ??
-    new GenAiCallbackHandler({ providerName: GEN_AI_PROVIDER_NAME })
   const logger = options.logger ?? noopLogger
 
   const agent = createAgent({
@@ -121,6 +116,9 @@ export const createConversationAgent = (
     tools: options.tools ?? [],
     checkpointer: options.checkpointer,
     contextSchema: DELEGATION_RUNTIME_CONTEXT_SCHEMA,
+    middleware: [
+      createGenAiTracingMiddleware({ providerName: GEN_AI_PROVIDER_NAME }),
+    ],
     ...(options.personaPrompt !== undefined && options.personaPrompt !== ''
       ? { systemPrompt: options.personaPrompt }
       : {}),
@@ -159,7 +157,6 @@ export const createConversationAgent = (
             },
             images: [...images],
           },
-          callbacks: [genAiCallbackHandler],
         },
       )
       const lastMessage = result.messages.at(-1)

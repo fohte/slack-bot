@@ -36,17 +36,17 @@ export type {
   ConversationThreadKey,
   CreateOpenCodeGoChatModelOptions,
   Delegation,
-  GenAiCallbackHandlerOptions,
+  GenAiTracingMiddlewareOptions,
   ImageBlock,
 } from '@/plugins/llm-agent/conversation-agent'
 export {
   CONVERSATION_CHECKPOINT_SCHEMA,
   createConversationAgent,
   createConversationCheckpointer,
+  createGenAiTracingMiddleware,
   createOpenCodeGoChatModel,
   DEFAULT_OPENCODE_GO_BASE_URL,
   deriveConversationThreadId,
-  GenAiCallbackHandler,
   imageBlockFromResizedImage,
   setupConversationCheckpointSchema,
 } from '@/plugins/llm-agent/conversation-agent'

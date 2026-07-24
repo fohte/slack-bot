@@ -106,8 +106,8 @@ importers:
         specifier: 3.3.5
         version: 3.3.5
       '@fohte/eslint-config':
-        specifier: 0.3.7
-        version: 0.3.7(d068587e65426403608a41bcfd5cf82e)
+        specifier: 0.3.8
+        version: 0.3.8(d068587e65426403608a41bcfd5cf82e)
       '@ninoseki/eslint-plugin-neverthrow':
         specifier: 0.2.0
         version: 0.2.0(eslint@10.6.0(jiti@2.6.1))(typescript@6.0.3)
@@ -956,8 +956,8 @@ packages:
   '@fohte/blog-publisher-contract@0.1.0':
     resolution: {integrity: sha512-TnyklTFBcsWxaBDKAiXLBzblm92NLIFSerUHmFbstxBMoI/MQTTA7HTt7NpEHoZYOqtrjwcLjF0Qt8AIG02KQw==}
 
-  '@fohte/eslint-config@0.3.7':
-    resolution: {integrity: sha512-UMjYUqg8vvSSjZareg318geQmktSqz2YvOIzgYs+GvWypKsVU0Mj0wxoihf4R0hvu6SxTzjuptublc/kZyS/AQ==}
+  '@fohte/eslint-config@0.3.8':
+    resolution: {integrity: sha512-kmY5JrzXyVHfpwN2/ZqaMrv4xgXTYVVUP6knrPJIAIcwtTa9+c+tnbogxaPSYy3WagvPsrJMF0VrzWBNFCdydw==}
     engines: {node: '>=20.19.0 || >=22.13.0'}
     peerDependencies:
       '@eslint-community/eslint-plugin-eslint-comments': ^4.0.0
@@ -4882,7 +4882,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  '@fohte/eslint-config@0.3.7(d068587e65426403608a41bcfd5cf82e)':
+  '@fohte/eslint-config@0.3.8(d068587e65426403608a41bcfd5cf82e)':
     dependencies:
       '@eslint-community/eslint-plugin-eslint-comments': 4.7.2(eslint@10.6.0(jiti@2.6.1))
       '@typescript-eslint/eslint-plugin': 8.63.0(@typescript-eslint/parser@8.63.0(eslint@10.6.0(jiti@2.6.1))(typescript@6.0.3))(eslint@10.6.0(jiti@2.6.1))(typescript@6.0.3)

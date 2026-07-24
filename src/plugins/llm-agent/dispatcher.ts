@@ -293,6 +293,7 @@ export const createTaskDispatcher = (
       resolved.slackClient,
       logger,
     )
+    // eslint-disable-next-line no-restricted-syntax -- span is only used and ended inside the callback below, so it never outlives its own active context
     await tracer.startActiveSpan(
       DISPATCH_SPAN_NAME,
       {
