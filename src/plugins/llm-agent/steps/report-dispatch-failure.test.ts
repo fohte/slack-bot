@@ -43,7 +43,7 @@ describe('reportDispatchFailure', () => {
         channel: 'C1',
         thread: '111.222',
         text: DISPATCH_FAILURE_TEXT,
-        blocks: undefined,
+        blocks: [{ type: 'markdown', text: DISPATCH_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {
