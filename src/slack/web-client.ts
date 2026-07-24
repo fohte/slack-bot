@@ -1,3 +1,4 @@
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import {
   type AssistantThreadsSetStatusArguments,
   type AssistantThreadsSetStatusResponse,
@@ -83,16 +84,22 @@ export const createSlackWebClient = (
   const fetchImpl = options.fetchImpl ?? fetch
 
   return {
-    postMessage: (arg) => callMethod(() => client.chat.postMessage(arg)),
-    updateMessage: (arg) => callMethod(() => client.chat.update(arg)),
-    deleteMessage: (arg) => callMethod(() => client.chat.delete(arg)),
-    openView: (arg) => callMethod(() => client.views.open(arg)),
-    updateView: (arg) => callMethod(() => client.views.update(arg)),
-    pushView: (arg) => callMethod(() => client.views.push(arg)),
+    postMessage: (arg) =>
+      callMethod('chat.postMessage', () => client.chat.postMessage(arg)),
+    updateMessage: (arg) =>
+      callMethod('chat.update', () => client.chat.update(arg)),
+    deleteMessage: (arg) =>
+      callMethod('chat.delete', () => client.chat.delete(arg)),
+    openView: (arg) => callMethod('views.open', () => client.views.open(arg)),
+    updateView: (arg) =>
+      callMethod('views.update', () => client.views.update(arg)),
+    pushView: (arg) => callMethod('views.push', () => client.views.push(arg)),
     postToResponseUrl: (url, payload) =>
       postToResponseUrl(fetchImpl, url, payload),
     setAssistantThreadStatus: (arg) =>
-      callMethod(() => client.assistant.threads.setStatus(arg)),
+      callMethod('assistant.threads.setStatus', () =>
+        client.assistant.threads.setStatus(arg),
+      ),
     downloadFile: (url) => downloadSlackFile(fetchImpl, options.botToken, url),
     getFileInfo: (fileId) => getSlackFileInfo(client, fileId),
   }
@@ -124,8 +131,22 @@ const getSlackFileInfo = async (
   client: WebClient,
   fileId: string,
 ): Promise<SlackFile | undefined> => {
-  const result = await callMethod(() => client.files.info({ file: fileId }))
+  const result = await callMethod('files.info', () =>
+    client.files.info({ file: fileId }),
+  )
   return toSlackFile(result.file)
+}
+
+// Groups every Slack Web API / response_url failure under one Sentry issue
+// per boundary rather than per call site.
+const SLACK_WEB_CLIENT_FINGERPRINT = 'slack.web-client.request-failed'
+
+const reportAndThrow = (
+  err: unknown,
+  extras: Record<string, unknown>,
+): never => {
+  captureWithFingerprint(err, SLACK_WEB_CLIENT_FINGERPRINT, { extras })
+  throw err
 }
 
 const SLACK_FILE_HOST_SUFFIX = '.slack.com'
@@ -140,20 +161,27 @@ const downloadSlackFile = async (
   botToken: string,
   url: string,
 ): Promise<SlackFileDownload> => {
+  const extras = { method: 'downloadFile', url }
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
-    throw new SlackApiError(`invalid slack file URL: ${url}`, {})
+    return reportAndThrow(
+      new SlackApiError(`invalid slack file URL: ${url}`, {}),
+      extras,
+    )
   }
   if (
     parsed.protocol !== 'https:' ||
     (parsed.hostname !== 'slack.com' &&
       !parsed.hostname.endsWith(SLACK_FILE_HOST_SUFFIX))
   ) {
-    throw new SlackApiError(
-      `refusing to download non-Slack URL: ${parsed.hostname}`,
-      {},
+    return reportAndThrow(
+      new SlackApiError(
+        `refusing to download non-Slack URL: ${parsed.hostname}`,
+        {},
+      ),
+      extras,
     )
   }
   let response: Response
@@ -163,15 +191,21 @@ const downloadSlackFile = async (
       headers: { Authorization: `Bearer ${botToken}` },
     })
   } catch (err) {
-    throw new SlackApiError(
-      `slack file download network error: ${err instanceof Error ? err.message : String(err)}`,
-      {},
+    return reportAndThrow(
+      new SlackApiError(
+        `slack file download network error: ${err instanceof Error ? err.message : String(err)}`,
+        {},
+      ),
+      extras,
     )
   }
   if (!response.ok) {
-    throw new SlackApiError(
-      `slack file download failed with HTTP ${String(response.status)}`,
-      { status: response.status },
+    return reportAndThrow(
+      new SlackApiError(
+        `slack file download failed with HTTP ${String(response.status)}`,
+        { status: response.status },
+      ),
+      extras,
     )
   }
   const contentLengthHeader = response.headers.get('content-length')
@@ -181,9 +215,12 @@ const downloadSlackFile = async (
       Number.isFinite(contentLength) &&
       contentLength > SLACK_FILE_DOWNLOAD_MAX_BYTES
     ) {
-      throw new SlackApiError(
-        `slack file too large: ${String(contentLength)} bytes (cap ${String(SLACK_FILE_DOWNLOAD_MAX_BYTES)})`,
-        { status: response.status },
+      return reportAndThrow(
+        new SlackApiError(
+          `slack file too large: ${String(contentLength)} bytes (cap ${String(SLACK_FILE_DOWNLOAD_MAX_BYTES)})`,
+          { status: response.status },
+        ),
+        extras,
       )
     }
   }
@@ -191,9 +228,12 @@ const downloadSlackFile = async (
   try {
     buf = await response.arrayBuffer()
   } catch (err) {
-    throw new SlackApiError(
-      `slack file body read error: ${err instanceof Error ? err.message : String(err)}`,
-      { status: response.status },
+    return reportAndThrow(
+      new SlackApiError(
+        `slack file body read error: ${err instanceof Error ? err.message : String(err)}`,
+        { status: response.status },
+      ),
+      extras,
     )
   }
   return {
@@ -203,18 +243,22 @@ const downloadSlackFile = async (
 }
 
 const callMethod = async <T extends WebAPICallResult>(
+  method: string,
   call: () => Promise<T>,
 ): Promise<T> => {
   try {
     return await call()
   } catch (err) {
     if (err instanceof Error) {
-      throw new SlackApiError(err.message, {
-        slackError: extractSlackError(err),
-        cause: err,
-      })
+      return reportAndThrow(
+        new SlackApiError(err.message, {
+          slackError: extractSlackError(err),
+          cause: err,
+        }),
+        { method },
+      )
     }
-    throw err
+    return reportAndThrow(err, { method })
   }
 }
 
@@ -231,15 +275,21 @@ const postToResponseUrl = async (
   url: string,
   payload: ResponseUrlPayload,
 ): Promise<ResponseUrlResult> => {
+  // response_url embeds a time/use-bounded capability token in its path, so
+  // it must not be forwarded to Sentry.
+  const extras = { method: 'postToResponseUrl' }
   const response = await fetchImpl(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    throw new SlackApiError(
-      `response_url POST failed with HTTP ${String(response.status)}`,
-      { status: response.status },
+    return reportAndThrow(
+      new SlackApiError(
+        `response_url POST failed with HTTP ${String(response.status)}`,
+        { status: response.status },
+      ),
+      extras,
     )
   }
   const text = await response.text()
@@ -260,10 +310,13 @@ const postToResponseUrl = async (
       typeof json['error'] === 'string'
         ? json['error']
         : 'response_url returned ok:false'
-    throw new SlackApiError(`response_url returned error: ${slackError}`, {
-      slackError,
-      status: response.status,
-    })
+    return reportAndThrow(
+      new SlackApiError(`response_url returned error: ${slackError}`, {
+        slackError,
+        status: response.status,
+      }),
+      extras,
+    )
   }
   const channelRaw = json['channel'] ?? json['channel_id']
   const tsRaw = json['ts'] ?? json['message_ts']
