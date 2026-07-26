@@ -135,13 +135,6 @@ export class DuplicateMcpToolNameError extends Error {
   }
 }
 
-export class ThreadSessionStoreError extends Error {
-  override readonly name = 'ThreadSessionStoreError'
-  constructor(message: string, cause?: unknown) {
-    super(message, cause === undefined ? undefined : { cause })
-  }
-}
-
 export class ConversationCheckpointSchemaSetupError extends Error {
   override readonly name = 'ConversationCheckpointSchemaSetupError'
   constructor(message: string, cause?: unknown) {

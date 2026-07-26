@@ -156,9 +156,3 @@ export {
   TASK_RECONCILER_DEFAULT_INTERVAL_MS,
   TASK_RECONCILER_DEFAULT_RETENTION_MS,
 } from '#plugins/llm-agent/task-reconciler'
-export type {
-  ThreadSessionKey,
-  ThreadSessionStore,
-  ThreadSessionUpsert,
-} from '#plugins/llm-agent/thread-session-store'
-export { createThreadSessionStore } from '#plugins/llm-agent/thread-session-store'
