@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { loadBlogPluginConfig } from '@/plugins/blog/config'
-import { ConfigLoadError } from '@/types/errors'
+import { loadBlogPluginConfig } from '#plugins/blog/config'
+import { ConfigLoadError } from '#types/errors'
 
 describe('loadBlogPluginConfig', () => {
   it('loads required env vars and parses allowed user IDs', () => {

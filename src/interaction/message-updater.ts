@@ -1,7 +1,7 @@
 import { errAsync, ResultAsync } from 'neverthrow'
 
-import type { ResponseUrlPayload, SlackWebClient } from '@/slack/web-client'
-import { ResponseUrlExhaustedError, SlackApiError } from '@/types/errors'
+import type { ResponseUrlPayload, SlackWebClient } from '#slack/web-client'
+import { ResponseUrlExhaustedError, SlackApiError } from '#types/errors'
 
 const RESPONSE_URL_TTL_MS = 30 * 60 * 1000
 const RESPONSE_URL_MAX_USES = 5

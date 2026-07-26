@@ -1,17 +1,17 @@
 import type { ApplyResult } from '@fohte/blog-publisher-contract'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createInteractionContext } from '@/interaction/context'
-import { lastBody, makeSlack, nthBody } from '@/plugins/blog/_test-utils'
+import { createInteractionContext } from '#interaction/context'
+import { lastBody, makeSlack, nthBody } from '#plugins/blog/_test-utils'
 import {
   type ApplySuccessInput,
   handleApplyButton,
-} from '@/plugins/blog/handlers/apply-button'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
+} from '#plugins/blog/handlers/apply-button'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type {
   BlockActionPayloadAction,
   BlockActionsPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 const runHandler = async (
   applyResult: ApplyResult,

@@ -4,8 +4,8 @@ import {
   extractInlineFileIds,
   isFileSharedToChannel,
   stripInlineFileIds,
-} from '@/plugins/llm-agent/files'
-import type { SlackFile } from '@/types/slack-payloads'
+} from '#plugins/llm-agent/files'
+import type { SlackFile } from '#types/slack-payloads'
 
 describe('extractInlineFileIds', () => {
   it('extracts a bare Slack file ID from message text', () => {

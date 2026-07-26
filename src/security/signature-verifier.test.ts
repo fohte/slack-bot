@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto'
 
 import { describe, expect, it } from 'vitest'
 
-import { createSignatureVerifier } from '@/security/signature-verifier'
+import { createSignatureVerifier } from '#security/signature-verifier'
 
 const SECRET = 'shared-signing-secret'
 const FIXED_NOW = 1_700_000_000

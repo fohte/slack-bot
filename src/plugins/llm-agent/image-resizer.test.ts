@@ -1,7 +1,7 @@
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
-import { createSharpImageResizer } from '@/plugins/llm-agent/image-resizer'
+import { createSharpImageResizer } from '#plugins/llm-agent/image-resizer'
 
 // mulberry32 PRNG, seeded so the "noisy" fixture bytes (and therefore the
 // exact compressed sizes at each resize attempt) are reproducible across

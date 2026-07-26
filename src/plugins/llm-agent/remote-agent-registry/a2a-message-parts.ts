@@ -1,4 +1,4 @@
-import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
+import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
 
 // Shared between fresh delegations (DelegationToolFactory) and task-resume
 // message/send calls (steps/resume-active-task.ts).

@@ -19,8 +19,8 @@ import {
   WebClient,
 } from '@slack/web-api'
 
-import { SlackApiError } from '@/types/errors'
-import type { SlackFile } from '@/types/slack-payloads'
+import { SlackApiError } from '#types/errors'
+import type { SlackFile } from '#types/slack-payloads'
 
 export interface ResponseUrlPayload {
   text?: string

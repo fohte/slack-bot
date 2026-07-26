@@ -1,13 +1,13 @@
 import { ResultAsync } from 'neverthrow'
 
-import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent'
-import { imageBlockFromResizedImage } from '@/plugins/llm-agent/conversation-agent'
+import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/index'
+import { imageBlockFromResizedImage } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
-} from '@/plugins/llm-agent/dispatcher-deps'
-import { SLACK_FILE_DOWNLOAD_MAX_BYTES } from '@/slack/web-client'
-import type { SlackFile } from '@/types/slack-payloads'
+} from '#plugins/llm-agent/dispatcher-deps'
+import { SLACK_FILE_DOWNLOAD_MAX_BYTES } from '#slack/web-client'
+import type { SlackFile } from '#types/slack-payloads'
 
 // A conservative budget for base64-inlined image content blocks sent to the
 // LLM API, mirroring the per-image / total caps the k8s ConfigMap-era

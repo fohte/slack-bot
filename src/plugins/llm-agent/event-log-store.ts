@@ -2,8 +2,8 @@ import { and, eq, isNotNull, lt, ne } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { ResultAsync } from 'neverthrow'
 
-import { eventLog } from '@/db/schema'
-import { EventLogStoreError } from '@/types/errors'
+import { eventLog } from '#db/schema'
+import { EventLogStoreError } from '#types/errors'
 
 // Caps a single findDispatchedUnresponded query so a large backlog (e.g.
 // during an extended outage) cannot pull an unbounded result set into

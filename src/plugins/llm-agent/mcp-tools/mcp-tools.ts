@@ -2,9 +2,9 @@ import type { DynamicStructuredTool } from '@langchain/core/tools'
 import { MultiServerMCPClient } from '@langchain/mcp-adapters'
 import { err, ok, ResultAsync } from 'neverthrow'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import { DuplicateMcpToolNameError } from '@/types/errors'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import { DuplicateMcpToolNameError } from '#types/errors'
 
 // The MultiServerMCPClient config below is created fresh per server, so
 // this key only needs to be unique within that single-entry map.

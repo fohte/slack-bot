@@ -2,11 +2,11 @@ import type { Plan } from '@fohte/blog-publisher-contract'
 import type { Result } from 'neverthrow'
 import { err, fromThrowable, ok } from 'neverthrow'
 
-import { translateIssues } from '@/plugins/blog/error-translator'
+import { translateIssues } from '#plugins/blog/error-translator'
 import {
   ButtonValueOverflow,
   PlanButtonValueDecodeError,
-} from '@/plugins/blog/errors'
+} from '#plugins/blog/errors'
 
 export const BUTTON_VALUE_LIMIT = 2000
 

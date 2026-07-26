@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { imageBlockFromResizedImage } from '@/plugins/llm-agent/conversation-agent/image-block'
+import { imageBlockFromResizedImage } from '#plugins/llm-agent/conversation-agent/image-block'
 
 describe('imageBlockFromResizedImage', () => {
   it('base64-encodes the bytes and maps jpg to image/jpeg', () => {

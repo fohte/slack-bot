@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { stripThinkBlocks } from '@/plugins/llm-agent/conversation-agent/strip-think-blocks'
+import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
 
 describe('stripThinkBlocks', () => {
   it('removes a leading think block and the whitespace around it', () => {

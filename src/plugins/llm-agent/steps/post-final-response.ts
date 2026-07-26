@@ -3,12 +3,12 @@ import { ResultAsync } from 'neverthrow'
 import {
   CLEAR_STATUS,
   trySetAssistantStatus,
-} from '@/plugins/llm-agent/assistant-status'
+} from '#plugins/llm-agent/assistant-status'
 import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
-} from '@/plugins/llm-agent/dispatcher-deps'
-import { postThreadMessage } from '@/plugins/llm-agent/slack-message-blocks'
+} from '#plugins/llm-agent/dispatcher-deps'
+import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
 
 export interface PostFinalResponseResult {
   // False when event_log markResponded lost the race to another delivery of

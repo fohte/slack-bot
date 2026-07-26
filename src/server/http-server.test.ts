@@ -1,12 +1,12 @@
 import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { noopLogger } from '@/logger/logger'
-import type { InteractionRouter } from '@/router/router'
-import type { SignatureVerifier } from '@/security/signature-verifier'
-import { createDeferred } from '@/server/_test-utils'
-import { createHttpServer } from '@/server/http-server'
-import { createInFlightTasks } from '@/server/in-flight-tasks'
+import { noopLogger } from '#logger/logger'
+import type { InteractionRouter } from '#router/router'
+import type { SignatureVerifier } from '#security/signature-verifier'
+import { createDeferred } from '#server/_test-utils'
+import { createHttpServer } from '#server/http-server'
+import { createInFlightTasks } from '#server/in-flight-tasks'
 
 vi.mock('@fohte/service-kit/observability', () => ({
   captureWithFingerprint: vi.fn(),

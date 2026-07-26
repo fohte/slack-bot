@@ -2,8 +2,8 @@ import { and, desc, eq, inArray, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { err, ok, Result, ResultAsync } from 'neverthrow'
 
-import { a2aTask } from '@/db/schema'
-import { A2aTaskTrackerError } from '@/types/errors'
+import { a2aTask } from '#db/schema'
+import { A2aTaskTrackerError } from '#types/errors'
 
 // Caps a single findUnsettled query so a large backlog (e.g. during an
 // extended reconciler outage) cannot pull an unbounded result set into

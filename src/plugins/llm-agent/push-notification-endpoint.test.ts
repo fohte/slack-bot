@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 
-import { createRecordingLogger } from '@/plugins/llm-agent/_test-utils'
-import { createA2aNotificationHandler } from '@/plugins/llm-agent/push-notification-endpoint'
-import type { ResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
+import { createRecordingLogger } from '#plugins/llm-agent/_test-utils'
+import { createA2aNotificationHandler } from '#plugins/llm-agent/push-notification-endpoint'
+import type { ResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 
 const TOKEN = 'shared-secret'
 

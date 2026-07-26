@@ -1,20 +1,20 @@
 import type { BaseCheckpointSaver } from '@langchain/langgraph'
 
-import type { EventContext } from '@/interaction/event-context'
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
-import type { A2aTaskTracker } from '@/plugins/llm-agent/a2a-task-tracker'
-import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent'
+import type { EventContext } from '#interaction/event-context'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import type { Plugin, SlackAppManifestCommand } from '#plugin/plugin'
+import type { A2aTaskTracker } from '#plugins/llm-agent/a2a-task-tracker'
+import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   EventLogOutcome,
   EventLogStore,
-} from '@/plugins/llm-agent/event-log-store'
+} from '#plugins/llm-agent/event-log-store'
 import {
   extractSlackFiles,
   extractSlackImageFiles,
-} from '@/plugins/llm-agent/files'
-import type { SlackEvent } from '@/types/slack-payloads'
+} from '#plugins/llm-agent/files'
+import type { SlackEvent } from '#types/slack-payloads'
 
 export const LLM_AGENT_PLUGIN_NAME = 'llm-agent'
 

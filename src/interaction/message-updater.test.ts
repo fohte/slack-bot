@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createOriginalUpdater,
   createRefUpdater,
-} from '@/interaction/message-updater'
-import { ResponseUrlExhaustedError } from '@/types/errors'
+} from '#interaction/message-updater'
+import { ResponseUrlExhaustedError } from '#types/errors'
 
 const buildMockClient = () => ({
   postMessage: vi.fn(),

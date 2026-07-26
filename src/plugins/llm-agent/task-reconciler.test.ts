@@ -10,9 +10,9 @@ import {
   createScriptedEventLogStore,
   createStubSlackClient,
   recordingHandleForGetTask,
-} from '@/plugins/llm-agent/_test-utils'
-import type { NewA2aTask } from '@/plugins/llm-agent/a2a-task-tracker'
-import { createResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
+} from '#plugins/llm-agent/_test-utils'
+import type { NewA2aTask } from '#plugins/llm-agent/a2a-task-tracker'
+import { createResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 import {
   DEADLINE_EXCEEDED_TEXT,
   startTaskReconciler,
@@ -20,8 +20,8 @@ import {
   TASK_RECONCILER_DEFAULT_GRACE_MS,
   TASK_RECONCILER_DEFAULT_INTERVAL_MS,
   TASK_RECONCILER_DEFAULT_RETENTION_MS,
-} from '@/plugins/llm-agent/task-reconciler'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/task-reconciler'
+import type { SlackWebClient } from '#slack/web-client'
 
 const NOW = new Date('2026-01-10T00:00:00Z')
 // Well before NOW minus the default grace period, so findUnsettled's

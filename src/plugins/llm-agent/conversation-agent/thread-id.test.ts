@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import {
   deriveConversationThreadId,
   parseConversationThreadId,
-} from '@/plugins/llm-agent/conversation-agent/thread-id'
-import { ConversationThreadIdParseError } from '@/types/errors'
+} from '#plugins/llm-agent/conversation-agent/thread-id'
+import { ConversationThreadIdParseError } from '#types/errors'
 
 describe('deriveConversationThreadId', () => {
   it('joins team, channel, and thread root ts with colons', () => {

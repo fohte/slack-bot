@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Plugin } from '@/plugin/plugin'
-import { createPluginRegistry } from '@/plugin/registry'
+import type { Plugin } from '#plugin/plugin'
+import { createPluginRegistry } from '#plugin/registry'
 import {
   PluginInvalidNameError,
   PluginNameConflictError,
   SlashCommandConflictError,
-} from '@/types/errors'
+} from '#types/errors'
 
 const samplePlugin = (overrides: Partial<Plugin> = {}): Plugin => ({
   name: 'crawl',

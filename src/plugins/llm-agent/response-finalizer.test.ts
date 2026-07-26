@@ -9,14 +9,14 @@ import {
   createScriptedEventLogStore,
   createStubSlackClient,
   recordingHandleForGetTask,
-} from '@/plugins/llm-agent/_test-utils'
-import type { NewA2aTask } from '@/plugins/llm-agent/a2a-task-tracker'
-import type { PersonaParaphraser } from '@/plugins/llm-agent/persona-paraphraser'
+} from '#plugins/llm-agent/_test-utils'
+import type { NewA2aTask } from '#plugins/llm-agent/a2a-task-tracker'
+import type { PersonaParaphraser } from '#plugins/llm-agent/persona-paraphraser'
 import {
   createResponseFinalizer,
   USAGE_LIMIT_TEXT,
-} from '@/plugins/llm-agent/response-finalizer'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/response-finalizer'
+import type { SlackWebClient } from '#slack/web-client'
 
 interface StubPersonaParaphraser extends PersonaParaphraser {
   readonly calls: readonly string[]

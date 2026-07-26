@@ -1,10 +1,10 @@
 import type { BlogPrSummary } from '@fohte/blog-publisher-contract'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createInteractionContext } from '@/interaction/context'
-import { lastBody, makeSlack } from '@/plugins/blog/_test-utils'
-import { handleStatusCommand } from '@/plugins/blog/handlers/status-command'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
+import { createInteractionContext } from '#interaction/context'
+import { lastBody, makeSlack } from '#plugins/blog/_test-utils'
+import { handleStatusCommand } from '#plugins/blog/handlers/status-command'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
 
 const pr = (overrides: Partial<BlogPrSummary> = {}): BlogPrSummary => ({
   number: 1,

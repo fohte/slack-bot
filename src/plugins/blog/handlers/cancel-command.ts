@@ -1,6 +1,6 @@
-import type { InteractionContext } from '@/interaction/context'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
-import type { SlashCommandBody } from '@/types/slack-payloads'
+import type { InteractionContext } from '#interaction/context'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
+import type { SlashCommandBody } from '#types/slack-payloads'
 
 export interface HandleCancelCommandInput {
   readonly ctx: InteractionContext

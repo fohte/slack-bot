@@ -9,7 +9,7 @@ import {
 import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { z } from 'zod'
 
-import { ServiceError, ServiceUnavailable } from '@/plugins/blog/errors'
+import { ServiceError, ServiceUnavailable } from '#plugins/blog/errors'
 
 const ErrorBody = z.object({
   error: z.object({

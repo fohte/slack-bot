@@ -7,22 +7,22 @@ import type { BaseCheckpointSaver } from '@langchain/langgraph'
 import { ChatOpenAI } from '@langchain/openai'
 import { createAgent } from 'langchain'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import { createGenAiTracingMiddleware } from '@/plugins/llm-agent/conversation-agent/genai-tracing-middleware'
-import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
-import { stripThinkBlocks } from '@/plugins/llm-agent/conversation-agent/strip-think-blocks'
-import { parseConversationThreadId } from '@/plugins/llm-agent/conversation-agent/thread-id'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import { createGenAiTracingMiddleware } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
+import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
+import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
+import { parseConversationThreadId } from '#plugins/llm-agent/conversation-agent/thread-id'
 // Delegation is defined in remote-agent-registry (the tool call that
 // produces it) and re-exported below to keep this module's existing public
-// import path (@/plugins/llm-agent/conversation-agent) unchanged.
-import type { Delegation } from '@/plugins/llm-agent/remote-agent-registry'
+// import path (#plugins/llm-agent/conversation-agent/index) unchanged.
+import type { Delegation } from '#plugins/llm-agent/remote-agent-registry/index'
 import {
   DELEGATION_RUNTIME_CONTEXT_SCHEMA,
   extractDelegations,
-} from '@/plugins/llm-agent/remote-agent-registry'
+} from '#plugins/llm-agent/remote-agent-registry/index'
 
-export type { Delegation } from '@/plugins/llm-agent/remote-agent-registry'
+export type { Delegation } from '#plugins/llm-agent/remote-agent-registry/index'
 
 // OpenCode Go's OpenAI-compatible endpoint.
 export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'

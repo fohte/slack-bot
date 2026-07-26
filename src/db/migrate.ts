@@ -1,5 +1,5 @@
-import { runMigrations } from '@/db/migrator'
-import { setupConversationCheckpointSchema } from '@/plugins/llm-agent/conversation-agent/postgres-checkpointer'
+import { runMigrations } from '#db/migrator'
+import { setupConversationCheckpointSchema } from '#plugins/llm-agent/conversation-agent/postgres-checkpointer'
 
 const databaseUrl = process.env['DATABASE_URL']
 if (databaseUrl === undefined || databaseUrl === '') {

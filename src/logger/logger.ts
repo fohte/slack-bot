@@ -1,6 +1,6 @@
 import pino, { type Logger as PinoLogger } from 'pino'
 
-import type { LogLevel } from '@/config/config'
+import type { LogLevel } from '#config/config'
 
 export type LogFields = Record<string, unknown>
 

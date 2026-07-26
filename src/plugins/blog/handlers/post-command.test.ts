@@ -1,19 +1,19 @@
 import type { Note } from '@fohte/blog-publisher-contract'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createInteractionContext } from '@/interaction/context'
+import { createInteractionContext } from '#interaction/context'
 import {
   lastBody,
   makeFailingSlack,
   makeSlack,
-} from '@/plugins/blog/_test-utils'
-import { ServiceUnavailable } from '@/plugins/blog/errors'
+} from '#plugins/blog/_test-utils'
+import { ServiceUnavailable } from '#plugins/blog/errors'
 import {
   buildSelectBlocks,
   handlePostCommand,
-} from '@/plugins/blog/handlers/post-command'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
-import { SlackApiError } from '@/types/errors'
+} from '#plugins/blog/handlers/post-command'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
+import { SlackApiError } from '#types/errors'
 
 const note = (overrides: Partial<Note> = {}): Note => ({
   docId: 'note:1',

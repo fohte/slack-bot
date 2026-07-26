@@ -8,7 +8,7 @@ import {
 } from '@opentelemetry/sdk-metrics'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type * as A2aCounters from '@/observability/a2a-counters'
+import type * as A2aCounters from '#observability/a2a-counters'
 
 // Counters lazily cache the OTel instruments on first use. Each test resets
 // modules and re-imports so the lazy cache picks up the test-local provider
@@ -18,7 +18,7 @@ let recordA2aPushNotification: typeof A2aCounters.recordA2aPushNotification
 
 const importCounters = async (): Promise<void> => {
   vi.resetModules()
-  const mod = await import('@/observability/a2a-counters')
+  const mod = await import('#observability/a2a-counters')
   recordA2aTaskSettled = mod.recordA2aTaskSettled
   recordA2aPushNotification = mod.recordA2aPushNotification
 }

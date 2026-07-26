@@ -1,7 +1,7 @@
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
-import { EventLogPruneError } from '@/types/errors'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
+import { EventLogPruneError } from '#types/errors'
 
 export const EVENT_LOG_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS = 60 * 60 * 1000

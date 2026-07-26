@@ -1,12 +1,12 @@
 import { ResultAsync } from 'neverthrow'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
 import {
   SchedulerDuplicateNameError,
   SchedulerInvalidArgumentError,
   SchedulerLimitError,
-} from '@/types/errors'
+} from '#types/errors'
 
 export type TaskTickResult = { done: false } | { done: true }
 

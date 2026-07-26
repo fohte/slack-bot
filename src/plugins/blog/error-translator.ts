@@ -4,7 +4,7 @@ import {
   ButtonValueOverflow,
   ServiceError,
   ServiceUnavailable,
-} from '@/plugins/blog/errors'
+} from '#plugins/blog/errors'
 
 const BUTTON_VALUE_OVERFLOW_MESSAGE =
   '選択数が多すぎます。25 件以下に絞ってください'

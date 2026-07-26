@@ -6,22 +6,6 @@ export default config(
     ignores: ['dist/**'],
   },
   {
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['./*', '../*'],
-              message:
-                'Please use absolute imports instead of relative imports.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
     files: ['**/*.test.ts', '**/_test-utils.ts', 'tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-type-assertion': 'off',

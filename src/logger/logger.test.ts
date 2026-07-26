@@ -2,7 +2,7 @@ import { Writable } from 'node:stream'
 
 import { describe, expect, it } from 'vitest'
 
-import { createLogger } from '@/logger/logger'
+import { createLogger } from '#logger/logger'
 
 const collect = (): {
   stream: Writable

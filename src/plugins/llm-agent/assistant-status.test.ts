@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { createRecordingLogger } from '@/plugins/llm-agent/_test-utils'
+import { createRecordingLogger } from '#plugins/llm-agent/_test-utils'
 import {
   CLEAR_STATUS,
   trySetAssistantStatus,
-} from '@/plugins/llm-agent/assistant-status'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/assistant-status'
+import type { SlackWebClient } from '#slack/web-client'
 
 interface CapturedCall {
   readonly channel_id: string

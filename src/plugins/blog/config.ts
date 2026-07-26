@@ -1,4 +1,4 @@
-import { ConfigLoadError } from '@/types/errors'
+import { ConfigLoadError } from '#types/errors'
 
 export interface BlogPluginConfig {
   readonly serviceUrl: string

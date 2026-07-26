@@ -1,9 +1,9 @@
 import { ResultAsync } from 'neverthrow'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import type { SlackWebClient } from '@/slack/web-client'
-import { AssistantStatusError } from '@/types/errors'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import type { SlackWebClient } from '#slack/web-client'
+import { AssistantStatusError } from '#types/errors'
 
 // Slack renders this as "<bot name> is thinking..." under the user's
 // message in the Agents & AI Apps split-view.

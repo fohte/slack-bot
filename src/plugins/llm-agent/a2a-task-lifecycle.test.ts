@@ -12,14 +12,14 @@ import {
   createStubRemoteAgent,
   createStubSlackClient,
   TEST_THREAD_KEY as THREAD_KEY,
-} from '@/plugins/llm-agent/_test-utils'
-import { createA2aNotificationHandler } from '@/plugins/llm-agent/push-notification-endpoint'
-import { createDelegationTool } from '@/plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
-import { createResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
+} from '#plugins/llm-agent/_test-utils'
+import { createA2aNotificationHandler } from '#plugins/llm-agent/push-notification-endpoint'
+import { createDelegationTool } from '#plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
+import { createResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 import {
   DEADLINE_EXCEEDED_TEXT,
   startTaskReconciler,
-} from '@/plugins/llm-agent/task-reconciler'
+} from '#plugins/llm-agent/task-reconciler'
 
 // These tests wire the real delegation tool, ResponseFinalizer, and
 // TaskReconciler together against a single in-memory tracker (rather than

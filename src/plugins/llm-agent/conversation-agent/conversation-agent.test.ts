@@ -4,9 +4,9 @@ import { tool } from 'langchain'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import type { LogFields, Logger } from '@/logger/logger'
-import { createRecordingChatModel } from '@/plugins/llm-agent/conversation-agent/_test-utils'
-import { createConversationAgent } from '@/plugins/llm-agent/conversation-agent/conversation-agent'
+import type { LogFields, Logger } from '#logger/logger'
+import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
+import { createConversationAgent } from '#plugins/llm-agent/conversation-agent/conversation-agent'
 
 const createRecordingLogger = (): Logger & {
   readonly warnCalls: LogFields[]

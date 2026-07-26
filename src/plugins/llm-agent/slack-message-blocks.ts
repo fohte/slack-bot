@@ -1,4 +1,4 @@
-import type { SlackWebClient } from '@/slack/web-client'
+import type { SlackWebClient } from '#slack/web-client'
 
 // Slack mrkdwn would otherwise interpret <, >, & inside the response text as
 // user/channel mentions or HTML entities.

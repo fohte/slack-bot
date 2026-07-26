@@ -5,9 +5,9 @@ import {
   EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS,
   EVENT_LOG_DEFAULT_TTL_MS,
   startEventLogRetention,
-} from '@/plugins/llm-agent/event-log-retention'
-import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
-import { EventLogStoreError } from '@/types/errors'
+} from '#plugins/llm-agent/event-log-retention'
+import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
+import { EventLogStoreError } from '#types/errors'
 
 const createStore = (
   pruneImpl: (cutoff: Date) => ResultAsync<number, EventLogStoreError> = () =>

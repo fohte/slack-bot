@@ -2,27 +2,27 @@ import type { Task } from '@a2a-js/sdk'
 import { TaskNotFoundError } from '@a2a-js/sdk/client'
 import { ResultAsync } from 'neverthrow'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import type { A2aReconcilerSettledReason } from '@/observability/a2a-counters'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import type { A2aReconcilerSettledReason } from '#observability/a2a-counters'
 import {
   recordA2aReconcilerSettled,
   recordA2aTaskSettled,
-} from '@/observability/a2a-counters'
+} from '#observability/a2a-counters'
 import type {
   A2aTaskRow,
   A2aTaskTracker,
-} from '@/plugins/llm-agent/a2a-task-tracker'
-import { A2A_TASK_ACTIVE_EXECUTION_STATES } from '@/plugins/llm-agent/a2a-task-tracker'
-import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
+} from '#plugins/llm-agent/a2a-task-tracker'
+import { A2A_TASK_ACTIVE_EXECUTION_STATES } from '#plugins/llm-agent/a2a-task-tracker'
+import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
 import type {
   RemoteAgentHandle,
   RemoteAgentRegistry,
-} from '@/plugins/llm-agent/remote-agent-registry'
-import type { ResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
-import { postThreadMessage } from '@/plugins/llm-agent/slack-message-blocks'
-import type { InFlightTasks } from '@/server/in-flight-tasks'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/remote-agent-registry/index'
+import type { ResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
+import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
+import type { InFlightTasks } from '#server/in-flight-tasks'
+import type { SlackWebClient } from '#slack/web-client'
 
 // Grace period before an unsettled row becomes reconcile-eligible, and how
 // often the reconciler ticks.

@@ -1,7 +1,7 @@
 import type { Result } from 'neverthrow'
 import { err, ok } from 'neverthrow'
 
-import { ConversationThreadIdParseError } from '@/types/errors'
+import { ConversationThreadIdParseError } from '#types/errors'
 
 export interface ConversationThreadKey {
   readonly teamId: string

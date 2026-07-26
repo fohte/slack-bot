@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDeferred } from '@/server/_test-utils'
-import { createInFlightTasks } from '@/server/in-flight-tasks'
+import { createDeferred } from '#server/_test-utils'
+import { createInFlightTasks } from '#server/in-flight-tasks'
 
 describe('createInFlightTasks', () => {
   it('resolves track() to the tracked promise value', async () => {

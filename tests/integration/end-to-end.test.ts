@@ -2,14 +2,14 @@ import { createHmac } from 'node:crypto'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { noopLogger } from '@/logger/logger'
-import type { Plugin } from '@/plugin/plugin'
-import { createPluginRegistry } from '@/plugin/registry'
-import { createInteractionRouter } from '@/router/router'
-import { createSignatureVerifier } from '@/security/signature-verifier'
-import { createHttpServer } from '@/server/http-server'
-import { createInFlightTasks } from '@/server/in-flight-tasks'
-import type { SlackWebClient } from '@/slack/web-client'
+import { noopLogger } from '#logger/logger'
+import type { Plugin } from '#plugin/plugin'
+import { createPluginRegistry } from '#plugin/registry'
+import { createInteractionRouter } from '#router/router'
+import { createSignatureVerifier } from '#security/signature-verifier'
+import { createHttpServer } from '#server/http-server'
+import { createInFlightTasks } from '#server/in-flight-tasks'
+import type { SlackWebClient } from '#slack/web-client'
 
 const SIGNING_SECRET = 'test-secret'
 const FIXED_NOW = 1_700_000_000

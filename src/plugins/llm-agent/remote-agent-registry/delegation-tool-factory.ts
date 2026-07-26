@@ -7,17 +7,17 @@ import type { ToolRuntime } from '@langchain/core/tools'
 import { tool } from 'langchain'
 import { z } from 'zod'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
 import type {
   A2aTaskTracker,
   ThreadKey,
-} from '@/plugins/llm-agent/a2a-task-tracker'
-import { isA2aTaskState } from '@/plugins/llm-agent/a2a-task-tracker'
-import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent/image-block'
-import { toFilePart } from '@/plugins/llm-agent/remote-agent-registry/a2a-message-parts'
-import type { RemoteAgentHandle } from '@/plugins/llm-agent/remote-agent-registry/remote-agent-registry'
-import { SEND_MESSAGE_RESULT_SCHEMA } from '@/plugins/llm-agent/remote-agent-registry/send-message-result'
+} from '#plugins/llm-agent/a2a-task-tracker'
+import { isA2aTaskState } from '#plugins/llm-agent/a2a-task-tracker'
+import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
+import { toFilePart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
+import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
+import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-registry/send-message-result'
 
 export interface Delegation {
   readonly agentName: string

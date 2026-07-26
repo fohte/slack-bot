@@ -2,14 +2,14 @@ import type { CiStatus } from '@fohte/blog-publisher-contract'
 import { okAsync } from 'neverthrow'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { MessageUpdater } from '@/interaction/message-updater'
+import type { MessageUpdater } from '#interaction/message-updater'
 import {
   CI_WATCH_INTERVAL_MS,
   CI_WATCH_MAX_DURATION_MS,
   createCiWatcher,
-} from '@/plugins/blog/ci-watcher'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
-import { createScheduler } from '@/scheduler/scheduler'
+} from '#plugins/blog/ci-watcher'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
+import { createScheduler } from '#scheduler/scheduler'
 
 const flush = async (): Promise<void> => {
   await Promise.resolve()

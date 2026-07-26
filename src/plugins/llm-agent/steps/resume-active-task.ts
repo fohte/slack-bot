@@ -4,16 +4,16 @@ import { TaskNotFoundError } from '@a2a-js/sdk/client'
 import type {
   A2aTaskLifecycle,
   A2aTaskRow,
-} from '@/plugins/llm-agent/a2a-task-tracker'
-import { isA2aTaskState } from '@/plugins/llm-agent/a2a-task-tracker'
-import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent'
+} from '#plugins/llm-agent/a2a-task-tracker'
+import { isA2aTaskState } from '#plugins/llm-agent/a2a-task-tracker'
+import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
-} from '@/plugins/llm-agent/dispatcher-deps'
-import type { RemoteAgentHandle } from '@/plugins/llm-agent/remote-agent-registry'
-import { SEND_MESSAGE_RESULT_SCHEMA } from '@/plugins/llm-agent/remote-agent-registry'
-import { toFilePart } from '@/plugins/llm-agent/remote-agent-registry/a2a-message-parts'
+} from '#plugins/llm-agent/dispatcher-deps'
+import { toFilePart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
+import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/index'
+import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-registry/index'
 
 // Posted directly to Slack (no LLM in the loop to paraphrase it), so this
 // stays generic rather than leaking the underlying error — same rationale
