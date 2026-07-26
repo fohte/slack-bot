@@ -5,9 +5,10 @@ import {
   createRefUpdater,
   type MessageUpdater,
   type SlackMessageRef,
+  toSlackApiError,
 } from '@/interaction/message-updater'
 import type { ResponseUrlPayload, SlackWebClient } from '@/slack/web-client'
-import { FollowUpUnavailableError, SlackApiError } from '@/types/errors'
+import { FollowUpUnavailableError, type SlackApiError } from '@/types/errors'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -117,12 +118,7 @@ export const createInteractionContext = (
       const body: ResponseUrlPayload = applyDefaultEphemeral(payload)
       return ResultAsync.fromPromise(
         options.slackClient.postToResponseUrl(options.responseUrl, body),
-        (caughtErr) =>
-          caughtErr instanceof SlackApiError
-            ? caughtErr
-            : new SlackApiError('postToResponseUrl failed', {
-                cause: caughtErr,
-              }),
+        (caughtErr) => toSlackApiError(caughtErr, 'postToResponseUrl failed'),
       ).map(() => undefined)
     },
     originalUpdater() {

@@ -25,10 +25,13 @@ export interface MessageUpdater {
   delete(): ResultAsync<void, ResponseUrlExhaustedError | SlackApiError>
 }
 
-const toSlackApiError = (caughtErr: unknown): SlackApiError =>
+export const toSlackApiError = (
+  caughtErr: unknown,
+  message = 'Slack API call failed',
+): SlackApiError =>
   caughtErr instanceof SlackApiError
     ? caughtErr
-    : new SlackApiError('Slack API call failed', { cause: caughtErr })
+    : new SlackApiError(message, { cause: caughtErr })
 
 interface ResponseUrlState {
   readonly url: string
