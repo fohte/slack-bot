@@ -1,10 +1,10 @@
-import type { InteractionContext } from '@/interaction/context'
-import { isRecord, renderPlanBlocks } from '@/plugins/blog/plan-presenter'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
+import type { InteractionContext } from '#interaction/context'
+import { isRecord, renderPlanBlocks } from '#plugins/blog/plan-presenter'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type {
   BlockActionPayloadAction,
   BlockActionsPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 export interface HandleSelectSubmitInput {
   readonly ctx: InteractionContext

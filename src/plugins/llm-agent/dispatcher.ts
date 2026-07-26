@@ -1,38 +1,35 @@
 import { SpanStatusCode, trace } from '@opentelemetry/api'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import type {
-  A2aTaskRow,
-  ThreadKey,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import type { A2aTaskRow, ThreadKey } from '#plugins/llm-agent/a2a-task-tracker'
 import {
   INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
-} from '@/plugins/llm-agent/assistant-status'
-import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent'
-import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent'
+} from '#plugins/llm-agent/assistant-status'
+import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/index'
+import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   DispatcherDeps,
   ResolvedDispatcherDeps,
   SlackEnvelope,
-} from '@/plugins/llm-agent/dispatcher-deps'
-import { resolveDeps } from '@/plugins/llm-agent/dispatcher-deps'
+} from '#plugins/llm-agent/dispatcher-deps'
+import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import {
   extractInlineFileIds,
   extractSlackImageFiles,
   isFileSharedToChannel,
   isImageFile,
   stripInlineFileIds,
-} from '@/plugins/llm-agent/files'
-import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
-import { postFinalResponse } from '@/plugins/llm-agent/steps/post-final-response'
-import { reportDispatchFailure } from '@/plugins/llm-agent/steps/report-dispatch-failure'
-import { resolveImageBlocks } from '@/plugins/llm-agent/steps/resolve-image-blocks'
-import { resumeActiveTask } from '@/plugins/llm-agent/steps/resume-active-task'
-import type { InFlightTasks } from '@/server/in-flight-tasks'
-import type { SlackWebClient } from '@/slack/web-client'
-import type { SlackFile } from '@/types/slack-payloads'
+} from '#plugins/llm-agent/files'
+import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
+import { postFinalResponse } from '#plugins/llm-agent/steps/post-final-response'
+import { reportDispatchFailure } from '#plugins/llm-agent/steps/report-dispatch-failure'
+import { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
+import { resumeActiveTask } from '#plugins/llm-agent/steps/resume-active-task'
+import type { InFlightTasks } from '#server/in-flight-tasks'
+import type { SlackWebClient } from '#slack/web-client'
+import type { SlackFile } from '#types/slack-payloads'
 
 const TRACER_NAME = 'slack-bot'
 const DISPATCH_SPAN_NAME = 'slack.mention.handle'

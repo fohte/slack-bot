@@ -1,9 +1,3 @@
 import { defineConfig } from 'vitest/config'
 
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@': '/src',
-    },
-  },
-})
+export default defineConfig({})

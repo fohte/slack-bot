@@ -1,8 +1,8 @@
 import { err, ok } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createInteractionContext } from '@/interaction/context'
-import { FollowUpUnavailableError } from '@/types/errors'
+import { createInteractionContext } from '#interaction/context'
+import { FollowUpUnavailableError } from '#types/errors'
 
 const buildMockClient = () => ({
   postMessage: vi.fn(),

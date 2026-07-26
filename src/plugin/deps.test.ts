@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { PluginDeps } from '@/plugin/deps'
-import { resolvePlugin } from '@/plugin/deps'
-import type { Plugin } from '@/plugin/plugin'
+import type { PluginDeps } from '#plugin/deps'
+import { resolvePlugin } from '#plugin/deps'
+import type { Plugin } from '#plugin/plugin'
 
 const stubDeps = (): PluginDeps =>
   ({

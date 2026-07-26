@@ -7,10 +7,10 @@ import {
   createScriptedEventLogStore,
   createStubSlackClient,
   TEST_ENV,
-} from '@/plugins/llm-agent/_test-utils'
-import { resolveDeps } from '@/plugins/llm-agent/dispatcher-deps'
-import { postFinalResponse } from '@/plugins/llm-agent/steps/post-final-response'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/_test-utils'
+import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
+import { postFinalResponse } from '#plugins/llm-agent/steps/post-final-response'
+import type { SlackWebClient } from '#slack/web-client'
 
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
   resolveDeps({

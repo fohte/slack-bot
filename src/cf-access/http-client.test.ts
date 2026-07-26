@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createCloudflareAccessHttpClientFactory } from '@/cf-access/http-client'
-import { loadConfig } from '@/config/config'
-import { CfAccessAuthError } from '@/types/errors'
+import { createCloudflareAccessHttpClientFactory } from '#cf-access/http-client'
+import { loadConfig } from '#config/config'
+import { CfAccessAuthError } from '#types/errors'
 
 const baseEnv = {
   SLACK_SIGNING_SECRET: 'sig',

@@ -1,9 +1,9 @@
 import type { BlogPrSummary } from '@fohte/blog-publisher-contract'
 
-import type { InteractionContext } from '@/interaction/context'
-import { escapeMrkdwn } from '@/plugins/blog/plan-presenter'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
-import type { SlashCommandBody } from '@/types/slack-payloads'
+import type { InteractionContext } from '#interaction/context'
+import { escapeMrkdwn } from '#plugins/blog/plan-presenter'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
+import type { SlashCommandBody } from '#types/slack-payloads'
 
 const MAX_PRS_PER_BLOCK = 20
 

@@ -20,26 +20,26 @@ import {
   taskResult,
   TEST_ENV,
   TEST_THREAD_KEY,
-} from '@/plugins/llm-agent/_test-utils'
-import type { A2aTaskRow } from '@/plugins/llm-agent/a2a-task-tracker'
-import type { TaskDispatcherOptions } from '@/plugins/llm-agent/dispatcher'
+} from '#plugins/llm-agent/_test-utils'
+import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
+import type { TaskDispatcherOptions } from '#plugins/llm-agent/dispatcher'
 import {
   createTaskDispatcher,
   envelopeFromAccepted,
   resolveInlineImageFiles,
-} from '@/plugins/llm-agent/dispatcher'
-import type { LlmAgentAcceptedEvent } from '@/plugins/llm-agent/plugin'
-import { DISPATCH_FAILURE_TEXT } from '@/plugins/llm-agent/steps/report-dispatch-failure'
-import { createDeferred } from '@/server/_test-utils'
-import { createInFlightTasks } from '@/server/in-flight-tasks'
-import type { SlackWebClient } from '@/slack/web-client'
-import { A2aTaskTrackerError } from '@/types/errors'
+} from '#plugins/llm-agent/dispatcher'
+import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
+import { DISPATCH_FAILURE_TEXT } from '#plugins/llm-agent/steps/report-dispatch-failure'
+import { createDeferred } from '#server/_test-utils'
+import { createInFlightTasks } from '#server/in-flight-tasks'
+import type { SlackWebClient } from '#slack/web-client'
+import { A2aTaskTrackerError } from '#types/errors'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
   SlackFile,
   SlackMessageEvent,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 const noopLogger = {
   debug() {},

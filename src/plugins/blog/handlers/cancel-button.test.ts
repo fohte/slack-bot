@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { createInteractionContext } from '@/interaction/context'
-import { lastBody, makeSlack } from '@/plugins/blog/_test-utils'
-import { handleCancelButton } from '@/plugins/blog/handlers/cancel-button'
+import { createInteractionContext } from '#interaction/context'
+import { lastBody, makeSlack } from '#plugins/blog/_test-utils'
+import { handleCancelButton } from '#plugins/blog/handlers/cancel-button'
 import type {
   BlockActionPayloadAction,
   BlockActionsPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 describe('CancelButtonHandler', () => {
   it('patches dismissal message', async () => {

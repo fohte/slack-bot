@@ -6,9 +6,9 @@ import {
   type MessageUpdater,
   type SlackMessageRef,
   toSlackApiError,
-} from '@/interaction/message-updater'
-import type { ResponseUrlPayload, SlackWebClient } from '@/slack/web-client'
-import { FollowUpUnavailableError, type SlackApiError } from '@/types/errors'
+} from '#interaction/message-updater'
+import type { ResponseUrlPayload, SlackWebClient } from '#slack/web-client'
+import { FollowUpUnavailableError, type SlackApiError } from '#types/errors'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -16,7 +16,7 @@ import type {
   SlashCommandBody,
   ViewClosedPayload,
   ViewSubmissionPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 export type InteractionSource =
   | { kind: 'slash_command'; command: string; body: SlashCommandBody }

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createScheduler } from '@/scheduler/scheduler'
+import { createScheduler } from '#scheduler/scheduler'
 import {
   SchedulerDuplicateNameError,
   SchedulerInvalidArgumentError,
   SchedulerLimitError,
-} from '@/types/errors'
+} from '#types/errors'
 
 const flush = async (): Promise<void> => {
   await Promise.resolve()

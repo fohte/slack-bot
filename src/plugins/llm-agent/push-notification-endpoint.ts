@@ -3,10 +3,10 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Context } from 'hono'
 import { z } from 'zod'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import { recordA2aPushNotification } from '@/observability/a2a-counters'
-import type { ResponseFinalizer } from '@/plugins/llm-agent/response-finalizer'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import { recordA2aPushNotification } from '#observability/a2a-counters'
+import type { ResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 
 const NOTIFICATION_TOKEN_HEADER = 'x-a2a-notification-token'
 

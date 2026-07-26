@@ -1,15 +1,15 @@
-import type { CloudflareAccessHttpClientFactory } from '@/cf-access/http-client'
-import type { Config } from '@/config/config'
-import type { Logger } from '@/logger/logger'
-import type { Plugin } from '@/plugin/plugin'
+import type { CloudflareAccessHttpClientFactory } from '#cf-access/http-client'
+import type { Config } from '#config/config'
+import type { Logger } from '#logger/logger'
+import type { Plugin } from '#plugin/plugin'
 import type {
   A2aTaskTracker,
   EventLogStore,
   ThreadSessionStore,
-} from '@/plugins/llm-agent'
-import type { InMemoryScheduler } from '@/scheduler/scheduler'
-import type { InFlightTasks } from '@/server/in-flight-tasks'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/index'
+import type { InMemoryScheduler } from '#scheduler/scheduler'
+import type { InFlightTasks } from '#server/in-flight-tasks'
+import type { SlackWebClient } from '#slack/web-client'
 
 export interface PluginDeps {
   readonly config: Config

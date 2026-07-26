@@ -1,5 +1,5 @@
-import type { InteractionContext } from '@/interaction/context'
-import type { EventContext } from '@/interaction/event-context'
+import type { InteractionContext } from '#interaction/context'
+import type { EventContext } from '#interaction/event-context'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -8,7 +8,7 @@ import type {
   SlashCommandBody,
   ViewClosedPayload,
   ViewSubmissionPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 export interface SlackAppManifestCommand {
   readonly command: string

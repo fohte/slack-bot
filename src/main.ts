@@ -1,20 +1,20 @@
-import '@/bootstrap'
+import '#bootstrap'
 
 import { serve } from '@hono/node-server'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 
-import { createCloudflareAccessHttpClientFactory } from '@/cf-access/http-client'
-import { loadConfig } from '@/config/config'
-import { createLogger } from '@/logger/logger'
-import type { PluginDeps, PluginInput } from '@/plugin/deps'
-import { resolvePlugin } from '@/plugin/deps'
-import { createPluginRegistry } from '@/plugin/registry'
-import { createBlogPlugin, loadBlogPluginConfig } from '@/plugins/blog'
+import { createCloudflareAccessHttpClientFactory } from '#cf-access/http-client'
+import { loadConfig } from '#config/config'
+import { createLogger } from '#logger/logger'
+import type { PluginDeps, PluginInput } from '#plugin/deps'
+import { resolvePlugin } from '#plugin/deps'
+import { createPluginRegistry } from '#plugin/registry'
+import { createBlogPlugin, loadBlogPluginConfig } from '#plugins/blog/index'
 import type {
   PersonaParaphraser,
   RemoteAgentRegistry,
-} from '@/plugins/llm-agent'
+} from '#plugins/llm-agent/index'
 import {
   createA2aNotificationHandler,
   createA2aTaskTracker,
@@ -32,14 +32,14 @@ import {
   createThreadSessionStore,
   startEventLogRetention,
   startTaskReconciler,
-} from '@/plugins/llm-agent'
-import { createInteractionRouter } from '@/router/router'
-import { createScheduler } from '@/scheduler/scheduler'
-import { createSignatureVerifier } from '@/security/signature-verifier'
-import { createHttpServer } from '@/server/http-server'
-import { createInFlightTasks } from '@/server/in-flight-tasks'
-import { createShutdownHandler } from '@/server/shutdown'
-import { createSlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/index'
+import { createInteractionRouter } from '#router/router'
+import { createScheduler } from '#scheduler/scheduler'
+import { createSignatureVerifier } from '#security/signature-verifier'
+import { createHttpServer } from '#server/http-server'
+import { createInFlightTasks } from '#server/in-flight-tasks'
+import { createShutdownHandler } from '#server/shutdown'
+import { createSlackWebClient } from '#slack/web-client'
 
 export interface BootstrapOptions {
   readonly plugins?: readonly PluginInput[]

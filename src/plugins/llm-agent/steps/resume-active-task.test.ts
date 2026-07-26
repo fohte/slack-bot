@@ -13,13 +13,13 @@ import {
   taskResult,
   TEST_ENV,
   TEST_THREAD_KEY,
-} from '@/plugins/llm-agent/_test-utils'
-import type { A2aTaskRow } from '@/plugins/llm-agent/a2a-task-tracker'
-import { resolveDeps } from '@/plugins/llm-agent/dispatcher-deps'
+} from '#plugins/llm-agent/_test-utils'
+import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
+import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import {
   RESUME_SEND_FAILURE_TEXT,
   resumeActiveTask,
-} from '@/plugins/llm-agent/steps/resume-active-task'
+} from '#plugins/llm-agent/steps/resume-active-task'
 
 const ACTIVE_TASK: A2aTaskRow = {
   ...TEST_THREAD_KEY,

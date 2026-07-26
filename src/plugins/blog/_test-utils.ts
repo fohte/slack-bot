@@ -4,7 +4,7 @@ import type {
   ResponseUrlPayload,
   ResponseUrlResult,
   SlackWebClient,
-} from '@/slack/web-client'
+} from '#slack/web-client'
 
 export interface TestSlack {
   readonly client: SlackWebClient

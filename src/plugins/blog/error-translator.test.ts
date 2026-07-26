@@ -4,12 +4,12 @@ import {
   translateApplyFailure,
   translateException,
   translateIssue,
-} from '@/plugins/blog/error-translator'
+} from '#plugins/blog/error-translator'
 import {
   ButtonValueOverflow,
   ServiceError,
   ServiceUnavailable,
-} from '@/plugins/blog/errors'
+} from '#plugins/blog/errors'
 
 describe('ErrorTranslator', () => {
   it('translates known issue codes to Japanese', () => {

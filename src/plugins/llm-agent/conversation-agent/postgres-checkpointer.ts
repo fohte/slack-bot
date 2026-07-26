@@ -1,7 +1,7 @@
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres'
 import { ResultAsync } from 'neverthrow'
 
-import { ConversationCheckpointSchemaSetupError } from '@/types/errors'
+import { ConversationCheckpointSchemaSetupError } from '#types/errors'
 
 // LangGraph owns this schema end-to-end (tables are created by
 // PostgresSaver.setup(), not by a Drizzle migration); Drizzle-managed tables

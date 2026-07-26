@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { loadConfig } from '@/config/config'
-import { ConfigLoadError } from '@/types/errors'
+import { loadConfig } from '#config/config'
+import { ConfigLoadError } from '#types/errors'
 
 const baseEnv = {
   SLACK_SIGNING_SECRET: 'sig',

@@ -1,11 +1,11 @@
 import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { type Context, Hono } from 'hono'
 
-import type { Logger } from '@/logger/logger'
-import type { InteractionRouter, RouterResult } from '@/router/router'
-import type { SignatureVerifier } from '@/security/signature-verifier'
-import { createHealthEndpoint, type HealthEndpoint } from '@/server/health'
-import type { InFlightTasks } from '@/server/in-flight-tasks'
+import type { Logger } from '#logger/logger'
+import type { InteractionRouter, RouterResult } from '#router/router'
+import type { SignatureVerifier } from '#security/signature-verifier'
+import { createHealthEndpoint, type HealthEndpoint } from '#server/health'
+import type { InFlightTasks } from '#server/in-flight-tasks'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -17,7 +17,7 @@ import type {
   ViewClosedPayload,
   ViewPayloadView,
   ViewSubmissionPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 type Variables = {
   rawBody: string

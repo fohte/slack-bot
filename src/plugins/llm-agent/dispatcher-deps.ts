@@ -1,19 +1,19 @@
 import { randomUUID } from 'node:crypto'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import type { A2aTaskTracker } from '@/plugins/llm-agent/a2a-task-tracker'
-import type { ConversationAgent } from '@/plugins/llm-agent/conversation-agent'
-import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
-import type { ImageResizer } from '@/plugins/llm-agent/image-resizer'
-import { createSharpImageResizer } from '@/plugins/llm-agent/image-resizer'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import type { A2aTaskTracker } from '#plugins/llm-agent/a2a-task-tracker'
+import type { ConversationAgent } from '#plugins/llm-agent/conversation-agent/index'
+import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
+import type { ImageResizer } from '#plugins/llm-agent/image-resizer'
+import { createSharpImageResizer } from '#plugins/llm-agent/image-resizer'
 import type {
   DelegationPushNotificationConfig,
   RemoteAgentRegistry,
-} from '@/plugins/llm-agent/remote-agent-registry'
-import { DEFAULT_A2A_TASK_DEADLINE_MS } from '@/plugins/llm-agent/remote-agent-registry'
-import type { SlackWebClient } from '@/slack/web-client'
-import type { SlackFile } from '@/types/slack-payloads'
+} from '#plugins/llm-agent/remote-agent-registry/index'
+import { DEFAULT_A2A_TASK_DEADLINE_MS } from '#plugins/llm-agent/remote-agent-registry/index'
+import type { SlackWebClient } from '#slack/web-client'
+import type { SlackFile } from '#types/slack-payloads'
 
 export const DEFAULT_SUCCESS_FALLBACK =
   '(the assistant did not produce a reply)'

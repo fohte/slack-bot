@@ -1,8 +1,8 @@
 import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ServiceError, ServiceUnavailable } from '@/plugins/blog/errors'
-import { createBlogServiceClient } from '@/plugins/blog/service-client'
+import { ServiceError, ServiceUnavailable } from '#plugins/blog/errors'
+import { createBlogServiceClient } from '#plugins/blog/service-client'
 
 vi.mock('@fohte/service-kit/observability', () => ({
   captureWithFingerprint: vi.fn(),

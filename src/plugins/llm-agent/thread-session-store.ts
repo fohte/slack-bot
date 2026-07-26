@@ -2,8 +2,8 @@ import { and, eq, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { ResultAsync } from 'neverthrow'
 
-import { threadSessionMap } from '@/db/schema'
-import { ThreadSessionStoreError } from '@/types/errors'
+import { threadSessionMap } from '#db/schema'
+import { ThreadSessionStoreError } from '#types/errors'
 
 export interface ThreadSessionKey {
   readonly slackTeamId: string

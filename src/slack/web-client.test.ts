@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createSlackWebClient,
   SLACK_FILE_DOWNLOAD_MAX_BYTES,
-} from '@/slack/web-client'
-import { SlackApiError } from '@/types/errors'
+} from '#slack/web-client'
+import { SlackApiError } from '#types/errors'
 
 vi.mock('@fohte/service-kit/observability', () => ({
   captureWithFingerprint: vi.fn(),

@@ -5,13 +5,13 @@ import {
   createInteractionContext,
   type InteractionContext,
   type InteractionSource,
-} from '@/interaction/context'
-import type { EventContext } from '@/interaction/event-context'
-import type { SlackMessageRef } from '@/interaction/message-updater'
-import type { Logger } from '@/logger/logger'
-import type { Plugin } from '@/plugin/plugin'
-import type { PluginRegistry } from '@/plugin/registry'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#interaction/context'
+import type { EventContext } from '#interaction/event-context'
+import type { SlackMessageRef } from '#interaction/message-updater'
+import type { Logger } from '#logger/logger'
+import type { Plugin } from '#plugin/plugin'
+import type { PluginRegistry } from '#plugin/registry'
+import type { SlackWebClient } from '#slack/web-client'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -21,7 +21,7 @@ import type {
   SlashCommandBody,
   ViewClosedPayload,
   ViewSubmissionPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 export type RouterResult =
   | { status: 200; body?: AckPayload | undefined }

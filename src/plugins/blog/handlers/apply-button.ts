@@ -1,21 +1,21 @@
-import type { InteractionContext } from '@/interaction/context'
-import type { MessageUpdater } from '@/interaction/message-updater'
+import type { InteractionContext } from '#interaction/context'
+import type { MessageUpdater } from '#interaction/message-updater'
 import {
   translateApplyFailure,
   translateException,
-} from '@/plugins/blog/error-translator'
+} from '#plugins/blog/error-translator'
 import {
   decodeDocIds,
   renderAlreadyAppliedBlocks,
   renderAppliedBlocks,
   renderApplyingBlocks,
   renderPlanBlocks,
-} from '@/plugins/blog/plan-presenter'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
+} from '#plugins/blog/plan-presenter'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type {
   BlockActionPayloadAction,
   BlockActionsPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 export interface HandleApplyButtonInput {
   readonly ctx: InteractionContext

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ButtonValueOverflow,
   PlanButtonValueDecodeError,
-} from '@/plugins/blog/errors'
+} from '#plugins/blog/errors'
 import {
   BUTTON_VALUE_LIMIT,
   decodeDocIds,
@@ -14,7 +14,7 @@ import {
   renderAppliedBlocks,
   renderCancelledBlocks,
   renderPlanBlocks,
-} from '@/plugins/blog/plan-presenter'
+} from '#plugins/blog/plan-presenter'
 
 const plan = (overrides: Partial<Plan> = {}): Plan => ({
   signature: 'abcd1234',

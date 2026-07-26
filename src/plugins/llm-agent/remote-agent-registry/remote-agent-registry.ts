@@ -4,8 +4,8 @@ import { ClientFactory } from '@a2a-js/sdk/client'
 import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
 
 export interface RemoteAgentHandle {
   // Agent Card's own `name`; also recorded as a2a_task.agent_name and used

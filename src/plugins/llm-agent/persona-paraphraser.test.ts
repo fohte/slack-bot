@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { createRecordingLogger } from '@/plugins/llm-agent/_test-utils'
-import { createRecordingChatModel } from '@/plugins/llm-agent/conversation-agent/_test-utils'
+import { createRecordingLogger } from '#plugins/llm-agent/_test-utils'
+import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import {
   createPersonaParaphraser,
   PARAPHRASE_INSTRUCTION,
-} from '@/plugins/llm-agent/persona-paraphraser'
+} from '#plugins/llm-agent/persona-paraphraser'
 
 describe('createPersonaParaphraser', () => {
   it('returns the model reply as the paraphrased text', async () => {

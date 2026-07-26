@@ -2,30 +2,30 @@ import type { Part, Task, TextPart } from '@a2a-js/sdk'
 import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import type { A2aPushNotificationResult } from '@/observability/a2a-counters'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import type { A2aPushNotificationResult } from '#observability/a2a-counters'
 import {
   recordA2aPushNotification,
   recordA2aTaskSettled,
-} from '@/observability/a2a-counters'
+} from '#observability/a2a-counters'
 import type {
   A2aTaskRow,
   A2aTaskTerminalState,
   A2aTaskTracker,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+} from '#plugins/llm-agent/a2a-task-tracker'
 import {
   isA2aTaskState,
   isA2aTaskTerminalState,
-} from '@/plugins/llm-agent/a2a-task-tracker'
-import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
-import type { PersonaParaphraser } from '@/plugins/llm-agent/persona-paraphraser'
+} from '#plugins/llm-agent/a2a-task-tracker'
+import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
+import type { PersonaParaphraser } from '#plugins/llm-agent/persona-paraphraser'
 import type {
   RemoteAgentHandle,
   RemoteAgentRegistry,
-} from '@/plugins/llm-agent/remote-agent-registry'
-import { postThreadMessage } from '@/plugins/llm-agent/slack-message-blocks'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/remote-agent-registry/index'
+import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
+import type { SlackWebClient } from '#slack/web-client'
 
 // Posted instead of the task's own message when the remote agent's failure
 // carries metadata.error_kind === 'usage_limit', since the underlying LLM

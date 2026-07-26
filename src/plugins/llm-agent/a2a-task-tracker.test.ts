@@ -1,16 +1,13 @@
 import { ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
-import { createInMemoryA2aTaskTracker as createInMemoryTracker } from '@/plugins/llm-agent/_test-utils'
-import type {
-  NewA2aTask,
-  ThreadKey,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+import { createInMemoryA2aTaskTracker as createInMemoryTracker } from '#plugins/llm-agent/_test-utils'
+import type { NewA2aTask, ThreadKey } from '#plugins/llm-agent/a2a-task-tracker'
 import {
   A2A_TASK_ACTIVE_EXECUTION_STATES,
   FIND_UNSETTLED_LIMIT,
   transitionGuard,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+} from '#plugins/llm-agent/a2a-task-tracker'
 
 const THREAD: ThreadKey = {
   slackTeamId: 'T1',

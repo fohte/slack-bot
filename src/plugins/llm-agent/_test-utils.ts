@@ -2,35 +2,35 @@ import type { AgentCard, Message, MessageSendParams, Task } from '@a2a-js/sdk'
 import type { Client } from '@a2a-js/sdk/client'
 import { okAsync } from 'neverthrow'
 
-import type { Logger } from '@/logger/logger'
+import type { Logger } from '#logger/logger'
 import type {
   A2aTaskLifecycle,
   A2aTaskRow,
   A2aTaskTracker,
   NewA2aTask,
   ThreadKey,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+} from '#plugins/llm-agent/a2a-task-tracker'
 import {
   FIND_UNSETTLED_LIMIT,
   isA2aTaskTerminalState,
   transitionGuard,
-} from '@/plugins/llm-agent/a2a-task-tracker'
+} from '#plugins/llm-agent/a2a-task-tracker'
 import type {
   ConversationAgent,
   ConversationAgentInput,
   ConversationOutcome,
-} from '@/plugins/llm-agent/conversation-agent'
-import type { SlackEnvelope } from '@/plugins/llm-agent/dispatcher-deps'
-import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
+} from '#plugins/llm-agent/conversation-agent/index'
+import type { SlackEnvelope } from '#plugins/llm-agent/dispatcher-deps'
+import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
 import type {
   ImageResizer,
   ResizeOutcome,
-} from '@/plugins/llm-agent/image-resizer'
+} from '#plugins/llm-agent/image-resizer'
 import type {
   RemoteAgentHandle,
   RemoteAgentRegistry,
-} from '@/plugins/llm-agent/remote-agent-registry'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/remote-agent-registry/index'
+import type { SlackWebClient } from '#slack/web-client'
 
 export interface SlackCall {
   readonly kind: 'status' | 'post'

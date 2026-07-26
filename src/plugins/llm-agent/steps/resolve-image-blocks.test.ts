@@ -8,11 +8,11 @@ import {
   createScriptedImageResizer,
   createStubSlackClient,
   TEST_ENV,
-} from '@/plugins/llm-agent/_test-utils'
-import { resolveDeps } from '@/plugins/llm-agent/dispatcher-deps'
-import { resolveImageBlocks } from '@/plugins/llm-agent/steps/resolve-image-blocks'
-import type { SlackWebClient } from '@/slack/web-client'
-import type { SlackFile } from '@/types/slack-payloads'
+} from '#plugins/llm-agent/_test-utils'
+import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
+import { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
+import type { SlackWebClient } from '#slack/web-client'
+import type { SlackFile } from '#types/slack-payloads'
 
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
   resolveDeps({

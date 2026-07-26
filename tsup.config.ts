@@ -13,4 +13,8 @@ export default defineConfig({
   // installed via pnpm and not duplicated into the image.
   bundle: true,
   skipNodeModulesBundle: true,
+  // skipNodeModulesBundle externalizes any non-relative specifier by default,
+  // which would otherwise externalize "#*" subpath imports (they don't start
+  // with "./" or "../") instead of bundling the first-party source they point to.
+  noExternal: [/^#/],
 })

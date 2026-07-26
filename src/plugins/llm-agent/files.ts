@@ -1,4 +1,4 @@
-import type { SlackEvent, SlackFile } from '@/types/slack-payloads'
+import type { SlackEvent, SlackFile } from '#types/slack-payloads'
 
 // SlackFile elements come from the raw event payload via an `unknown`-cast
 // array, so the input is treated as `unknown` here to defensively reject

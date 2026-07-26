@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { RecordingLogger } from '@/plugins/llm-agent/_test-utils'
+import type { RecordingLogger } from '#plugins/llm-agent/_test-utils'
 import {
   createFakeA2aTaskTracker,
   createFakeConversationAgent,
@@ -9,14 +9,14 @@ import {
   createScriptedEventLogStore,
   createStubSlackClient,
   TEST_ENV,
-} from '@/plugins/llm-agent/_test-utils'
-import type { ResolvedDispatcherDeps } from '@/plugins/llm-agent/dispatcher-deps'
-import { resolveDeps } from '@/plugins/llm-agent/dispatcher-deps'
+} from '#plugins/llm-agent/_test-utils'
+import type { ResolvedDispatcherDeps } from '#plugins/llm-agent/dispatcher-deps'
+import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import {
   DISPATCH_FAILURE_TEXT,
   reportDispatchFailure,
-} from '@/plugins/llm-agent/steps/report-dispatch-failure'
-import type { SlackWebClient } from '@/slack/web-client'
+} from '#plugins/llm-agent/steps/report-dispatch-failure'
+import type { SlackWebClient } from '#slack/web-client'
 
 const baseDeps = (
   slackClient: SlackWebClient,

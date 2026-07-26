@@ -2,10 +2,10 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ResultAsync } from 'neverthrow'
 
-import type { Logger } from '@/logger/logger'
-import { noopLogger } from '@/logger/logger'
-import { stripThinkBlocks } from '@/plugins/llm-agent/conversation-agent/strip-think-blocks'
-import { PersonaParaphraseError } from '@/types/errors'
+import type { Logger } from '#logger/logger'
+import { noopLogger } from '#logger/logger'
+import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
+import { PersonaParaphraseError } from '#types/errors'
 
 // Wraps personaPrompt (tone only, see ConversationAgentOptions.personaPrompt)
 // with an instruction to rewrite rather than answer, so the same prompt a

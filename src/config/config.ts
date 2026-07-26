@@ -1,4 +1,4 @@
-import { ConfigLoadError } from '@/types/errors'
+import { ConfigLoadError } from '#types/errors'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 

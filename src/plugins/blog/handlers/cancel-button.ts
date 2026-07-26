@@ -1,9 +1,9 @@
-import type { InteractionContext } from '@/interaction/context'
-import { renderCancelledBlocks } from '@/plugins/blog/plan-presenter'
+import type { InteractionContext } from '#interaction/context'
+import { renderCancelledBlocks } from '#plugins/blog/plan-presenter'
 import type {
   BlockActionPayloadAction,
   BlockActionsPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 export interface HandleCancelButtonInput {
   readonly ctx: InteractionContext

@@ -1,9 +1,9 @@
-import type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
+import type { Plugin, SlackAppManifestCommand } from '#plugin/plugin'
 import {
   PluginInvalidNameError,
   PluginNameConflictError,
   SlashCommandConflictError,
-} from '@/types/errors'
+} from '#types/errors'
 
 const PLUGIN_NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/
 

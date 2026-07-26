@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { noopLogger } from '@/logger/logger'
-import { createDeferred } from '@/server/_test-utils'
-import { createShutdownHandler } from '@/server/shutdown'
+import { noopLogger } from '#logger/logger'
+import { createDeferred } from '#server/_test-utils'
+import { createShutdownHandler } from '#server/shutdown'
 
 describe('createShutdownHandler', () => {
   it('drains in-flight tasks, closes the server, then exits', async () => {

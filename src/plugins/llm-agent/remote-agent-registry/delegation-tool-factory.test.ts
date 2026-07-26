@@ -3,16 +3,16 @@ import type { Client } from '@a2a-js/sdk/client'
 import { ToolMessage } from '@langchain/core/messages'
 import { describe, expect, it } from 'vitest'
 
-import { createFakeA2aTaskTracker } from '@/plugins/llm-agent/_test-utils'
-import type { ThreadKey } from '@/plugins/llm-agent/a2a-task-tracker'
-import type { Delegation } from '@/plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
+import { createFakeA2aTaskTracker } from '#plugins/llm-agent/_test-utils'
+import type { ThreadKey } from '#plugins/llm-agent/a2a-task-tracker'
+import type { Delegation } from '#plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
 import {
   createDelegationTool,
   createDelegationTools,
   delegationToolDescription,
   delegationToolName,
-} from '@/plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
-import type { RemoteAgentHandle } from '@/plugins/llm-agent/remote-agent-registry/remote-agent-registry'
+} from '#plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
+import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
 
 const THREAD_KEY: ThreadKey = {
   slackTeamId: 'T1',

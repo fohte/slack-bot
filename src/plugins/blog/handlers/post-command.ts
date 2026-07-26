@@ -1,8 +1,8 @@
 import type { Note } from '@fohte/blog-publisher-contract'
 
-import type { InteractionContext } from '@/interaction/context'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
-import type { SlashCommandBody } from '@/types/slack-payloads'
+import type { InteractionContext } from '#interaction/context'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
+import type { SlashCommandBody } from '#types/slack-payloads'
 
 const SLACK_STATIC_SELECT_OPTION_LIMIT = 100
 

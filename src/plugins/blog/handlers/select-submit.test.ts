@@ -1,11 +1,11 @@
 import type { Plan } from '@fohte/blog-publisher-contract'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createInteractionContext } from '@/interaction/context'
-import { lastBody, makeSlack } from '@/plugins/blog/_test-utils'
-import { handleSelectSubmit } from '@/plugins/blog/handlers/select-submit'
-import type { BlogServiceClient } from '@/plugins/blog/service-client'
-import type { BlockActionsPayload } from '@/types/slack-payloads'
+import { createInteractionContext } from '#interaction/context'
+import { lastBody, makeSlack } from '#plugins/blog/_test-utils'
+import { handleSelectSubmit } from '#plugins/blog/handlers/select-submit'
+import type { BlogServiceClient } from '#plugins/blog/service-client'
+import type { BlockActionsPayload } from '#types/slack-payloads'
 
 const samplePlan = (errors: Plan['errors'] = []): Plan => ({
   signature: 'sig',

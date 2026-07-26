@@ -1,10 +1,10 @@
 export type {
   CloudflareAccessHttpClient,
   CloudflareAccessHttpClientFactory,
-} from '@/cf-access/http-client'
-export { createCloudflareAccessHttpClientFactory } from '@/cf-access/http-client'
-export type { Config, LogLevel, ServiceTokenPair } from '@/config/config'
-export { loadConfig } from '@/config/config'
+} from '#cf-access/http-client'
+export { createCloudflareAccessHttpClientFactory } from '#cf-access/http-client'
+export type { Config, LogLevel, ServiceTokenPair } from '#config/config'
+export { loadConfig } from '#config/config'
 export type {
   AckPayload,
   FollowUpPayload,
@@ -12,25 +12,25 @@ export type {
   InteractionContextOptions,
   InteractionContextResult,
   InteractionSource,
-} from '@/interaction/context'
-export { createInteractionContext } from '@/interaction/context'
-export type { EventContext } from '@/interaction/event-context'
+} from '#interaction/context'
+export { createInteractionContext } from '#interaction/context'
+export type { EventContext } from '#interaction/event-context'
 export type {
   MessageUpdater,
   SlackMessagePatch,
   SlackMessageRef,
-} from '@/interaction/message-updater'
+} from '#interaction/message-updater'
 export {
   createOriginalUpdater,
   createRefUpdater,
-} from '@/interaction/message-updater'
-export type { LogFields, Logger, LoggerOptions } from '@/logger/logger'
-export { createLogger, noopLogger } from '@/logger/logger'
-export type { PluginDeps, PluginFactory, PluginInput } from '@/plugin/deps'
-export { resolvePlugin } from '@/plugin/deps'
-export type { Plugin, SlackAppManifestCommand } from '@/plugin/plugin'
-export type { PluginRegistry } from '@/plugin/registry'
-export { createPluginRegistry } from '@/plugin/registry'
+} from '#interaction/message-updater'
+export type { LogFields, Logger, LoggerOptions } from '#logger/logger'
+export { createLogger, noopLogger } from '#logger/logger'
+export type { PluginDeps, PluginFactory, PluginInput } from '#plugin/deps'
+export { resolvePlugin } from '#plugin/deps'
+export type { Plugin, SlackAppManifestCommand } from '#plugin/plugin'
+export type { PluginRegistry } from '#plugin/registry'
+export { createPluginRegistry } from '#plugin/registry'
 export type {
   BlogPluginConfig,
   BlogServiceClient,
@@ -38,7 +38,7 @@ export type {
   CiWatcher,
   CiWatcherOptions,
   CiWatchInput,
-} from '@/plugins/blog'
+} from '#plugins/blog/index'
 export {
   BLOG_COMMANDS,
   BLOG_PLUGIN_NAME,
@@ -51,7 +51,7 @@ export {
   loadBlogPluginConfig,
   ServiceError,
   ServiceUnavailable,
-} from '@/plugins/blog'
+} from '#plugins/blog/index'
 export type {
   EventLogOutcome,
   EventLogRecord,
@@ -60,7 +60,7 @@ export type {
   EventLogStore,
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
-} from '@/plugins/llm-agent'
+} from '#plugins/llm-agent/index'
 export {
   createEventLogStore,
   createLlmAgentPlugin,
@@ -70,13 +70,13 @@ export {
   LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
   startEventLogRetention,
-} from '@/plugins/llm-agent'
+} from '#plugins/llm-agent/index'
 export type {
   InteractionRouter,
   RouterOptions,
   RouterResult,
-} from '@/router/router'
-export { createInteractionRouter } from '@/router/router'
+} from '#router/router'
+export { createInteractionRouter } from '#router/router'
 export type {
   InMemoryScheduler,
   ScheduledTaskDef,
@@ -84,32 +84,32 @@ export type {
   TaskHandle,
   TaskStatus,
   TaskTickResult,
-} from '@/scheduler/scheduler'
-export { createScheduler } from '@/scheduler/scheduler'
+} from '#scheduler/scheduler'
+export { createScheduler } from '#scheduler/scheduler'
 export type {
   SignatureVerifier,
   SignatureVerifierOptions,
-} from '@/security/signature-verifier'
-export { createSignatureVerifier } from '@/security/signature-verifier'
-export type { HealthEndpoint } from '@/server/health'
-export { createHealthEndpoint } from '@/server/health'
-export type { HttpServer, HttpServerOptions } from '@/server/http-server'
-export { createHttpServer } from '@/server/http-server'
-export type { InFlightTasks } from '@/server/in-flight-tasks'
-export { createInFlightTasks } from '@/server/in-flight-tasks'
+} from '#security/signature-verifier'
+export { createSignatureVerifier } from '#security/signature-verifier'
+export type { HealthEndpoint } from '#server/health'
+export { createHealthEndpoint } from '#server/health'
+export type { HttpServer, HttpServerOptions } from '#server/http-server'
+export { createHttpServer } from '#server/http-server'
+export type { InFlightTasks } from '#server/in-flight-tasks'
+export { createInFlightTasks } from '#server/in-flight-tasks'
 export type {
   CloseableServer,
   ShutdownDeps,
   ShutdownHandler,
-} from '@/server/shutdown'
-export { createShutdownHandler } from '@/server/shutdown'
+} from '#server/shutdown'
+export { createShutdownHandler } from '#server/shutdown'
 export type {
   ResponseUrlPayload,
   ResponseUrlResult,
   SlackWebClient,
   SlackWebClientOptions,
-} from '@/slack/web-client'
-export { createSlackWebClient } from '@/slack/web-client'
+} from '#slack/web-client'
+export { createSlackWebClient } from '#slack/web-client'
 export {
   AssistantStatusError,
   CfAccessAuthError,
@@ -129,7 +129,7 @@ export {
   SlackApiError,
   SlashCommandConflictError,
   StaleTimestampError,
-} from '@/types/errors'
+} from '#types/errors'
 export type {
   BlockActionPayloadAction,
   BlockActionsPayload,
@@ -146,4 +146,4 @@ export type {
   ViewClosedPayload,
   ViewPayloadView,
   ViewSubmissionPayload,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'

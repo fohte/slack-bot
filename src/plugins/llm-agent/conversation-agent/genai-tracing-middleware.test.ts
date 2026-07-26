@@ -13,7 +13,7 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { createGenAiTracingMiddleware } from '@/plugins/llm-agent/conversation-agent/genai-tracing-middleware'
+import { createGenAiTracingMiddleware } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
 
 interface SpanRow {
   readonly name: string

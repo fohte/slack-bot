@@ -1,4 +1,4 @@
-import type { ResizedImage } from '@/plugins/llm-agent/image-resizer'
+import type { ResizedImage } from '#plugins/llm-agent/image-resizer'
 
 // LLM-facing shape the existing image pipeline's output is converted to
 // before it reaches ConversationAgent.respond.

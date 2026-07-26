@@ -2,35 +2,35 @@ import { emptyCheckpoint, MemorySaver } from '@langchain/langgraph'
 import { errAsync, okAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { EventContext } from '@/interaction/event-context'
-import { noopLogger } from '@/logger/logger'
-import type { Plugin } from '@/plugin/plugin'
-import { createPluginRegistry } from '@/plugin/registry'
-import { createFakeA2aTaskTracker } from '@/plugins/llm-agent/_test-utils'
-import type { A2aTaskRow } from '@/plugins/llm-agent/a2a-task-tracker'
-import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent'
+import type { EventContext } from '#interaction/event-context'
+import { noopLogger } from '#logger/logger'
+import type { Plugin } from '#plugin/plugin'
+import { createPluginRegistry } from '#plugin/registry'
+import { createFakeA2aTaskTracker } from '#plugins/llm-agent/_test-utils'
+import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
+import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   EventLogRecord,
   EventLogStore,
-} from '@/plugins/llm-agent/event-log-store'
+} from '#plugins/llm-agent/event-log-store'
 import type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
-} from '@/plugins/llm-agent/plugin'
+} from '#plugins/llm-agent/plugin'
 import {
   createLlmAgentPlugin,
   LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
-} from '@/plugins/llm-agent/plugin'
-import { createInteractionRouter } from '@/router/router'
-import type { SlackWebClient } from '@/slack/web-client'
-import { A2aTaskTrackerError } from '@/types/errors'
+} from '#plugins/llm-agent/plugin'
+import { createInteractionRouter } from '#router/router'
+import type { SlackWebClient } from '#slack/web-client'
+import { A2aTaskTrackerError } from '#types/errors'
 import type {
   SlackAppMentionEvent,
   SlackEvent,
   SlackEventCallback,
   SlackMessageEvent,
-} from '@/types/slack-payloads'
+} from '#types/slack-payloads'
 
 type OnEventFn = NonNullable<Plugin['onEvent']>
 type OnEventArgs = [EventContext, SlackEvent]
