@@ -16,20 +16,8 @@ const okJson = (body: unknown, status = 200): Response =>
     headers: { 'content-type': 'application/json' },
   })
 
-// Verifies both halves of the boundary contract for a single failure in one
-// call: the exact error re-thrown to the caller, and the exact Sentry report
-// captured for it (same error instance, same fingerprint, same extras).
-const expectReportedFailure = async (
-  promise: Promise<unknown>,
-  expectedError: Error,
-  extras: Record<string, unknown>,
-): Promise<void> => {
-  const thrown = await promise.catch((err: unknown) => err)
-  expect(thrown).toEqual(expectedError)
-  expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
-    [thrown, BLOG_SERVICE_CLIENT_FINGERPRINT, { extras }],
-  ])
-}
+const rejectionOf = async (promise: Promise<unknown>): Promise<unknown> =>
+  promise.catch((err: unknown) => err)
 
 describe('BlogServiceClient', () => {
   beforeEach(() => {
@@ -63,7 +51,7 @@ describe('BlogServiceClient', () => {
     expect(headers['x-trace-id']).toBe('trace-1')
   })
 
-  it('converts HTTP 4xx to ServiceError with code/message and reports it to Sentry', async () => {
+  describe('when buildPlan receives an HTTP 4xx response', () => {
     const fetchImpl = vi.fn(
       async () =>
         new Response(
@@ -76,19 +64,32 @@ describe('BlogServiceClient', () => {
       bearerToken: 't',
       fetchImpl,
     })
-    await expectReportedFailure(
-      client.buildPlan(['a']),
-      new ServiceError('oh no', {
-        status: 400,
-        code: 'Bad',
-        issues: undefined,
-        traceId: undefined,
-      }),
-      { method: 'POST', path: '/plan' },
-    )
+
+    it('converts it to ServiceError with code/message', async () => {
+      const thrown = await rejectionOf(client.buildPlan(['a']))
+      expect(thrown).toEqual(
+        new ServiceError('oh no', {
+          status: 400,
+          code: 'Bad',
+          issues: undefined,
+          traceId: undefined,
+        }),
+      )
+    })
+
+    it('reports it to Sentry', async () => {
+      const thrown = await rejectionOf(client.buildPlan(['a']))
+      expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+        [
+          thrown,
+          BLOG_SERVICE_CLIENT_FINGERPRINT,
+          { extras: { method: 'POST', path: '/plan' } },
+        ],
+      ])
+    })
   })
 
-  it('converts HTTP 5xx to ServiceError and reports it to Sentry', async () => {
+  describe('when listNotes receives an HTTP 5xx response', () => {
     const fetchImpl = vi.fn(
       async () => new Response('boom', { status: 500 }),
     ) as unknown as typeof fetch
@@ -97,19 +98,32 @@ describe('BlogServiceClient', () => {
       bearerToken: 't',
       fetchImpl,
     })
-    await expectReportedFailure(
-      client.listNotes(),
-      new ServiceError('boom', {
-        status: 500,
-        code: 'UnknownError',
-        issues: undefined,
-        traceId: undefined,
-      }),
-      { method: 'GET', path: '/notes' },
-    )
+
+    it('converts it to ServiceError with code/message', async () => {
+      const thrown = await rejectionOf(client.listNotes())
+      expect(thrown).toEqual(
+        new ServiceError('boom', {
+          status: 500,
+          code: 'UnknownError',
+          issues: undefined,
+          traceId: undefined,
+        }),
+      )
+    })
+
+    it('reports it to Sentry', async () => {
+      const thrown = await rejectionOf(client.listNotes())
+      expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+        [
+          thrown,
+          BLOG_SERVICE_CLIENT_FINGERPRINT,
+          { extras: { method: 'GET', path: '/notes' } },
+        ],
+      ])
+    })
   })
 
-  it('throws ServiceUnavailable on network error and reports it to Sentry', async () => {
+  describe('when listNotes hits a network error', () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError('network down')
     }) as unknown as typeof fetch
@@ -118,14 +132,27 @@ describe('BlogServiceClient', () => {
       bearerToken: 't',
       fetchImpl,
     })
-    await expectReportedFailure(
-      client.listNotes(),
-      new ServiceUnavailable(
-        'Failed to reach blog-publisher service: network down',
-        { cause: new TypeError('network down'), traceId: undefined },
-      ),
-      { method: 'GET', path: '/notes' },
-    )
+
+    it('converts it to ServiceUnavailable', async () => {
+      const thrown = await rejectionOf(client.listNotes())
+      expect(thrown).toEqual(
+        new ServiceUnavailable(
+          'Failed to reach blog-publisher service: network down',
+          { cause: new TypeError('network down'), traceId: undefined },
+        ),
+      )
+    })
+
+    it('reports it to Sentry', async () => {
+      const thrown = await rejectionOf(client.listNotes())
+      expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+        [
+          thrown,
+          BLOG_SERVICE_CLIENT_FINGERPRINT,
+          { extras: { method: 'GET', path: '/notes' } },
+        ],
+      ])
+    })
   })
 
   it('cancelPr posts to the right path', async () => {
