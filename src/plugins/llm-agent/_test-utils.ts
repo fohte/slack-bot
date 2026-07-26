@@ -23,10 +23,6 @@ import type {
 import type { SlackEnvelope } from '#plugins/llm-agent/dispatcher-deps'
 import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
 import type {
-  ImageResizer,
-  ResizeOutcome,
-} from '#plugins/llm-agent/image-resizer'
-import type {
   RemoteAgentHandle,
   RemoteAgentRegistry,
 } from '#plugins/llm-agent/remote-agent-registry/index'
@@ -173,23 +169,6 @@ export const TEST_THREAD_KEY: ThreadKey = {
   slackTeamId: TEST_ENV.teamId,
   slackChannelId: TEST_ENV.channelId,
   threadRootTs: TEST_ENV.threadRootTs,
-}
-
-export interface ScriptedImageResizer extends ImageResizer {
-  readonly calls: ReadonlyArray<{ readonly maxBytes: number }>
-}
-
-export const createScriptedImageResizer = (
-  resize: (bytes: Uint8Array, maxBytes: number) => ResizeOutcome,
-): ScriptedImageResizer => {
-  const calls: Array<{ maxBytes: number }> = []
-  return {
-    calls,
-    async resize(bytes, maxBytes) {
-      calls.push({ maxBytes })
-      return resize(bytes, maxBytes)
-    },
-  }
 }
 
 export interface LogEntry {

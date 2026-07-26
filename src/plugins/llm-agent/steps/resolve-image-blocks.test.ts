@@ -5,13 +5,13 @@ import {
   createFakeConversationAgent,
   createFakeRemoteAgentRegistry,
   createScriptedEventLogStore,
-  createScriptedImageResizer,
   createStubSlackClient,
   TEST_ENV,
 } from '#plugins/llm-agent/_test-utils'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
-import type { SlackWebClient } from '#slack/web-client'
+import type { SlackFileDownload, SlackWebClient } from '#slack/web-client'
+import { SlackImageThumbnailUnavailableError } from '#types/errors'
 import type { SlackFile } from '#types/slack-payloads'
 
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
@@ -27,14 +27,14 @@ const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
   })
 
 const createSlackClientWithDownloads = (
-  bytesByUrl: ReadonlyMap<string, Uint8Array>,
+  responsesByUrl: ReadonlyMap<string, SlackFileDownload>,
 ): SlackWebClient =>
   ({
     ...createStubSlackClient(),
     async downloadFile(url: string) {
-      const bytes = bytesByUrl.get(url)
-      if (bytes === undefined) throw new Error(`unexpected url: ${url}`)
-      return { bytes, contentType: 'image/png' }
+      const response = responsesByUrl.get(url)
+      if (response === undefined) throw new Error(`unexpected url: ${url}`)
+      return response
     },
   }) as SlackWebClient
 
@@ -43,27 +43,23 @@ describe('resolveImageBlocks', () => {
     expect(await resolveImageBlocks(baseDeps(), TEST_ENV)).toEqual([])
   })
 
-  it('downloads attached images and returns them as base64 content blocks', async () => {
-    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
-    const jpgBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+  it('downloads the largest available thumbnail and returns it as a base64 content block', async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
     const slackClient = createSlackClientWithDownloads(
       new Map([
-        ['https://files.slack.com/img-1.png', pngBytes],
-        ['https://files.slack.com/img-2.jpg', jpgBytes],
+        [
+          'https://files.slack.com/thumb-1024.jpg',
+          { bytes, contentType: 'image/jpeg' },
+        ],
       ]),
     )
     const images: readonly SlackFile[] = [
       {
         id: 'F1',
-        name: 'screen.png',
-        mimetype: 'image/png',
-        url_private: 'https://files.slack.com/img-1.png',
-      },
-      {
-        id: 'F2',
         name: 'photo.jpg',
         mimetype: 'image/jpeg',
-        url_private: 'https://files.slack.com/img-2.jpg',
+        thumb_1024: 'https://files.slack.com/thumb-1024.jpg',
+        thumb_360: 'https://files.slack.com/thumb-360.jpg',
       },
     ]
 
@@ -73,153 +69,152 @@ describe('resolveImageBlocks', () => {
     })
 
     expect(blocks).toEqual([
-      {
-        base64: Buffer.from(pngBytes).toString('base64'),
-        mimeType: 'image/png',
-      },
-      {
-        base64: Buffer.from(jpgBytes).toString('base64'),
-        mimeType: 'image/jpeg',
-      },
+      { base64: Buffer.from(bytes).toString('base64'), mimeType: 'image/jpeg' },
     ])
   })
 
-  it('drops images whose download fails and continues with the rest', async () => {
-    const okBytes = new Uint8Array([1, 2, 3])
-    const slackClient: SlackWebClient = {
-      ...createStubSlackClient(),
-      async downloadFile(url: string) {
-        if (url === 'https://files.slack.com/bad.png') throw new Error('403')
-        return { bytes: okBytes, contentType: 'image/png' }
-      },
-    } as SlackWebClient
-    const images: readonly SlackFile[] = [
-      {
-        id: 'F1',
-        name: 'bad.png',
-        mimetype: 'image/png',
-        url_private: 'https://files.slack.com/bad.png',
-      },
-      {
-        id: 'F2',
-        name: 'good.png',
-        mimetype: 'image/png',
-        url_private: 'https://files.slack.com/good.png',
-      },
-    ]
-
-    const blocks = await resolveImageBlocks(baseDeps({ slackClient }), {
-      ...TEST_ENV,
-      images,
-    })
-
-    expect(blocks).toEqual([
-      {
-        base64: Buffer.from(okBytes).toString('base64'),
-        mimeType: 'image/png',
-      },
-    ])
-  })
-
-  it('skips downloading images whose declared Slack size exceeds the download guard', async () => {
+  it('falls back to a smaller thumbnail when the largest one exceeds the per-image cap', async () => {
+    const tooBig = new Uint8Array(600 * 1024).fill(7)
+    const fits = new Uint8Array([1, 2, 3, 4])
     const downloadCalls: string[] = []
-    const smallBytes = new Uint8Array([1, 2, 3])
     const slackClient: SlackWebClient = {
       ...createStubSlackClient(),
       async downloadFile(url: string) {
         downloadCalls.push(url)
-        return { bytes: smallBytes, contentType: 'image/png' }
+        if (url === 'https://files.slack.com/thumb-1024.jpg') {
+          return { bytes: tooBig, contentType: 'image/jpeg' }
+        }
+        if (url === 'https://files.slack.com/thumb-480.jpg') {
+          return { bytes: fits, contentType: 'image/jpeg' }
+        }
+        throw new Error(`unexpected url: ${url}`)
       },
     } as SlackWebClient
     const images: readonly SlackFile[] = [
       {
         id: 'F1',
-        name: 'massive.png',
-        mimetype: 'image/png',
-        size: 30 * 1024 * 1024,
-        url_private: 'https://files.slack.com/massive.png',
-      },
-      {
-        id: 'F2',
-        name: 'ok.png',
-        mimetype: 'image/png',
-        size: 1024,
-        url_private: 'https://files.slack.com/ok.png',
+        name: 'photo.jpg',
+        mimetype: 'image/jpeg',
+        thumb_1024: 'https://files.slack.com/thumb-1024.jpg',
+        thumb_480: 'https://files.slack.com/thumb-480.jpg',
       },
     ]
 
-    await resolveImageBlocks(baseDeps({ slackClient }), {
+    const blocks = await resolveImageBlocks(baseDeps({ slackClient }), {
       ...TEST_ENV,
       images,
     })
 
-    expect(downloadCalls).toEqual(['https://files.slack.com/ok.png'])
-  })
-
-  it('resizes a downloaded image that exceeds the per-image cap and uses the resized bytes', async () => {
-    const bigBytes = new Uint8Array(600 * 1024).fill(7)
-    const resizedBytes = new Uint8Array([9, 9, 9, 9])
-    const slackClient = createSlackClientWithDownloads(
-      new Map([['https://files.slack.com/img-1.png', bigBytes]]),
-    )
-    const imageResizer = createScriptedImageResizer(() => ({
-      ok: true,
-      bytes: resizedBytes,
-      ext: 'jpg',
-    }))
-    const images: readonly SlackFile[] = [
-      {
-        id: 'F1',
-        name: 'photo.png',
-        mimetype: 'image/png',
-        url_private: 'https://files.slack.com/img-1.png',
-      },
-    ]
-
-    const blocks = await resolveImageBlocks(
-      baseDeps({ slackClient, imageResizer }),
-      { ...TEST_ENV, images },
-    )
-
-    expect(imageResizer.calls).toEqual([{ maxBytes: 500 * 1024 }])
+    expect(downloadCalls).toEqual([
+      'https://files.slack.com/thumb-1024.jpg',
+      'https://files.slack.com/thumb-480.jpg',
+    ])
     expect(blocks).toEqual([
-      {
-        base64: Buffer.from(resizedBytes).toString('base64'),
-        mimeType: 'image/jpeg',
-      },
+      { base64: Buffer.from(fits).toString('base64'), mimeType: 'image/jpeg' },
     ])
   })
 
-  it('drops an image when it cannot be resized under the cap', async () => {
-    const bigBytes = new Uint8Array(600 * 1024).fill(7)
-    const slackClient = createSlackClientWithDownloads(
-      new Map([['https://files.slack.com/img-1.png', bigBytes]]),
-    )
-    const imageResizer = createScriptedImageResizer(() => ({
-      ok: false,
-      reason: 'still_too_large',
-    }))
+  it('falls back to a smaller thumbnail when the largest one fails to download', async () => {
+    const fits = new Uint8Array([9, 9, 9])
+    const slackClient: SlackWebClient = {
+      ...createStubSlackClient(),
+      async downloadFile(url: string) {
+        if (url === 'https://files.slack.com/thumb-1024.jpg') {
+          throw new Error('403')
+        }
+        if (url === 'https://files.slack.com/thumb-360.jpg') {
+          return { bytes: fits, contentType: 'image/png' }
+        }
+        throw new Error(`unexpected url: ${url}`)
+      },
+    } as SlackWebClient
     const images: readonly SlackFile[] = [
       {
         id: 'F1',
         name: 'photo.png',
         mimetype: 'image/png',
-        url_private: 'https://files.slack.com/img-1.png',
+        thumb_1024: 'https://files.slack.com/thumb-1024.jpg',
+        thumb_360: 'https://files.slack.com/thumb-360.jpg',
       },
     ]
 
-    const blocks = await resolveImageBlocks(
-      baseDeps({ slackClient, imageResizer }),
-      { ...TEST_ENV, images },
-    )
+    const blocks = await resolveImageBlocks(baseDeps({ slackClient }), {
+      ...TEST_ENV,
+      images,
+    })
 
-    expect(blocks).toEqual([])
+    expect(blocks).toEqual([
+      { base64: Buffer.from(fits).toString('base64'), mimeType: 'image/png' },
+    ])
+  })
+
+  it('rejects with SlackImageThumbnailUnavailableError when the file has no thumb_* URL', async () => {
+    const images: readonly SlackFile[] = [
+      { id: 'F1', name: 'photo.jpg', mimetype: 'image/jpeg' },
+    ]
+
+    await expect(
+      resolveImageBlocks(baseDeps(), { ...TEST_ENV, images }),
+    ).rejects.toThrow(SlackImageThumbnailUnavailableError)
+  })
+
+  it('rejects with SlackImageThumbnailUnavailableError when every available thumbnail exceeds the cap', async () => {
+    const tooBig = new Uint8Array(600 * 1024).fill(1)
+    const slackClient = createSlackClientWithDownloads(
+      new Map([
+        [
+          'https://files.slack.com/thumb-360.jpg',
+          { bytes: tooBig, contentType: 'image/jpeg' },
+        ],
+      ]),
+    )
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'photo.jpg',
+        mimetype: 'image/jpeg',
+        thumb_360: 'https://files.slack.com/thumb-360.jpg',
+      },
+    ]
+
+    await expect(
+      resolveImageBlocks(baseDeps({ slackClient }), { ...TEST_ENV, images }),
+    ).rejects.toThrow(SlackImageThumbnailUnavailableError)
+  })
+
+  it("derives the content block's mimeType from the downloaded response, not the original file's declared mimetype", async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+    const slackClient = createSlackClientWithDownloads(
+      new Map([
+        [
+          'https://files.slack.com/thumb-360.jpg',
+          { bytes, contentType: 'image/jpeg' },
+        ],
+      ]),
+    )
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'photo.png',
+        mimetype: 'image/png',
+        thumb_360: 'https://files.slack.com/thumb-360.jpg',
+      },
+    ]
+
+    const blocks = await resolveImageBlocks(baseDeps({ slackClient }), {
+      ...TEST_ENV,
+      images,
+    })
+
+    expect(blocks).toEqual([
+      { base64: Buffer.from(bytes).toString('base64'), mimeType: 'image/jpeg' },
+    ])
   })
 
   it('stops attaching further images once the total byte budget is reached', async () => {
-    // First image exactly fills the per-image cap (500 KiB, no resize
-    // needed); the second exactly fills what's left of the 700 KiB total
-    // budget. The third must never even be downloaded.
+    // First image exactly fills the per-image cap (500 KiB); the second
+    // exactly fills what's left of the 700 KiB total budget. The third must
+    // never even be downloaded.
     const firstBytes = new Uint8Array(500 * 1024).fill(1)
     const secondBytes = new Uint8Array(200 * 1024).fill(2)
     const downloadCalls: string[] = []
@@ -227,10 +222,10 @@ describe('resolveImageBlocks', () => {
       ...createStubSlackClient(),
       async downloadFile(url: string) {
         downloadCalls.push(url)
-        if (url === 'https://files.slack.com/first.png') {
+        if (url === 'https://files.slack.com/first-thumb.png') {
           return { bytes: firstBytes, contentType: 'image/png' }
         }
-        if (url === 'https://files.slack.com/second.png') {
+        if (url === 'https://files.slack.com/second-thumb.png') {
           return { bytes: secondBytes, contentType: 'image/png' }
         }
         throw new Error(`unexpected url: ${url}`)
@@ -241,19 +236,19 @@ describe('resolveImageBlocks', () => {
         id: 'F1',
         name: 'first.png',
         mimetype: 'image/png',
-        url_private: 'https://files.slack.com/first.png',
+        thumb_360: 'https://files.slack.com/first-thumb.png',
       },
       {
         id: 'F2',
         name: 'second.png',
         mimetype: 'image/png',
-        url_private: 'https://files.slack.com/second.png',
+        thumb_360: 'https://files.slack.com/second-thumb.png',
       },
       {
         id: 'F3',
         name: 'third.png',
         mimetype: 'image/png',
-        url_private: 'https://files.slack.com/third.png',
+        thumb_360: 'https://files.slack.com/third-thumb.png',
       },
     ]
 
@@ -263,8 +258,8 @@ describe('resolveImageBlocks', () => {
     })
 
     expect(downloadCalls).toEqual([
-      'https://files.slack.com/first.png',
-      'https://files.slack.com/second.png',
+      'https://files.slack.com/first-thumb.png',
+      'https://files.slack.com/second-thumb.png',
     ])
     expect(blocks).toEqual([
       {

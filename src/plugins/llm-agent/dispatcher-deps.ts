@@ -5,8 +5,6 @@ import { noopLogger } from '#logger/logger'
 import type { A2aTaskTracker } from '#plugins/llm-agent/a2a-task-tracker'
 import type { ConversationAgent } from '#plugins/llm-agent/conversation-agent/index'
 import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
-import type { ImageResizer } from '#plugins/llm-agent/image-resizer'
-import { createSharpImageResizer } from '#plugins/llm-agent/image-resizer'
 import type {
   DelegationPushNotificationConfig,
   RemoteAgentRegistry,
@@ -33,7 +31,6 @@ export interface DispatcherDeps {
   readonly a2aTaskTracker: A2aTaskTracker
   readonly eventLogStore: EventLogStore
   readonly slackClient: SlackWebClient
-  readonly imageResizer?: ImageResizer | undefined
   // Own service's push endpoint + shared token, threaded into both fresh
   // delegations (via DelegationToolDependencies, wired at the call site) and
   // task-resume message/send calls. Omitted means delegated tasks rely
@@ -52,7 +49,6 @@ export interface ResolvedDispatcherDeps {
   readonly a2aTaskTracker: A2aTaskTracker
   readonly eventLogStore: EventLogStore
   readonly slackClient: SlackWebClient
-  readonly imageResizer: ImageResizer
   readonly pushNotificationConfig: DelegationPushNotificationConfig | undefined
   readonly taskDeadlineMs: number
   readonly successFallbackText: string
@@ -67,7 +63,6 @@ export const resolveDeps = (deps: DispatcherDeps): ResolvedDispatcherDeps => ({
   a2aTaskTracker: deps.a2aTaskTracker,
   eventLogStore: deps.eventLogStore,
   slackClient: deps.slackClient,
-  imageResizer: deps.imageResizer ?? createSharpImageResizer(),
   pushNotificationConfig: deps.pushNotificationConfig,
   taskDeadlineMs: deps.taskDeadlineMs ?? DEFAULT_A2A_TASK_DEADLINE_MS,
   successFallbackText: deps.successFallbackText ?? DEFAULT_SUCCESS_FALLBACK,

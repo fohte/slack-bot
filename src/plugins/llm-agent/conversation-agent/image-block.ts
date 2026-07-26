@@ -1,25 +1,26 @@
-import type { ResizedImage } from '#plugins/llm-agent/image-resizer'
+export interface DownloadedImage {
+  readonly bytes: Uint8Array
+  readonly ext: string
+}
 
-// LLM-facing shape the existing image pipeline's output is converted to
+// LLM-facing shape the Slack thumbnail pipeline's output is converted to
 // before it reaches ConversationAgent.respond.
 export interface ImageBlock {
   readonly base64: string
   readonly mimeType: string
 }
 
-// ImageResizer always re-encodes to JPEG (see RESIZED_EXT in image-resizer.ts),
-// so 'jpg' is the only key exercised today; the map exists so a future resizer
-// extension fails closed (an unmapped ext) rather than mislabeling the mime type.
 const EXT_MIME_TYPES: Readonly<Record<string, string>> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',
+  gif: 'image/gif',
   webp: 'image/webp',
 }
 
-export const imageBlockFromResizedImage = (
-  resized: ResizedImage,
+export const imageBlockFromDownloadedImage = (
+  image: DownloadedImage,
 ): ImageBlock => ({
-  base64: Buffer.from(resized.bytes).toString('base64'),
-  mimeType: EXT_MIME_TYPES[resized.ext] ?? 'application/octet-stream',
+  base64: Buffer.from(image.bytes).toString('base64'),
+  mimeType: EXT_MIME_TYPES[image.ext] ?? 'application/octet-stream',
 })

@@ -47,7 +47,7 @@ export {
   createOpenCodeGoChatModel,
   DEFAULT_OPENCODE_GO_BASE_URL,
   deriveConversationThreadId,
-  imageBlockFromResizedImage,
+  imageBlockFromDownloadedImage,
   setupConversationCheckpointSchema,
 } from '#plugins/llm-agent/conversation-agent/index'
 export type {
