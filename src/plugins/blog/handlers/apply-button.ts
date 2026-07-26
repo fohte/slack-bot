@@ -46,16 +46,15 @@ export const handleApplyButton = async (
     return
   }
 
-  let docIds: string[]
-  try {
-    docIds = decodeDocIds(action.value)
-  } catch {
+  const decoded = decodeDocIds(action.value)
+  if (decoded.isErr()) {
     await ctx.followUp({
       response_type: 'ephemeral',
       text: ':warning: Apply ボタンの状態が不正です。再度 /blog-post を実行してください。',
     })
     return
   }
+  const docIds = decoded.value
 
   const updater = ctx.originalUpdater()
   const applying = renderApplyingBlocks()

@@ -1,8 +1,13 @@
 import type { Plan } from '@fohte/blog-publisher-contract'
+import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
-import { ButtonValueOverflow } from '@/plugins/blog/errors'
 import {
+  ButtonValueOverflow,
+  PlanButtonValueDecodeError,
+} from '@/plugins/blog/errors'
+import {
+  BUTTON_VALUE_LIMIT,
   decodeDocIds,
   encodeDocIds,
   renderAlreadyAppliedBlocks,
@@ -54,7 +59,7 @@ describe('PlanPresenter', () => {
     expect(apply).toBeDefined()
     expect(apply?.['disabled']).toBeUndefined()
     const decoded = decodeDocIds(apply?.['value'] as string)
-    expect(decoded).toEqual(['note:a'])
+    expect(decoded).toEqual(ok(['note:a']))
   })
 
   it('marks Apply button disabled when errors > 0', () => {
@@ -92,17 +97,32 @@ describe('PlanPresenter', () => {
     expect(findButton(res.blocks, 'blog:cancel')).toBeDefined()
   })
 
-  it('encodeDocIds throws ButtonValueOverflow when exceeding 2000 chars', () => {
+  it('encodeDocIds returns ButtonValueOverflow when exceeding 2000 chars', () => {
     const big = Array.from(
       { length: 100 },
       (_, i) => `note:${'x'.repeat(40)}-${String(i)}`,
     )
-    expect(() => encodeDocIds(big)).toThrow(ButtonValueOverflow)
+    const value = JSON.stringify({ docIds: big })
+    expect(encodeDocIds(big)).toEqual(
+      err(new ButtonValueOverflow(value.length, BUTTON_VALUE_LIMIT)),
+    )
   })
 
-  it('decodeDocIds rejects malformed input', () => {
-    expect(() => decodeDocIds('{}')).toThrow()
-    expect(() => decodeDocIds('{"docIds":[1]}')).toThrow()
+  // toEqual only compares Error#cause when the expected side sets one, so
+  // omitting it below still matches the 'not-json' case's JSON.parse
+  // SyntaxError cause.
+  it.each([
+    { input: 'not-json', message: 'Invalid button value: not valid JSON' },
+    { input: '[]', message: 'Invalid button value: not an object' },
+    { input: '{}', message: 'Invalid button value: docIds missing' },
+    {
+      input: '{"docIds":[1]}',
+      message: 'Invalid button value: docIds must be strings',
+    },
+  ])('decodeDocIds rejects $input with "$message"', ({ input, message }) => {
+    expect(decodeDocIds(input)).toEqual(
+      err(new PlanButtonValueDecodeError(message)),
+    )
   })
 
   it('renderAppliedBlocks contains PR URL', () => {
