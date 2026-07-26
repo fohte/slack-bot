@@ -108,37 +108,20 @@ describe('PlanPresenter', () => {
     )
   })
 
-  it('decodeDocIds rejects non-JSON input', () => {
-    const decoded = decodeDocIds('not-json')
-    expect(decoded.isErr()).toBe(true)
-    expect(
-      decoded._unsafeUnwrapErr() instanceof PlanButtonValueDecodeError,
-    ).toBe(true)
-  })
-
-  it('decodeDocIds rejects a JSON value that is not an object', () => {
-    expect(decodeDocIds('[]')).toEqual(
-      err(
-        new PlanButtonValueDecodeError('Invalid button value: not an object'),
-      ),
-    )
-  })
-
-  it('decodeDocIds rejects an object missing docIds', () => {
-    expect(decodeDocIds('{}')).toEqual(
-      err(
-        new PlanButtonValueDecodeError('Invalid button value: docIds missing'),
-      ),
-    )
-  })
-
-  it('decodeDocIds rejects docIds with non-string elements', () => {
-    expect(decodeDocIds('{"docIds":[1]}')).toEqual(
-      err(
-        new PlanButtonValueDecodeError(
-          'Invalid button value: docIds must be strings',
-        ),
-      ),
+  // toEqual only compares Error#cause when the expected side sets one, so
+  // omitting it below still matches the 'not-json' case's JSON.parse
+  // SyntaxError cause.
+  it.each([
+    { input: 'not-json', message: 'Invalid button value: not valid JSON' },
+    { input: '[]', message: 'Invalid button value: not an object' },
+    { input: '{}', message: 'Invalid button value: docIds missing' },
+    {
+      input: '{"docIds":[1]}',
+      message: 'Invalid button value: docIds must be strings',
+    },
+  ])('decodeDocIds rejects $input with "$message"', ({ input, message }) => {
+    expect(decodeDocIds(input)).toEqual(
+      err(new PlanButtonValueDecodeError(message)),
     )
   })
 
