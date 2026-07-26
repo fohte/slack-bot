@@ -1,4 +1,5 @@
 import type { CiStatus } from '@fohte/blog-publisher-contract'
+import { okAsync } from 'neverthrow'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { MessageUpdater } from '@/interaction/message-updater'
@@ -20,8 +21,8 @@ const makeUpdater = (): {
   updater: MessageUpdater
   patch: ReturnType<typeof vi.fn>
 } => {
-  const patch = vi.fn(async () => undefined)
-  const del = vi.fn(async () => undefined)
+  const patch = vi.fn(() => okAsync(undefined))
+  const del = vi.fn(() => okAsync(undefined))
   return { updater: { patch, delete: del }, patch }
 }
 

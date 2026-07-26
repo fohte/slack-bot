@@ -76,6 +76,10 @@ export class ResponseUrlExhaustedError extends Error {
   override readonly name = 'ResponseUrlExhaustedError'
 }
 
+export class FollowUpUnavailableError extends Error {
+  override readonly name = 'FollowUpUnavailableError'
+}
+
 export class CfAccessAuthError extends Error {
   override readonly name = 'CfAccessAuthError'
   constructor(pluginName: string) {

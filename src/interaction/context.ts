@@ -1,10 +1,14 @@
+import { errAsync, ResultAsync } from 'neverthrow'
+
 import {
   createOriginalUpdater,
   createRefUpdater,
   type MessageUpdater,
   type SlackMessageRef,
+  toSlackApiError,
 } from '@/interaction/message-updater'
 import type { ResponseUrlPayload, SlackWebClient } from '@/slack/web-client'
+import { FollowUpUnavailableError, type SlackApiError } from '@/types/errors'
 import type {
   BlockActionsPayload,
   MessageActionPayload,
@@ -43,7 +47,9 @@ export interface FollowUpPayload {
 export interface InteractionContext {
   readonly source: InteractionSource
   ack(payload?: AckPayload): void
-  followUp(payload: FollowUpPayload): Promise<void>
+  followUp(
+    payload: FollowUpPayload,
+  ): ResultAsync<void, FollowUpUnavailableError | SlackApiError>
   originalUpdater(): MessageUpdater
   updater(ref: SlackMessageRef): MessageUpdater
 }
@@ -101,14 +107,19 @@ export const createInteractionContext = (
         payload === undefined ? undefined : applyDefaultEphemeral(payload)
       resolveAck(ackState.payload)
     },
-    async followUp(payload) {
+    followUp(payload) {
       if (options.responseUrl === undefined) {
-        throw new Error(
-          'followUp() requires a response_url, but none is available for this interaction',
+        return errAsync(
+          new FollowUpUnavailableError(
+            'followUp() requires a response_url, but none is available for this interaction',
+          ),
         )
       }
       const body: ResponseUrlPayload = applyDefaultEphemeral(payload)
-      await options.slackClient.postToResponseUrl(options.responseUrl, body)
+      return ResultAsync.fromPromise(
+        options.slackClient.postToResponseUrl(options.responseUrl, body),
+        (caughtErr) => toSlackApiError(caughtErr, 'postToResponseUrl failed'),
+      ).map(() => undefined)
     },
     originalUpdater() {
       if (cachedOriginal === undefined) {

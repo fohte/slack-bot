@@ -1,5 +1,7 @@
+import { errAsync, ResultAsync } from 'neverthrow'
+
 import type { ResponseUrlPayload, SlackWebClient } from '@/slack/web-client'
-import { ResponseUrlExhaustedError } from '@/types/errors'
+import { ResponseUrlExhaustedError, SlackApiError } from '@/types/errors'
 
 const RESPONSE_URL_TTL_MS = 30 * 60 * 1000
 const RESPONSE_URL_MAX_USES = 5
@@ -17,9 +19,19 @@ export interface SlackMessagePatch {
 }
 
 export interface MessageUpdater {
-  patch(payload: SlackMessagePatch): Promise<void>
-  delete(): Promise<void>
+  patch(
+    payload: SlackMessagePatch,
+  ): ResultAsync<void, ResponseUrlExhaustedError | SlackApiError>
+  delete(): ResultAsync<void, ResponseUrlExhaustedError | SlackApiError>
 }
+
+export const toSlackApiError = (
+  caughtErr: unknown,
+  message = 'Slack API call failed',
+): SlackApiError =>
+  caughtErr instanceof SlackApiError
+    ? caughtErr
+    : new SlackApiError(message, { cause: caughtErr })
 
 interface ResponseUrlState {
   readonly url: string
@@ -52,57 +64,75 @@ export const createOriginalUpdater = (
   }
 
   return {
-    async patch(payload) {
+    patch(payload) {
       if (urlState !== undefined && isUrlAvailable()) {
-        const result = await options.client.postToResponseUrl(urlState.url, {
-          replace_original: true,
-          ...payload,
-        } satisfies ResponseUrlPayload)
-        urlState.uses += 1
-        if (
-          cachedRef === undefined &&
-          result.channelId !== undefined &&
-          result.messageTs !== undefined
-        ) {
-          cachedRef = {
-            channelId: result.channelId,
-            messageTs: result.messageTs,
+        return ResultAsync.fromPromise(
+          options.client.postToResponseUrl(urlState.url, {
+            replace_original: true,
+            ...payload,
+          } satisfies ResponseUrlPayload),
+          toSlackApiError,
+        ).map((result) => {
+          urlState.uses += 1
+          if (
+            cachedRef === undefined &&
+            result.channelId !== undefined &&
+            result.messageTs !== undefined
+          ) {
+            cachedRef = {
+              channelId: result.channelId,
+              messageTs: result.messageTs,
+            }
           }
-        }
-        return
-      }
-      if (cachedRef === undefined) {
-        throw new ResponseUrlExhaustedError(
-          'response_url is exhausted and no message ref is available for chat.update fallback',
-        )
-      }
-      await options.client.updateMessage({
-        channel: cachedRef.channelId,
-        ts: cachedRef.messageTs,
-        text: payload.text ?? '',
-        ...(payload.blocks !== undefined ? { blocks: payload.blocks } : {}),
-        ...(payload.attachments !== undefined
-          ? { attachments: payload.attachments }
-          : {}),
-      })
-    },
-    async delete() {
-      if (urlState !== undefined && isUrlAvailable()) {
-        await options.client.postToResponseUrl(urlState.url, {
-          delete_original: true,
+          return undefined
         })
-        urlState.uses += 1
-        return
       }
       if (cachedRef === undefined) {
-        throw new ResponseUrlExhaustedError(
-          'response_url is exhausted and no message ref is available for chat.delete fallback',
+        return errAsync(
+          new ResponseUrlExhaustedError(
+            'response_url is exhausted and no message ref is available for chat.update fallback',
+          ),
         )
       }
-      await options.client.deleteMessage({
-        channel: cachedRef.channelId,
-        ts: cachedRef.messageTs,
-      })
+      return ResultAsync.fromPromise(
+        options.client.updateMessage({
+          channel: cachedRef.channelId,
+          ts: cachedRef.messageTs,
+          text: payload.text ?? '',
+          ...(payload.blocks !== undefined ? { blocks: payload.blocks } : {}),
+          ...(payload.attachments !== undefined
+            ? { attachments: payload.attachments }
+            : {}),
+        }),
+        toSlackApiError,
+      ).map(() => undefined)
+    },
+    delete() {
+      if (urlState !== undefined && isUrlAvailable()) {
+        return ResultAsync.fromPromise(
+          options.client.postToResponseUrl(urlState.url, {
+            delete_original: true,
+          }),
+          toSlackApiError,
+        ).map(() => {
+          urlState.uses += 1
+          return undefined
+        })
+      }
+      if (cachedRef === undefined) {
+        return errAsync(
+          new ResponseUrlExhaustedError(
+            'response_url is exhausted and no message ref is available for chat.delete fallback',
+          ),
+        )
+      }
+      return ResultAsync.fromPromise(
+        options.client.deleteMessage({
+          channel: cachedRef.channelId,
+          ts: cachedRef.messageTs,
+        }),
+        toSlackApiError,
+      ).map(() => undefined)
     },
   }
 }
@@ -115,21 +145,27 @@ interface RefUpdaterOptions {
 export const createRefUpdater = (
   options: RefUpdaterOptions,
 ): MessageUpdater => ({
-  async patch(payload) {
-    await options.client.updateMessage({
-      channel: options.ref.channelId,
-      ts: options.ref.messageTs,
-      text: payload.text ?? '',
-      ...(payload.blocks !== undefined ? { blocks: payload.blocks } : {}),
-      ...(payload.attachments !== undefined
-        ? { attachments: payload.attachments }
-        : {}),
-    })
+  patch(payload) {
+    return ResultAsync.fromPromise(
+      options.client.updateMessage({
+        channel: options.ref.channelId,
+        ts: options.ref.messageTs,
+        text: payload.text ?? '',
+        ...(payload.blocks !== undefined ? { blocks: payload.blocks } : {}),
+        ...(payload.attachments !== undefined
+          ? { attachments: payload.attachments }
+          : {}),
+      }),
+      toSlackApiError,
+    ).map(() => undefined)
   },
-  async delete() {
-    await options.client.deleteMessage({
-      channel: options.ref.channelId,
-      ts: options.ref.messageTs,
-    })
+  delete() {
+    return ResultAsync.fromPromise(
+      options.client.deleteMessage({
+        channel: options.ref.channelId,
+        ts: options.ref.messageTs,
+      }),
+      toSlackApiError,
+    ).map(() => undefined)
   },
 })

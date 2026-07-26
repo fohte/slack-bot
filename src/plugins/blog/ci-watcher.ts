@@ -1,5 +1,5 @@
 import type { CiStatus } from '@fohte/blog-publisher-contract'
-import { fromThrowable, ResultAsync } from 'neverthrow'
+import { fromThrowable } from 'neverthrow'
 
 import type { MessageUpdater } from '@/interaction/message-updater'
 import type { Logger } from '@/logger/logger'
@@ -116,10 +116,7 @@ export const createCiWatcher = (options: CiWatcherOptions): CiWatcher => {
     rendered: RenderedMessage,
     taskName: string,
   ): Promise<void> => {
-    const result = await ResultAsync.fromPromise(
-      updater.patch(rendered),
-      (error) => error,
-    )
+    const result = await updater.patch(rendered)
     if (result.isErr()) {
       logger.error(
         {

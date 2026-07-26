@@ -18,11 +18,12 @@ export const handlePostCommand = async (
   const { ctx, client } = input
   ctx.ack()
   const notes = await client.listNotes()
-  await ctx.followUp({
+  const followUpResult = await ctx.followUp({
     response_type: 'ephemeral',
     text: buildHeaderText(notes),
     blocks: buildSelectBlocks(notes),
   })
+  if (followUpResult.isErr()) throw followUpResult.error
 }
 
 const buildHeaderText = (notes: readonly Note[]): string => {

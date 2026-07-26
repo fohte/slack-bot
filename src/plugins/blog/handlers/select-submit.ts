@@ -20,18 +20,20 @@ export const handleSelectSubmit = async (
   ctx.ack()
   const docIds = extractSelectedDocIds(payload)
   if (docIds.length === 0) {
-    await ctx.followUp({
+    const followUpResult = await ctx.followUp({
       response_type: 'ephemeral',
       text: ':warning: ノートが選択されていません。',
     })
+    if (followUpResult.isErr()) throw followUpResult.error
     return
   }
   const plan = await client.buildPlan(docIds)
   const rendered = renderPlanBlocks({ plan })
-  await ctx.originalUpdater().patch({
+  const patchResult = await ctx.originalUpdater().patch({
     text: rendered.text,
     blocks: rendered.blocks,
   })
+  if (patchResult.isErr()) throw patchResult.error
 }
 
 const extractSelectedValues = (action: unknown): string[] | undefined => {

@@ -39,26 +39,32 @@ export const handleApplyButton = async (
   ctx.ack()
 
   if (action.value === undefined) {
-    await ctx.followUp({
+    const followUpResult = await ctx.followUp({
       response_type: 'ephemeral',
       text: ':warning: Apply ボタンの value が空です。再度 /blog-post を実行してください。',
     })
+    if (followUpResult.isErr()) throw followUpResult.error
     return
   }
 
   const decoded = decodeDocIds(action.value)
   if (decoded.isErr()) {
-    await ctx.followUp({
+    const followUpResult = await ctx.followUp({
       response_type: 'ephemeral',
       text: ':warning: Apply ボタンの状態が不正です。再度 /blog-post を実行してください。',
     })
+    if (followUpResult.isErr()) throw followUpResult.error
     return
   }
   const docIds = decoded.value
 
   const updater = ctx.originalUpdater()
   const applying = renderApplyingBlocks()
-  await updater.patch({ text: applying.text, blocks: applying.blocks })
+  const applyingPatchResult = await updater.patch({
+    text: applying.text,
+    blocks: applying.blocks,
+  })
+  if (applyingPatchResult.isErr()) throw applyingPatchResult.error
 
   let result
   try {
@@ -74,7 +80,11 @@ export const handleApplyButton = async (
         prUrl: result.prUrl,
         branch: result.branch,
       })
-      await updater.patch({ text: rendered.text, blocks: rendered.blocks })
+      const patchResult = await updater.patch({
+        text: rendered.text,
+        blocks: rendered.blocks,
+      })
+      if (patchResult.isErr()) throw patchResult.error
       if (input.onSuccess !== undefined) {
         await input.onSuccess({
           ctx,
@@ -87,10 +97,11 @@ export const handleApplyButton = async (
     }
     case 'planChanged': {
       const rendered = renderPlanBlocks({ plan: result.newPlan })
-      await updater.patch({
+      const patchResult = await updater.patch({
         text: `:warning: Plan が変わりました — ${rendered.text}`,
         blocks: rendered.blocks,
       })
+      if (patchResult.isErr()) throw patchResult.error
       return
     }
     case 'alreadyApplied': {
@@ -98,15 +109,20 @@ export const handleApplyButton = async (
         prNumber: result.prNumber,
         prUrl: result.prUrl,
       })
-      await updater.patch({ text: rendered.text, blocks: rendered.blocks })
+      const patchResult = await updater.patch({
+        text: rendered.text,
+        blocks: rendered.blocks,
+      })
+      if (patchResult.isErr()) throw patchResult.error
       return
     }
     case 'failed': {
       const text = `:x: ${translateApplyFailure(result)}`
-      await updater.patch({
+      const patchResult = await updater.patch({
         text,
         blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
       })
+      if (patchResult.isErr()) throw patchResult.error
       return
     }
   }
@@ -117,12 +133,11 @@ const patchError = async (
   err: unknown,
 ): Promise<void> => {
   const text = `:x: ${translateException(err)}`
-  try {
-    await updater.patch({
-      text,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
-    })
-  } catch {
+  const patchResult = await updater.patch({
+    text,
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+  })
+  if (patchResult.isErr()) {
     // ignore secondary patch failure; primary error still propagates
   }
 }

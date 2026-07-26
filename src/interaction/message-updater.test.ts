@@ -1,3 +1,4 @@
+import { err } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -73,7 +74,7 @@ describe('MessageUpdater (originalUpdater)', () => {
     expect(client.updateMessage).toHaveBeenCalledTimes(1)
   })
 
-  it('throws when response_url expired and no ref was cached', async () => {
+  it('returns a ResponseUrlExhaustedError when response_url expired and no ref was cached', async () => {
     const client = buildMockClient()
     const updater = createOriginalUpdater({
       responseUrl: 'https://hooks.slack.com/actions/x',
@@ -93,8 +94,12 @@ describe('MessageUpdater (originalUpdater)', () => {
       now: () => nowVal,
     })
     nowVal += 31 * 60 * 1000
-    await expect(updater2.patch({ text: 'late' })).rejects.toBeInstanceOf(
-      ResponseUrlExhaustedError,
+    expect(await updater2.patch({ text: 'late' })).toEqual(
+      err(
+        new ResponseUrlExhaustedError(
+          'response_url is exhausted and no message ref is available for chat.update fallback',
+        ),
+      ),
     )
     void updater
   })

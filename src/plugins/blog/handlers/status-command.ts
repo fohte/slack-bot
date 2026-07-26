@@ -19,11 +19,12 @@ export const handleStatusCommand = async (
   const { ctx, client } = input
   ctx.ack()
   const prs = await client.listPrs('open')
-  await ctx.followUp({
+  const followUpResult = await ctx.followUp({
     response_type: 'ephemeral',
     text: buildHeader(prs),
     blocks: buildBlocks(prs),
   })
+  if (followUpResult.isErr()) throw followUpResult.error
 }
 
 const buildHeader = (prs: readonly BlogPrSummary[]): string =>

@@ -1,3 +1,5 @@
+import { ResultAsync } from 'neverthrow'
+
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import {
@@ -41,6 +43,11 @@ export interface SchedulerOptions {
 
 const MIN_INTERVAL_MS = 1000
 
+// Wraps the call itself (not an already-created promise) so a callback that
+// throws synchronously before returning a promise is captured too.
+const toResult = <T>(fn: () => Promise<T>): ResultAsync<T, unknown> =>
+  ResultAsync.fromThrowable(fn, (err) => err)()
+
 export const createScheduler = (
   options: SchedulerOptions,
 ): InMemoryScheduler => {
@@ -77,50 +84,52 @@ export const createScheduler = (
     if (!isRunning(state)) return
     if (now() - state.startedAt > state.def.maxDurationMs) {
       transition(state, 'timed-out')
-      try {
-        await state.def.onTimeout?.()
-      } catch (err) {
-        logger.error(
-          {
-            event: 'scheduler_timeout_handler_error',
-            task: state.def.name,
-            error: serializeError(err),
-          },
-          'scheduler onTimeout handler threw',
-        )
+      const onTimeout = state.def.onTimeout
+      if (onTimeout !== undefined) {
+        const result = await toResult(() => onTimeout())
+        if (result.isErr()) {
+          logger.error(
+            {
+              event: 'scheduler_timeout_handler_error',
+              task: state.def.name,
+              error: serializeError(result.error),
+            },
+            'scheduler onTimeout handler threw',
+          )
+        }
       }
       return
     }
-    try {
-      const result = await state.def.tick()
-      if (!isRunning(state)) return
-      if (result.done) {
+    const tickResult = await toResult(() => state.def.tick())
+    if (!isRunning(state)) return
+    if (tickResult.isOk()) {
+      if (tickResult.value.done) {
         transition(state, 'completed')
         return
       }
-    } catch (err) {
-      if (!isRunning(state)) return
-      try {
-        if (state.def.onError !== undefined) {
-          await state.def.onError(err)
-        } else {
+    } else {
+      const err = tickResult.error
+      const onError = state.def.onError
+      if (onError !== undefined) {
+        const onErrorResult = await toResult(() => onError(err))
+        if (onErrorResult.isErr()) {
           logger.error(
             {
-              event: 'scheduler_task_error',
+              event: 'scheduler_error_handler_error',
               task: state.def.name,
-              error: serializeError(err),
+              error: serializeError(onErrorResult.error),
             },
-            'scheduler task tick threw',
+            'scheduler onError handler threw',
           )
         }
-      } catch (handlerErr) {
+      } else {
         logger.error(
           {
-            event: 'scheduler_error_handler_error',
+            event: 'scheduler_task_error',
             task: state.def.name,
-            error: serializeError(handlerErr),
+            error: serializeError(err),
           },
-          'scheduler onError handler threw',
+          'scheduler task tick threw',
         )
       }
     }
@@ -136,6 +145,8 @@ export const createScheduler = (
   }
 
   return {
+    // Argument validation throws synchronously at registration time;
+    // callers are expected to fix the call site, not handle a Result.
     schedule(def) {
       if (def.intervalMs < MIN_INTERVAL_MS) {
         throw new SchedulerInvalidArgumentError(

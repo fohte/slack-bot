@@ -115,6 +115,7 @@ export {
   CfAccessAuthError,
   ConfigLoadError,
   EventLogPruneError,
+  FollowUpUnavailableError,
   InvalidSignatureError,
   MalformedPayloadError,
   PluginHandlerError,
