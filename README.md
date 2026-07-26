@@ -104,11 +104,14 @@ const pingPlugin: Plugin = {
     // Long-running work happens after ack().
     const reply = await computeReply(body.text)
 
-    // Edit the original ack message.
-    await ctx.originalUpdater().patch({ text: reply })
+    // Edit the original ack message. patch()/followUp() return a
+    // neverthrow Result instead of throwing.
+    const patchResult = await ctx.originalUpdater().patch({ text: reply })
+    if (patchResult.isErr()) throw patchResult.error
 
     // Or send a new follow-up message via response_url.
-    await ctx.followUp({ text: 'done' })
+    const followUpResult = await ctx.followUp({ text: 'done' })
+    if (followUpResult.isErr()) throw followUpResult.error
   },
 }
 
@@ -136,9 +139,10 @@ const crawlPlugin: PluginFactory = ({ scheduler, cfAccess, logger }) => {
             `https://crawlers.fohte.net/api/runs/${body.text}`,
           )
           const status = (await res.json()) as { done: boolean }
-          await ctx
+          const patchResult = await ctx
             .originalUpdater()
             .patch({ text: `status: ${String(status.done)}` })
+          if (patchResult.isErr()) throw patchResult.error
           return { done: status.done }
         },
         async onError(err) {
