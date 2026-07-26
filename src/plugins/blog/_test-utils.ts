@@ -15,16 +15,13 @@ export interface TestSlack {
   >
 }
 
-export const makeSlack = (
-  response: ResponseUrlResult = {
-    channelId: undefined,
-    messageTs: undefined,
-    raw: 'ok',
-  },
+const makeSlackWithImpl = (
+  impl: () => Promise<ResponseUrlResult>,
 ): TestSlack => {
-  const postToResponseUrl = vi.fn<
-    (url: string, payload: ResponseUrlPayload) => Promise<ResponseUrlResult>
-  >(() => Promise.resolve(response))
+  const postToResponseUrl =
+    vi.fn<
+      (url: string, payload: ResponseUrlPayload) => Promise<ResponseUrlResult>
+    >(impl)
   const partial: unknown = {
     postMessage: vi.fn(),
     updateMessage: vi.fn(),
@@ -37,6 +34,19 @@ export const makeSlack = (
 
   return { client: partial as SlackWebClient, postToResponseUrl }
 }
+
+export const makeSlack = (
+  response: ResponseUrlResult = {
+    channelId: undefined,
+    messageTs: undefined,
+    raw: 'ok',
+  },
+): TestSlack => makeSlackWithImpl(() => Promise.resolve(response))
+
+// Simulates postToResponseUrl failing, for tests that verify a followUp()/
+// patch() Result error still reaches the caller.
+export const makeFailingSlack = (error: Error): TestSlack =>
+  makeSlackWithImpl(() => Promise.reject(error))
 
 export const lastBody = (
   postToResponseUrl: TestSlack['postToResponseUrl'],

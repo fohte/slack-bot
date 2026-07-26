@@ -82,12 +82,25 @@ describe('InteractionContext', () => {
       slackClient: client,
       responseUrl: 'https://hooks.slack.com/actions/x',
     })
-    const result = await ctx.followUp({ text: 'later' })
-    expect(result).toEqual(ok(undefined))
+    await ctx.followUp({ text: 'later' })
     expect(client.postToResponseUrl).toHaveBeenCalledWith(
       'https://hooks.slack.com/actions/x',
       expect.objectContaining({ text: 'later', response_type: 'ephemeral' }),
     )
+  })
+
+  it('followUp returns ok(undefined) on success', async () => {
+    const client = buildMockClient()
+    const { ctx } = createInteractionContext({
+      source: {
+        kind: 'slash_command',
+        command: '/ping',
+        body: { command: '/ping' },
+      },
+      slackClient: client,
+      responseUrl: 'https://hooks.slack.com/actions/x',
+    })
+    expect(await ctx.followUp({ text: 'later' })).toEqual(ok(undefined))
   })
 
   it('followUp returns a FollowUpUnavailableError when response_url is missing', async () => {

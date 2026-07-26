@@ -2,13 +2,18 @@ import type { Note } from '@fohte/blog-publisher-contract'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createInteractionContext } from '@/interaction/context'
-import { lastBody, makeSlack } from '@/plugins/blog/_test-utils'
+import {
+  lastBody,
+  makeFailingSlack,
+  makeSlack,
+} from '@/plugins/blog/_test-utils'
 import { ServiceUnavailable } from '@/plugins/blog/errors'
 import {
   buildSelectBlocks,
   handlePostCommand,
 } from '@/plugins/blog/handlers/post-command'
 import type { BlogServiceClient } from '@/plugins/blog/service-client'
+import { SlackApiError } from '@/types/errors'
 
 const note = (overrides: Partial<Note> = {}): Note => ({
   docId: 'note:1',
@@ -104,5 +109,31 @@ describe('PostCommandHandler', () => {
         client,
       }),
     ).rejects.toBeInstanceOf(ServiceUnavailable)
+  })
+
+  it('propagates the followUp Result error when response_url posting fails', async () => {
+    const listNotes = vi.fn(async () => [note()])
+    const client = { listNotes } as unknown as BlogServiceClient
+    const slack = makeFailingSlack(
+      new SlackApiError('response_url POST failed with HTTP 410', {
+        status: 410,
+      }),
+    )
+    const result = createInteractionContext({
+      source: {
+        kind: 'slash_command',
+        command: '/blog-post',
+        body: { command: '/blog-post' },
+      },
+      slackClient: slack.client,
+      responseUrl: 'https://hooks.example/x',
+    })
+    await expect(
+      handlePostCommand({
+        ctx: result.ctx,
+        body: { command: '/blog-post' },
+        client,
+      }),
+    ).rejects.toBeInstanceOf(SlackApiError)
   })
 })
