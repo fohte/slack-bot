@@ -150,9 +150,11 @@ const reportError = async (
   logger.error({ err }, 'blog plugin handler failed')
   ctx.ack()
   const text = translateException(err)
-  try {
-    await ctx.followUp({ response_type: 'ephemeral', text })
-  } catch (followUpErr) {
-    logger.error({ err: followUpErr }, 'blog plugin followUp failed')
+  const followUpResult = await ctx.followUp({
+    response_type: 'ephemeral',
+    text,
+  })
+  if (followUpResult.isErr()) {
+    logger.error({ err: followUpResult.error }, 'blog plugin followUp failed')
   }
 }

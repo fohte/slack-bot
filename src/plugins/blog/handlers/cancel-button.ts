@@ -17,8 +17,9 @@ export const handleCancelButton = async (
   const { ctx } = input
   ctx.ack()
   const rendered = renderCancelledBlocks()
-  await ctx.originalUpdater().patch({
+  const patchResult = await ctx.originalUpdater().patch({
     text: rendered.text,
     blocks: rendered.blocks,
   })
+  if (patchResult.isErr()) throw patchResult.error
 }

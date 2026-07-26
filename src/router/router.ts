@@ -1,3 +1,5 @@
+import { ResultAsync } from 'neverthrow'
+
 import {
   type AckPayload,
   createInteractionContext,
@@ -107,8 +109,11 @@ export const createInteractionRouter = (
     // Track handler completion in the background. Slack imposes a 3-second
     // ack deadline, so the HTTP response must come back as soon as ctx.ack()
     // is called or the handler returns, whichever happens first.
-    const completion = handlerCall
-      .then(() => {
+    const completion = ResultAsync.fromPromise(
+      handlerCall,
+      (err: unknown) => err,
+    ).match(
+      () => {
         options.logger.info(
           {
             event: 'interaction_handled',
@@ -121,8 +126,8 @@ export const createInteractionRouter = (
           'interaction handled',
         )
         return undefined
-      })
-      .catch((err: unknown) => {
+      },
+      (err) => {
         options.logger.error(
           {
             event: 'plugin_handler_error',
@@ -137,7 +142,8 @@ export const createInteractionRouter = (
         return ephemeralError(
           'Sorry, an error occurred while handling the request.',
         )
-      })
+      },
+    )
 
     const ackBody = await Promise.race([ackPromise, completion])
     return { status: 200, body: ackBody }
@@ -185,8 +191,11 @@ export const createInteractionRouter = (
         }
         const startedAt = now()
         const handlerCall = plugin.onEvent(ctx, envelope.event)
-        const tracked = handlerCall
-          .then(() => {
+        const tracked = ResultAsync.fromPromise(
+          handlerCall,
+          (err: unknown) => err,
+        ).match(
+          () => {
             options.logger.info(
               {
                 event: 'event_handled',
@@ -198,8 +207,8 @@ export const createInteractionRouter = (
               },
               'event handled',
             )
-          })
-          .catch((err: unknown) => {
+          },
+          (err) => {
             options.logger.error(
               {
                 event: 'plugin_event_handler_error',
@@ -211,7 +220,8 @@ export const createInteractionRouter = (
               },
               'plugin event handler threw',
             )
-          })
+          },
+        )
         dispatches.push(tracked)
       }
       await Promise.all(dispatches)

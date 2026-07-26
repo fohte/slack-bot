@@ -1,6 +1,8 @@
+import { err, ok } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createInteractionContext } from '@/interaction/context'
+import { FollowUpUnavailableError } from '@/types/errors'
 
 const buildMockClient = () => ({
   postMessage: vi.fn(),
@@ -80,14 +82,15 @@ describe('InteractionContext', () => {
       slackClient: client,
       responseUrl: 'https://hooks.slack.com/actions/x',
     })
-    await ctx.followUp({ text: 'later' })
+    const result = await ctx.followUp({ text: 'later' })
+    expect(result).toEqual(ok(undefined))
     expect(client.postToResponseUrl).toHaveBeenCalledWith(
       'https://hooks.slack.com/actions/x',
       expect.objectContaining({ text: 'later', response_type: 'ephemeral' }),
     )
   })
 
-  it('followUp throws when response_url missing', async () => {
+  it('followUp returns a FollowUpUnavailableError when response_url is missing', async () => {
     const client = buildMockClient()
     const { ctx } = createInteractionContext({
       source: {
@@ -98,7 +101,13 @@ describe('InteractionContext', () => {
       slackClient: client,
       responseUrl: undefined,
     })
-    await expect(ctx.followUp({ text: 'x' })).rejects.toThrow(/response_url/)
+    expect(await ctx.followUp({ text: 'x' })).toEqual(
+      err(
+        new FollowUpUnavailableError(
+          'followUp() requires a response_url, but none is available for this interaction',
+        ),
+      ),
+    )
   })
 
   it('originalUpdater returns the same instance on repeated calls', () => {

@@ -16,17 +16,19 @@ export const handleCancelCommand = async (
   const arg = (body.text ?? '').trim()
   const prNumber = parsePrNumber(arg)
   if (prNumber === undefined) {
-    await ctx.followUp({
+    const followUpResult = await ctx.followUp({
       response_type: 'ephemeral',
       text: ':warning: 使用法: `/blog-cancel <pr_number>`',
     })
+    if (followUpResult.isErr()) throw followUpResult.error
     return
   }
   await client.cancelPr(prNumber)
-  await ctx.followUp({
+  const followUpResult = await ctx.followUp({
     response_type: 'ephemeral',
     text: `:white_check_mark: PR #${String(prNumber)} を close しました。`,
   })
+  if (followUpResult.isErr()) throw followUpResult.error
 }
 
 const parsePrNumber = (raw: string): number | undefined => {

@@ -115,14 +115,13 @@ export const createCiWatcher = (options: CiWatcherOptions): CiWatcher => {
     rendered: RenderedMessage,
     taskName: string,
   ): Promise<void> => {
-    try {
-      await updater.patch(rendered)
-    } catch (err) {
+    const result = await updater.patch(rendered)
+    if (result.isErr()) {
       logger.error(
         {
           event: 'blog_ci_watch_patch_failed',
           task: taskName,
-          error: serializeError(err),
+          error: serializeError(result.error),
         },
         'CiWatcher failed to patch Slack message',
       )
