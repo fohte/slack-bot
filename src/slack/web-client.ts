@@ -161,8 +161,8 @@ const reportAndThrow = (
 const SLACK_FILE_HOST_SUFFIX = '.slack.com'
 // Bound the in-memory buffer for a single download to keep a malicious or
 // runaway Content-Length from OOM-ing the process. Modern smartphone photos
-// commonly run 10-20 MB, so this must clear that range; downstream resizing
-// (see image-resizer.ts) shrinks anything still over the ConfigMap cap.
+// commonly run 10-20 MB, so this must clear that range even though callers
+// only ever download pre-sized Slack thumb_* variants, never the original.
 export const SLACK_FILE_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024
 
 const downloadSlackFile = async (

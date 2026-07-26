@@ -182,6 +182,31 @@ describe('resolveImageBlocks', () => {
     ).rejects.toThrow(SlackImageThumbnailUnavailableError)
   })
 
+  it('rejects the whole call when one image among several has no usable thumbnail, discarding blocks already resolved for the others', async () => {
+    const firstBytes = new Uint8Array([1, 2, 3])
+    const slackClient = createSlackClientWithDownloads(
+      new Map([
+        [
+          'https://files.slack.com/first-thumb.jpg',
+          { bytes: firstBytes, contentType: 'image/jpeg' },
+        ],
+      ]),
+    )
+    const images: readonly SlackFile[] = [
+      {
+        id: 'F1',
+        name: 'first.jpg',
+        mimetype: 'image/jpeg',
+        thumb_360: 'https://files.slack.com/first-thumb.jpg',
+      },
+      { id: 'F2', name: 'second.jpg', mimetype: 'image/jpeg' },
+    ]
+
+    await expect(
+      resolveImageBlocks(baseDeps({ slackClient }), { ...TEST_ENV, images }),
+    ).rejects.toThrow(SlackImageThumbnailUnavailableError)
+  })
+
   it("derives the content block's mimeType from the downloaded response, not the original file's declared mimetype", async () => {
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
     const slackClient = createSlackClientWithDownloads(

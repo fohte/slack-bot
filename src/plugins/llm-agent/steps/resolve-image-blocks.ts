@@ -98,6 +98,17 @@ const resolveThumbnail = async (
     if (bytes.byteLength <= perImageCap) {
       return { bytes, ext: extForThumbnail(contentType, url) }
     }
+    resolved.logger.warn(
+      {
+        event: 'llm_agent_slack_thumbnail_too_large',
+        event_id: env.eventId,
+        slack_file_id: file.id,
+        thumbnail_url: url,
+        bytes: bytes.byteLength,
+        cap: perImageCap,
+      },
+      'slack thumbnail exceeds cap; trying the next smaller tier',
+    )
   }
   throw new SlackImageThumbnailUnavailableError(
     `slack file ${file.id ?? '(unknown id)'} has no thumb_* variant that fits the ${String(perImageCap)}-byte cap (checked ${String(candidates.length)} candidate size(s))`,
@@ -105,7 +116,11 @@ const resolveThumbnail = async (
 }
 
 // Serial: downloadFile does not retry, so issuing all images in parallel
-// would 429 the whole batch on a single rate-limit hit.
+// would 429 the whole batch on a single rate-limit hit. An image with no
+// usable thumbnail rejects this whole call — including blocks already
+// resolved for earlier images — rather than being dropped on its own, so the
+// caller's existing failure path surfaces it as a full mention failure
+// instead of a silently incomplete reply.
 export const resolveImageBlocks = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
