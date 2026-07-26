@@ -73,7 +73,7 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
         })
         return
       }
-      const dispatch = async (): Promise<void> => {
+      await dispatchAndReport(ctx, logger, async () => {
         switch (body.command) {
           case '/blog-post':
             await handlePostCommand({ ctx, body, client })
@@ -90,11 +90,7 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
               text: `未対応のコマンドです: ${body.command}`,
             })
         }
-      }
-      const result = await ResultAsync.fromPromise(dispatch(), (error) => error)
-      if (result.isErr()) {
-        await reportError(ctx, result.error, logger)
-      }
+      })
     },
     async onBlockAction(ctx, payload) {
       if (!isAllowed(payload.user?.id)) {
@@ -109,7 +105,7 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
         ctx.ack()
         return
       }
-      const dispatch = async (): Promise<void> => {
+      await dispatchAndReport(ctx, logger, async () => {
         switch (action.action_id) {
           case 'blog:select-submit':
             await handleSelectSubmit({ ctx, payload, action, client })
@@ -139,12 +135,22 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
           default:
             ctx.ack()
         }
-      }
-      const result = await ResultAsync.fromPromise(dispatch(), (error) => error)
-      if (result.isErr()) {
-        await reportError(ctx, result.error, logger)
-      }
+      })
     },
+  }
+}
+
+// Turns a handler's thrown failure into the Plugin interface's throw-free
+// contract: wrap the dispatch in a Result so a single isErr() branch routes
+// every failure to reportError, instead of duplicating a try/catch per event.
+const dispatchAndReport = async (
+  ctx: InteractionContext,
+  logger: Logger,
+  dispatch: () => Promise<void>,
+): Promise<void> => {
+  const result = await ResultAsync.fromPromise(dispatch(), (error) => error)
+  if (result.isErr()) {
+    await reportError(ctx, result.error, logger)
   }
 }
 
