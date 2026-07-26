@@ -7,7 +7,6 @@ import {
   type ApplySuccessInput,
   handleApplyButton,
 } from '@/plugins/blog/handlers/apply-button'
-import { encodeDocIds } from '@/plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '@/plugins/blog/service-client'
 import type {
   BlockActionPayloadAction,
@@ -23,7 +22,7 @@ const runHandler = async (
   const client = { apply } as unknown as BlogServiceClient
   const action: BlockActionPayloadAction = {
     action_id: 'blog:apply',
-    value: encodeDocIds(['note:a'])._unsafeUnwrap(),
+    value: JSON.stringify({ docIds: ['note:a'] }),
   }
   const payload: BlockActionsPayload = {
     type: 'block_actions',
@@ -115,7 +114,7 @@ describe('ApplyButtonHandler', () => {
     const client = { apply } as unknown as BlogServiceClient
     const action: BlockActionPayloadAction = {
       action_id: 'blog:apply',
-      value: encodeDocIds(['note:a'])._unsafeUnwrap(),
+      value: JSON.stringify({ docIds: ['note:a'] }),
     }
     const payload: BlockActionsPayload = {
       type: 'block_actions',
