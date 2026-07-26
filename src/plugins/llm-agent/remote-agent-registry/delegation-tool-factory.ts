@@ -125,10 +125,22 @@ export const createDelegationTool = (
       // input-required task is a different, tool-independent flow that
       // sends directly to the existing taskId/contextId instead of coming
       // back through the model as a tool call.
-      const contextId = await deps.a2aTaskTracker.lookupContext(
+      const contextLookup = await deps.a2aTaskTracker.lookupContext(
         threadKey,
         handle.name,
       )
+      if (contextLookup.isErr()) {
+        logger.warn(
+          {
+            event: 'llm_agent_remote_agent_delegation_context_lookup_failed',
+            agent_name: handle.name,
+            err: contextLookup.error,
+          },
+          'llm-agent delegation tool failed to look up an existing A2A ' +
+            'context; starting a new context',
+        )
+      }
+      const contextId = contextLookup.isOk() ? contextLookup.value : undefined
 
       const message: Message = {
         kind: 'message',
@@ -230,17 +242,16 @@ export const createDelegationTool = (
         contextId: result.contextId,
       }
       const threadKeyForRecord: ThreadKey = threadKey
-      try {
-        await deps.a2aTaskTracker.recordDelegated({
-          ...threadKeyForRecord,
-          taskId: result.id,
-          contextId: result.contextId,
-          agentName: handle.name,
-          slackEventId,
-          state: result.status.state,
-          deadlineAt: new Date(now().getTime() + deadlineMs),
-        })
-      } catch (error) {
+      const recordResult = await deps.a2aTaskTracker.recordDelegated({
+        ...threadKeyForRecord,
+        taskId: result.id,
+        contextId: result.contextId,
+        agentName: handle.name,
+        slackEventId,
+        state: result.status.state,
+        deadlineAt: new Date(now().getTime() + deadlineMs),
+      })
+      if (recordResult.isErr()) {
         // The remote agent already started this task; failing to record it
         // here only breaks slack-bot's own polling/resume tracking for it,
         // so this still reports success with the real taskId/contextId
@@ -250,7 +261,7 @@ export const createDelegationTool = (
             event: 'llm_agent_remote_agent_delegation_record_failed',
             agent_name: handle.name,
             task_id: result.id,
-            err: error,
+            err: recordResult.error,
           },
           'llm-agent delegation tool sent a task but failed to record it locally',
         )

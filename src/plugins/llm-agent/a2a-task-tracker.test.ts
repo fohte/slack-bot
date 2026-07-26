@@ -1,3 +1,4 @@
+import { ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import { createInMemoryA2aTaskTracker as createInMemoryTracker } from '@/plugins/llm-agent/_test-utils'
@@ -61,19 +62,21 @@ describe('recordDelegated / findActiveInputRequired', () => {
     const tracker = createInMemoryTracker({ now: () => created })
     await tracker.recordDelegated(newTask({ state: 'input-required' }))
 
-    expect(await tracker.findActiveInputRequired(THREAD)).toEqual({
-      ...newTask({ state: 'input-required' }),
-      settled: false,
-      createdAt: created,
-      updatedAt: created,
-    })
+    expect(await tracker.findActiveInputRequired(THREAD)).toEqual(
+      ok({
+        ...newTask({ state: 'input-required' }),
+        settled: false,
+        createdAt: created,
+        updatedAt: created,
+      }),
+    )
   })
 
   it('returns undefined when no active task in the thread is input-required', async () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'working' }))
 
-    expect(await tracker.findActiveInputRequired(THREAD)).toBeUndefined()
+    expect(await tracker.findActiveInputRequired(THREAD)).toEqual(ok(undefined))
   })
 })
 
@@ -85,9 +88,16 @@ describe('findUnsettled', () => {
 
     expect(
       await tracker.findUnsettled(new Date('2026-01-01T00:00:01Z')),
-    ).toEqual([
-      { ...newTask(), settled: false, createdAt: created, updatedAt: created },
-    ])
+    ).toEqual(
+      ok([
+        {
+          ...newTask(),
+          settled: false,
+          createdAt: created,
+          updatedAt: created,
+        },
+      ]),
+    )
   })
 
   it('excludes rows not yet older than the cutoff', async () => {
@@ -95,7 +105,7 @@ describe('findUnsettled', () => {
     const tracker = createInMemoryTracker({ now: () => created })
     await tracker.recordDelegated(newTask())
 
-    expect(await tracker.findUnsettled(created)).toEqual([])
+    expect(await tracker.findUnsettled(created)).toEqual(ok([]))
   })
 
   it('caps the result at FIND_UNSETTLED_LIMIT, keeping the oldest rows', async () => {
@@ -112,12 +122,14 @@ describe('findUnsettled', () => {
     const rows = await tracker.findUnsettled(rowAt(rowCount))
 
     expect(rows).toEqual(
-      Array.from({ length: FIND_UNSETTLED_LIMIT }, (_, i) => ({
-        ...newTask({ taskId: `task-${i}` }),
-        settled: false,
-        createdAt: rowAt(i),
-        updatedAt: rowAt(i),
-      })),
+      ok(
+        Array.from({ length: FIND_UNSETTLED_LIMIT }, (_, i) => ({
+          ...newTask({ taskId: `task-${i}` }),
+          settled: false,
+          createdAt: rowAt(i),
+          updatedAt: rowAt(i),
+        })),
+      ),
     )
   })
 })
@@ -136,25 +148,25 @@ describe('transition', () => {
       tracker.transition('task-1', { state: 'failed' }),
     ])
 
-    expect(winners).toEqual([{ updated: true }, { updated: false }])
+    expect(winners).toEqual([ok({ updated: true }), ok({ updated: false })])
   })
 
   it('does not fail a task waiting on user input', async () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'input-required' }))
 
-    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual({
-      updated: false,
-    })
+    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual(
+      ok({ updated: false }),
+    )
   })
 
   it('fails a task that is still executing', async () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'working' }))
 
-    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual({
-      updated: true,
-    })
+    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual(
+      ok({ updated: true }),
+    )
   })
 
   it('does not fail a task whose deadline has since moved past a stale snapshot', async () => {
@@ -174,7 +186,7 @@ describe('transition', () => {
         state: 'failed',
         ifDeadlineAtOrBefore: staleDeadline,
       }),
-    ).toEqual({ updated: false })
+    ).toEqual(ok({ updated: false }))
   })
 
   it('fails a task whose deadline is still at or before the observed snapshot', async () => {
@@ -189,7 +201,7 @@ describe('transition', () => {
         state: 'failed',
         ifDeadlineAtOrBefore: deadline,
       }),
-    ).toEqual({ updated: true })
+    ).toEqual(ok({ updated: true }))
   })
 
   it('resumes an input-required task by arming a fresh deadline', async () => {
@@ -208,14 +220,16 @@ describe('transition', () => {
 
     expect(
       await tracker.findUnsettled(new Date('2026-01-01T02:00:00Z')),
-    ).toEqual([
-      {
-        ...newTask({ state: 'submitted', deadlineAt: newDeadline }),
-        settled: false,
-        createdAt: created,
-        updatedAt: resumedAt,
-      },
-    ])
+    ).toEqual(
+      ok([
+        {
+          ...newTask({ state: 'submitted', deadlineAt: newDeadline }),
+          settled: false,
+          createdAt: created,
+          updatedAt: resumedAt,
+        },
+      ]),
+    )
   })
 
   it('settles an input-required task directly when requireCurrentStates permits it', async () => {
@@ -227,8 +241,8 @@ describe('transition', () => {
         state: 'failed',
         requireCurrentStates: ['input-required'],
       }),
-    ).toEqual({ updated: true })
-    expect(await tracker.findActiveInputRequired(THREAD)).toBeUndefined()
+    ).toEqual(ok({ updated: true }))
+    expect(await tracker.findActiveInputRequired(THREAD)).toEqual(ok(undefined))
   })
 
   it('does not transition a task that is already settled', async () => {
@@ -236,9 +250,9 @@ describe('transition', () => {
     await tracker.recordDelegated(newTask({ state: 'working' }))
     await tracker.transition('task-1', { state: 'completed' })
 
-    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual({
-      updated: false,
-    })
+    expect(await tracker.transition('task-1', { state: 'failed' })).toEqual(
+      ok({ updated: false }),
+    )
   })
 
   it('lets only one of two racing input-required observations succeed', async () => {
@@ -254,7 +268,7 @@ describe('transition', () => {
       tracker.transition('task-1', { state: 'input-required' }),
     ])
 
-    expect(winners).toEqual([{ updated: true }, { updated: false }])
+    expect(winners).toEqual([ok({ updated: true }), ok({ updated: false })])
   })
 })
 
@@ -264,18 +278,20 @@ describe('findByTaskId', () => {
     const tracker = createInMemoryTracker({ now: () => created })
     await tracker.recordDelegated(newTask())
 
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...newTask(),
-      settled: false,
-      createdAt: created,
-      updatedAt: created,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...newTask(),
+        settled: false,
+        createdAt: created,
+        updatedAt: created,
+      }),
+    )
   })
 
   it('returns undefined for an untracked taskId', async () => {
     const tracker = createInMemoryTracker()
 
-    expect(await tracker.findByTaskId('unknown-task')).toBeUndefined()
+    expect(await tracker.findByTaskId('unknown-task')).toEqual(ok(undefined))
   })
 })
 
@@ -292,30 +308,34 @@ describe('unsettle', () => {
     await tracker.transition('task-1', { state: 'completed' })
 
     tick = unsettledAt
-    expect(await tracker.unsettle('task-1')).toEqual({ updated: true })
+    expect(await tracker.unsettle('task-1')).toEqual(ok({ updated: true }))
     expect(
       await tracker.findUnsettled(new Date('2026-01-01T01:00:00Z')),
-    ).toEqual([
-      {
-        ...newTask({ state: 'completed' }),
-        settled: false,
-        createdAt: created,
-        updatedAt: unsettledAt,
-      },
-    ])
+    ).toEqual(
+      ok([
+        {
+          ...newTask({ state: 'completed' }),
+          settled: false,
+          createdAt: created,
+          updatedAt: unsettledAt,
+        },
+      ]),
+    )
   })
 
   it('is a no-op for a row that is not settled', async () => {
     const tracker = createInMemoryTracker()
     await tracker.recordDelegated(newTask({ state: 'working' }))
 
-    expect(await tracker.unsettle('task-1')).toEqual({ updated: false })
+    expect(await tracker.unsettle('task-1')).toEqual(ok({ updated: false }))
   })
 
   it('is a no-op for an untracked taskId', async () => {
     const tracker = createInMemoryTracker()
 
-    expect(await tracker.unsettle('unknown-task')).toEqual({ updated: false })
+    expect(await tracker.unsettle('unknown-task')).toEqual(
+      ok({ updated: false }),
+    )
   })
 })
 
@@ -323,7 +343,7 @@ describe('lookupContext', () => {
   it('returns undefined for a thread and agent with no prior delegation', async () => {
     const tracker = createInMemoryTracker()
 
-    expect(await tracker.lookupContext(THREAD, 'meshi')).toBeUndefined()
+    expect(await tracker.lookupContext(THREAD, 'meshi')).toEqual(ok(undefined))
   })
 
   it('reuses the contextId of the most recently delegated task for the same thread and agent', async () => {
@@ -337,7 +357,7 @@ describe('lookupContext', () => {
       newTask({ taskId: 'task-2', contextId: 'ctx-new' }),
     )
 
-    expect(await tracker.lookupContext(THREAD, 'meshi')).toBe('ctx-new')
+    expect(await tracker.lookupContext(THREAD, 'meshi')).toEqual(ok('ctx-new'))
   })
 
   it('does not reuse a context recorded for a different agent', async () => {
@@ -346,7 +366,9 @@ describe('lookupContext', () => {
       newTask({ agentName: 'meshi', contextId: 'ctx-meshi' }),
     )
 
-    expect(await tracker.lookupContext(THREAD, 't-rader')).toBeUndefined()
+    expect(await tracker.lookupContext(THREAD, 't-rader')).toEqual(
+      ok(undefined),
+    )
   })
 })
 
@@ -359,8 +381,8 @@ describe('deleteSettledOlderThan', () => {
 
     expect(
       await tracker.deleteSettledOlderThan(new Date('2026-01-01T00:00:01Z')),
-    ).toBe(1)
-    expect(await tracker.findByTaskId('task-1')).toBeUndefined()
+    ).toEqual(ok(1))
+    expect(await tracker.findByTaskId('task-1')).toEqual(ok(undefined))
   })
 
   it('leaves a settled row not yet older than the cutoff', async () => {
@@ -369,8 +391,15 @@ describe('deleteSettledOlderThan', () => {
     await tracker.recordDelegated(newTask({ state: 'working' }))
     await tracker.transition('task-1', { state: 'completed' })
 
-    expect(await tracker.deleteSettledOlderThan(created)).toBe(0)
-    expect(await tracker.findByTaskId('task-1')).not.toBeUndefined()
+    expect(await tracker.deleteSettledOlderThan(created)).toEqual(ok(0))
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...newTask({ state: 'completed' }),
+        settled: true,
+        createdAt: created,
+        updatedAt: created,
+      }),
+    )
   })
 
   it('leaves an unsettled row regardless of age', async () => {
@@ -380,7 +409,14 @@ describe('deleteSettledOlderThan', () => {
 
     expect(
       await tracker.deleteSettledOlderThan(new Date('2026-01-02T00:00:00Z')),
-    ).toBe(0)
-    expect(await tracker.findByTaskId('task-1')).not.toBeUndefined()
+    ).toEqual(ok(0))
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...newTask({ state: 'input-required' }),
+        settled: false,
+        createdAt: created,
+        updatedAt: created,
+      }),
+    )
   })
 })

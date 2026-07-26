@@ -1,5 +1,6 @@
 import type { Task } from '@a2a-js/sdk'
 import { TaskNotFoundError } from '@a2a-js/sdk/client'
+import { ResultAsync } from 'neverthrow'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
@@ -87,25 +88,27 @@ export const startTaskReconciler = (
     row: A2aTaskRow,
     text: string,
   ): Promise<boolean> => {
-    try {
-      await postThreadMessage(
+    const postResult = await ResultAsync.fromPromise(
+      postThreadMessage(
         options.slackClient,
         { channel: row.slackChannelId, threadTs: row.threadRootTs },
         text,
-      )
-      return true
-    } catch (error) {
+      ),
+      (caughtErr) => caughtErr,
+    )
+    if (postResult.isErr()) {
       logger.error(
         {
           event: 'llm_agent_a2a_reconcile_post_failed',
           task_id: row.taskId,
           agent_name: row.agentName,
-          err: error,
+          err: postResult.error,
         },
         'llm-agent reconciler failed to post a forced-failure result to Slack',
       )
       return false
     }
+    return true
   }
 
   // Settles a row the reconciler itself decided to fail (deadline exceeded,
@@ -124,29 +127,29 @@ export const startTaskReconciler = (
   ): Promise<boolean> => {
     const posted = await postToThread(row, text)
     if (!posted) {
-      try {
-        await options.a2aTaskTracker.unsettle(row.taskId)
-      } catch (error) {
+      const unsettleResult = await options.a2aTaskTracker.unsettle(row.taskId)
+      if (unsettleResult.isErr()) {
         logger.error(
           {
             event: 'llm_agent_a2a_reconcile_unsettle_failed',
             task_id: row.taskId,
-            err: error,
+            err: unsettleResult.error,
           },
           'llm-agent reconciler failed to roll back the settled flag after a Slack post failure',
         )
       }
       return false
     }
-    try {
-      await options.eventLogStore.markResponded(row.slackEventId)
-    } catch (error) {
+    const markRespondedResult = await options.eventLogStore.markResponded(
+      row.slackEventId,
+    )
+    if (markRespondedResult.isErr()) {
       logger.warn(
         {
           event: 'llm_agent_a2a_reconcile_mark_responded_failed',
           task_id: row.taskId,
           slack_event_id: row.slackEventId,
-          err: error,
+          err: markRespondedResult.error,
         },
         'llm-agent reconciler failed to mark event_log responded after a forced-failure settle',
       )
@@ -169,11 +172,21 @@ export const startTaskReconciler = (
       A2A_TASK_ACTIVE_EXECUTION_STATES.includes(row.state) &&
       row.deadlineAt.getTime() <= deadline.getTime()
     ) {
-      const { updated } = await options.a2aTaskTracker.transition(row.taskId, {
-        state: 'failed',
-        ifDeadlineAtOrBefore: deadline,
-      })
-      if (updated) {
+      const transitionResult = await options.a2aTaskTracker.transition(
+        row.taskId,
+        { state: 'failed', ifDeadlineAtOrBefore: deadline },
+      )
+      if (transitionResult.isErr()) {
+        logger.error(
+          {
+            event: 'llm_agent_a2a_reconcile_deadline_transition_failed',
+            task_id: row.taskId,
+            agent_name: row.agentName,
+            err: transitionResult.error,
+          },
+          'llm-agent reconciler failed to transition a deadline-exceeded task',
+        )
+      } else if (transitionResult.value.updated) {
         return settleFailure(row, 'deadline', DEADLINE_EXCEEDED_TEXT)
       }
     }
@@ -202,13 +215,25 @@ export const startTaskReconciler = (
         // to opt back in; without it, a TaskNotFound observed here would
         // leave that row unsettled (and un-pruned, and re-polled every tick)
         // forever, since no other path re-settles it.
-        const { updated } = await options.a2aTaskTracker.transition(
+        const transitionResult = await options.a2aTaskTracker.transition(
           row.taskId,
           A2A_TASK_ACTIVE_EXECUTION_STATES.includes(row.state)
             ? { state: 'failed' }
             : { state: 'failed', requireCurrentStates: [row.state] },
         )
-        if (updated) {
+        if (transitionResult.isErr()) {
+          logger.error(
+            {
+              event: 'llm_agent_a2a_reconcile_task_not_found_transition_failed',
+              task_id: row.taskId,
+              agent_name: row.agentName,
+              err: transitionResult.error,
+            },
+            'llm-agent reconciler failed to transition a task after TaskNotFoundError',
+          )
+          return false
+        }
+        if (transitionResult.value.updated) {
           return settleFailure(row, 'polling', TASK_NOT_FOUND_TEXT)
         }
         return false
@@ -250,17 +275,21 @@ export const startTaskReconciler = (
     if (isRunning) return { settled: 0, pruned: 0 }
     isRunning = true
     try {
+      const findUnsettledResult = await options.a2aTaskTracker.findUnsettled(
+        new Date(now().getTime() - graceMs),
+      )
       let rows: readonly A2aTaskRow[]
-      try {
-        rows = await options.a2aTaskTracker.findUnsettled(
-          new Date(now().getTime() - graceMs),
-        )
-      } catch (error) {
+      if (findUnsettledResult.isErr()) {
         logger.error(
-          { event: 'llm_agent_a2a_reconcile_query_failed', err: error },
+          {
+            event: 'llm_agent_a2a_reconcile_query_failed',
+            err: findUnsettledResult.error,
+          },
           'llm-agent reconciler failed to query unsettled a2a_task rows',
         )
         rows = []
+      } else {
+        rows = findUnsettledResult.value
       }
 
       let settled = 0
@@ -285,16 +314,20 @@ export const startTaskReconciler = (
         }
       }
 
+      const pruneResult = await options.a2aTaskTracker.deleteSettledOlderThan(
+        new Date(now().getTime() - retentionMs),
+      )
       let pruned = 0
-      try {
-        pruned = await options.a2aTaskTracker.deleteSettledOlderThan(
-          new Date(now().getTime() - retentionMs),
-        )
-      } catch (error) {
+      if (pruneResult.isErr()) {
         logger.error(
-          { event: 'llm_agent_a2a_reconcile_prune_failed', err: error },
+          {
+            event: 'llm_agent_a2a_reconcile_prune_failed',
+            err: pruneResult.error,
+          },
           'llm-agent reconciler failed to prune settled a2a_task rows',
         )
+      } else {
+        pruned = pruneResult.value
       }
 
       return { settled, pruned }

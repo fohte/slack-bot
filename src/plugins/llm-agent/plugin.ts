@@ -191,13 +191,8 @@ const decideForMessage = async (
         'llm-agent gate lookup failed; treating as not found',
       )
     }
-    const [activeTask, checkpoint] = await Promise.all([
-      a2aTaskTracker
-        .findActiveInputRequired(threadKey)
-        .catch((error: unknown) => {
-          logLookupFailure('active_task', error)
-          return undefined
-        }),
+    const [activeTaskResult, checkpoint] = await Promise.all([
+      a2aTaskTracker.findActiveInputRequired(threadKey),
       checkpointer
         .get({ configurable: { thread_id: threadId } })
         .catch((error: unknown) => {
@@ -205,6 +200,12 @@ const decideForMessage = async (
           return undefined
         }),
     ])
+    if (activeTaskResult.isErr()) {
+      logLookupFailure('active_task', activeTaskResult.error)
+    }
+    const activeTask = activeTaskResult.isOk()
+      ? activeTaskResult.value
+      : undefined
     if (activeTask !== undefined) {
       return { accept: true, reason: 'active_task_resumption' }
     }
@@ -231,13 +232,16 @@ const decideForAppMention = async (
     // paired message delivery, so this only catches the case where the
     // file_share message has already been accepted; if app_mention wins
     // the race instead, both get accepted.
-    const hasSibling = await eventLogStore.hasAcceptedSibling({
+    const hasSiblingResult = await eventLogStore.hasAcceptedSibling({
       slackTeamId: teamId,
       slackChannelId: fields.channel,
       messageTs: fields.ts,
       excludeSlackEventId: eventId,
     })
-    if (hasSibling) return { accept: false, reason: 'duplicate_of_message' }
+    if (hasSiblingResult.isErr()) throw hasSiblingResult.error
+    if (hasSiblingResult.value) {
+      return { accept: false, reason: 'duplicate_of_message' }
+    }
   }
   return { accept: true, reason: 'app_mention' }
 }
@@ -312,27 +316,26 @@ export const createLlmAgentPlugin = (
 
       const threadRootTs = fields.thread_ts ?? fields.ts
 
-      let outcome: EventLogOutcome
-      try {
-        outcome = await eventLogStore.recordReceived({
-          slackEventId: eventId,
-          slackTeamId: ctx.envelope.team_id,
-          slackChannelId: fields.channel,
-          threadRootTs,
-          messageTs: fields.ts,
-        })
-      } catch (error) {
+      const recordResult = await eventLogStore.recordReceived({
+        slackEventId: eventId,
+        slackTeamId: ctx.envelope.team_id,
+        slackChannelId: fields.channel,
+        threadRootTs,
+        messageTs: fields.ts,
+      })
+      if (recordResult.isErr()) {
         logger.error(
           {
             event: 'llm_agent_event_log_failed',
             event_type: event.type,
             event_id: eventId,
-            err: error,
+            err: recordResult.error,
           },
           'failed to record event in event_log',
         )
-        throw error
+        throw recordResult.error
       }
+      const outcome: EventLogOutcome = recordResult.value
 
       logger.info(
         {
@@ -361,14 +364,13 @@ export const createLlmAgentPlugin = (
           // rejected_duplicate. A concurrent retry that has already taken the
           // rejected_duplicate branch can still slip through; the next-task
           // Task CR pipeline owns full at-least-once delivery.
-          try {
-            await eventLogStore.deleteReceived(eventId)
-          } catch (rollbackError) {
+          const deleteResult = await eventLogStore.deleteReceived(eventId)
+          if (deleteResult.isErr()) {
             logger.error(
               {
                 event: 'llm_agent_event_log_rollback_failed',
                 event_id: eventId,
-                err: rollbackError,
+                err: deleteResult.error,
               },
               'failed to roll back event_log row after onAccepted failure',
             )

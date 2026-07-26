@@ -1,7 +1,9 @@
 import { and, desc, eq, inArray, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+import { err, ok, Result, ResultAsync } from 'neverthrow'
 
 import { a2aTask } from '@/db/schema'
+import { A2aTaskTrackerError } from '@/types/errors'
 
 // Caps a single findUnsettled query so a large backlog (e.g. during an
 // extended reconciler outage) cannot pull an unbounded result set into
@@ -26,9 +28,13 @@ export type A2aTaskState = (typeof A2A_TASK_STATES)[number]
 export const isA2aTaskState = (value: string): value is A2aTaskState =>
   (A2A_TASK_STATES as readonly string[]).includes(value)
 
-const toA2aTaskState = (value: string): A2aTaskState => {
-  if (isA2aTaskState(value)) return value
-  throw new Error(`unexpected a2a_task.state value: ${value}`)
+const toA2aTaskState = (
+  value: string,
+): Result<A2aTaskState, A2aTaskTrackerError> => {
+  if (isA2aTaskState(value)) return ok(value)
+  return err(
+    new A2aTaskTrackerError(`unexpected a2a_task.state value: ${value}`),
+  )
 }
 
 // States in which a task may still be actively executing. A transition to
@@ -126,39 +132,47 @@ export const transitionGuard = (to: A2aTaskLifecycle): TransitionGuard =>
       : {}
 
 export interface A2aTaskTracker {
-  recordDelegated(rec: NewA2aTask): Promise<void>
+  recordDelegated(rec: NewA2aTask): ResultAsync<void, A2aTaskTrackerError>
   // Gates whether the next user message in a thread resumes a task instead
   // of starting a new conversation turn.
-  findActiveInputRequired(threadKey: ThreadKey): Promise<A2aTaskRow | undefined>
+  findActiveInputRequired(
+    threadKey: ThreadKey,
+  ): ResultAsync<A2aTaskRow | undefined, A2aTaskTrackerError>
   // Rows the reconciler should poll tasks/get for, last updated before
   // `olderThan`. Capped at FIND_UNSETTLED_LIMIT rows per call; a caller that
   // needs the true backlog size must call repeatedly across ticks.
-  findUnsettled(olderThan: Date): Promise<readonly A2aTaskRow[]>
+  findUnsettled(
+    olderThan: Date,
+  ): ResultAsync<readonly A2aTaskRow[], A2aTaskTrackerError>
   // Looks up a single row by its A2A taskId. Used by the push notification
   // endpoint, which is handed only a taskId (unlike the reconciler, whose
   // findUnsettled() rows already carry every field a settle decision needs).
-  findByTaskId(taskId: string): Promise<A2aTaskRow | undefined>
+  findByTaskId(
+    taskId: string,
+  ): ResultAsync<A2aTaskRow | undefined, A2aTaskTrackerError>
   // Conditional UPDATE: only rows not yet settled are affected, so
   // concurrent callers (push notification vs. reconciler) settling the same
   // task elect a single winner.
   transition(
     taskId: string,
     to: A2aTaskLifecycle,
-  ): Promise<{ updated: boolean }>
+  ): ResultAsync<{ updated: boolean }, A2aTaskTrackerError>
   // Reverts a winning transition's settled flag after the Slack post it
   // gated failed, so the row is picked up again (by a later push or the
   // reconciler) instead of sitting settled with no post ever delivered.
-  unsettle(taskId: string): Promise<{ updated: boolean }>
+  unsettle(
+    taskId: string,
+  ): ResultAsync<{ updated: boolean }, A2aTaskTrackerError>
   // contextId reuse for a thread/agent pair; undefined means this is the
   // first delegation from this thread to this agent.
   lookupContext(
     threadKey: ThreadKey,
     agentName: string,
-  ): Promise<string | undefined>
+  ): ResultAsync<string | undefined, A2aTaskTrackerError>
   // Retention: deletes settled rows last updated before `cutoff`. Rows still
   // unsettled (e.g. input-required, awaiting a user reply with no time
   // limit) are never touched here regardless of age.
-  deleteSettledOlderThan(cutoff: Date): Promise<number>
+  deleteSettledOlderThan(cutoff: Date): ResultAsync<number, A2aTaskTrackerError>
 }
 
 const ROW_COLUMNS = {
@@ -191,67 +205,93 @@ interface A2aTaskDbRow {
   readonly updatedAt: Date
 }
 
-const toRow = (row: A2aTaskDbRow): A2aTaskRow => ({
-  ...row,
-  state: toA2aTaskState(row.state),
-})
+const toRow = (row: A2aTaskDbRow): Result<A2aTaskRow, A2aTaskTrackerError> =>
+  toA2aTaskState(row.state).map((state) => ({ ...row, state }))
 
 export const createA2aTaskTracker = (
   db: PostgresJsDatabase,
 ): A2aTaskTracker => ({
-  async recordDelegated(rec) {
-    await db
-      .insert(a2aTask)
-      .values({
-        taskId: rec.taskId,
-        contextId: rec.contextId,
-        agentName: rec.agentName,
-        slackTeamId: rec.slackTeamId,
-        slackChannelId: rec.slackChannelId,
-        threadRootTs: rec.threadRootTs,
-        slackEventId: rec.slackEventId,
-        state: rec.state,
-        deadlineAt: rec.deadlineAt,
-      })
-      .onConflictDoNothing({ target: a2aTask.taskId })
-  },
-  async findActiveInputRequired(threadKey) {
-    const rows = await db
-      .select(ROW_COLUMNS)
-      .from(a2aTask)
-      .where(
-        and(
-          eq(a2aTask.slackTeamId, threadKey.slackTeamId),
-          eq(a2aTask.slackChannelId, threadKey.slackChannelId),
-          eq(a2aTask.threadRootTs, threadKey.threadRootTs),
-          eq(a2aTask.state, 'input-required'),
-          eq(a2aTask.settled, false),
+  recordDelegated(rec) {
+    return ResultAsync.fromPromise(
+      db
+        .insert(a2aTask)
+        .values({
+          taskId: rec.taskId,
+          contextId: rec.contextId,
+          agentName: rec.agentName,
+          slackTeamId: rec.slackTeamId,
+          slackChannelId: rec.slackChannelId,
+          threadRootTs: rec.threadRootTs,
+          slackEventId: rec.slackEventId,
+          state: rec.state,
+          deadlineAt: rec.deadlineAt,
+        })
+        .onConflictDoNothing({ target: a2aTask.taskId }),
+      (caughtErr) =>
+        new A2aTaskTrackerError(
+          'failed to record delegated a2a task',
+          caughtErr,
         ),
-      )
-      .orderBy(desc(a2aTask.updatedAt))
-      .limit(1)
-    const row = rows[0]
-    return row === undefined ? undefined : toRow(row)
+    ).map(() => undefined)
   },
-  async findUnsettled(olderThan) {
-    const rows = await db
-      .select(ROW_COLUMNS)
-      .from(a2aTask)
-      .where(and(eq(a2aTask.settled, false), lt(a2aTask.updatedAt, olderThan)))
-      .orderBy(a2aTask.updatedAt)
-      .limit(FIND_UNSETTLED_LIMIT)
-    return rows.map(toRow)
+  findActiveInputRequired(threadKey) {
+    return ResultAsync.fromPromise(
+      db
+        .select(ROW_COLUMNS)
+        .from(a2aTask)
+        .where(
+          and(
+            eq(a2aTask.slackTeamId, threadKey.slackTeamId),
+            eq(a2aTask.slackChannelId, threadKey.slackChannelId),
+            eq(a2aTask.threadRootTs, threadKey.threadRootTs),
+            eq(a2aTask.state, 'input-required'),
+            eq(a2aTask.settled, false),
+          ),
+        )
+        .orderBy(desc(a2aTask.updatedAt))
+        .limit(1),
+      (caughtErr) =>
+        new A2aTaskTrackerError(
+          'failed to find active input-required a2a task',
+          caughtErr,
+        ),
+    ).andThen((rows) => {
+      const row = rows[0]
+      return row === undefined ? ok(undefined) : toRow(row)
+    })
   },
-  async findByTaskId(taskId) {
-    const rows = await db
-      .select(ROW_COLUMNS)
-      .from(a2aTask)
-      .where(eq(a2aTask.taskId, taskId))
-      .limit(1)
-    const row = rows[0]
-    return row === undefined ? undefined : toRow(row)
+  findUnsettled(olderThan) {
+    return ResultAsync.fromPromise(
+      db
+        .select(ROW_COLUMNS)
+        .from(a2aTask)
+        .where(
+          and(eq(a2aTask.settled, false), lt(a2aTask.updatedAt, olderThan)),
+        )
+        .orderBy(a2aTask.updatedAt)
+        .limit(FIND_UNSETTLED_LIMIT),
+      (caughtErr) =>
+        new A2aTaskTrackerError(
+          'failed to find unsettled a2a tasks',
+          caughtErr,
+        ),
+    ).andThen((rows) => Result.combine(rows.map(toRow)))
   },
-  async transition(taskId, to) {
+  findByTaskId(taskId) {
+    return ResultAsync.fromPromise(
+      db
+        .select(ROW_COLUMNS)
+        .from(a2aTask)
+        .where(eq(a2aTask.taskId, taskId))
+        .limit(1),
+      (caughtErr) =>
+        new A2aTaskTrackerError('failed to find a2a task by taskId', caughtErr),
+    ).andThen((rows) => {
+      const row = rows[0]
+      return row === undefined ? ok(undefined) : toRow(row)
+    })
+  },
+  transition(taskId, to) {
     const guard = transitionGuard(to)
     const conditions = [eq(a2aTask.taskId, taskId), eq(a2aTask.settled, false)]
     if (guard.requireStates !== undefined) {
@@ -260,47 +300,65 @@ export const createA2aTaskTracker = (
     if (to.ifDeadlineAtOrBefore !== undefined) {
       conditions.push(lte(a2aTask.deadlineAt, to.ifDeadlineAtOrBefore))
     }
-    const updated = await db
-      .update(a2aTask)
-      .set({
-        state: to.state,
-        settled: isTerminalState(to.state),
-        ...(to.deadlineAt !== undefined ? { deadlineAt: to.deadlineAt } : {}),
-        updatedAt: sql`now()`,
-      })
-      .where(and(...conditions))
-      .returning({ taskId: a2aTask.taskId })
-    return { updated: updated.length > 0 }
+    return ResultAsync.fromPromise(
+      db
+        .update(a2aTask)
+        .set({
+          state: to.state,
+          settled: isTerminalState(to.state),
+          ...(to.deadlineAt !== undefined ? { deadlineAt: to.deadlineAt } : {}),
+          updatedAt: sql`now()`,
+        })
+        .where(and(...conditions))
+        .returning({ taskId: a2aTask.taskId }),
+      (caughtErr) =>
+        new A2aTaskTrackerError('failed to transition a2a task', caughtErr),
+    ).map((updated) => ({ updated: updated.length > 0 }))
   },
-  async unsettle(taskId) {
-    const updated = await db
-      .update(a2aTask)
-      .set({ settled: false, updatedAt: sql`now()` })
-      .where(and(eq(a2aTask.taskId, taskId), eq(a2aTask.settled, true)))
-      .returning({ taskId: a2aTask.taskId })
-    return { updated: updated.length > 0 }
+  unsettle(taskId) {
+    return ResultAsync.fromPromise(
+      db
+        .update(a2aTask)
+        .set({ settled: false, updatedAt: sql`now()` })
+        .where(and(eq(a2aTask.taskId, taskId), eq(a2aTask.settled, true)))
+        .returning({ taskId: a2aTask.taskId }),
+      (caughtErr) =>
+        new A2aTaskTrackerError('failed to unsettle a2a task', caughtErr),
+    ).map((updated) => ({ updated: updated.length > 0 }))
   },
-  async lookupContext(threadKey, agentName) {
-    const rows = await db
-      .select({ contextId: a2aTask.contextId })
-      .from(a2aTask)
-      .where(
-        and(
-          eq(a2aTask.slackTeamId, threadKey.slackTeamId),
-          eq(a2aTask.slackChannelId, threadKey.slackChannelId),
-          eq(a2aTask.threadRootTs, threadKey.threadRootTs),
-          eq(a2aTask.agentName, agentName),
+  lookupContext(threadKey, agentName) {
+    return ResultAsync.fromPromise(
+      db
+        .select({ contextId: a2aTask.contextId })
+        .from(a2aTask)
+        .where(
+          and(
+            eq(a2aTask.slackTeamId, threadKey.slackTeamId),
+            eq(a2aTask.slackChannelId, threadKey.slackChannelId),
+            eq(a2aTask.threadRootTs, threadKey.threadRootTs),
+            eq(a2aTask.agentName, agentName),
+          ),
+        )
+        .orderBy(desc(a2aTask.createdAt))
+        .limit(1),
+      (caughtErr) =>
+        new A2aTaskTrackerError(
+          'failed to look up a2a task context',
+          caughtErr,
         ),
-      )
-      .orderBy(desc(a2aTask.createdAt))
-      .limit(1)
-    return rows[0]?.contextId
+    ).map((rows) => rows[0]?.contextId)
   },
-  async deleteSettledOlderThan(cutoff) {
-    const deleted = await db
-      .delete(a2aTask)
-      .where(and(eq(a2aTask.settled, true), lt(a2aTask.updatedAt, cutoff)))
-      .returning({ taskId: a2aTask.taskId })
-    return deleted.length
+  deleteSettledOlderThan(cutoff) {
+    return ResultAsync.fromPromise(
+      db
+        .delete(a2aTask)
+        .where(and(eq(a2aTask.settled, true), lt(a2aTask.updatedAt, cutoff)))
+        .returning({ taskId: a2aTask.taskId }),
+      (caughtErr) =>
+        new A2aTaskTrackerError(
+          'failed to delete settled a2a tasks',
+          caughtErr,
+        ),
+    ).map((deleted) => deleted.length)
   },
 })

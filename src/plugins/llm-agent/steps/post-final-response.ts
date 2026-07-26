@@ -1,3 +1,5 @@
+import { ResultAsync } from 'neverthrow'
+
 import {
   CLEAR_STATUS,
   trySetAssistantStatus,
@@ -25,7 +27,9 @@ export const postFinalResponse = async (
   text: string,
   resolved: ResolvedDispatcherDeps,
 ): Promise<PostFinalResponseResult> => {
-  const { updated } = await resolved.eventLogStore.markResponded(env.eventId)
+  const markResult = await resolved.eventLogStore.markResponded(env.eventId)
+  if (markResult.isErr()) throw markResult.error
+  const { updated } = markResult.value
   if (updated === 0) {
     resolved.logger.info(
       {
@@ -37,26 +41,29 @@ export const postFinalResponse = async (
     return { posted: false }
   }
 
-  try {
-    await postThreadMessage(
+  const postResult = await ResultAsync.fromPromise(
+    postThreadMessage(
       resolved.slackClient,
       { channel: env.channelId, threadTs: env.threadRootTs },
       text,
+    ),
+    (caughtErr) => caughtErr,
+  )
+  if (postResult.isErr()) {
+    const unmarkResult = await resolved.eventLogStore.unmarkResponded(
+      env.eventId,
     )
-  } catch (error) {
-    try {
-      await resolved.eventLogStore.unmarkResponded(env.eventId)
-    } catch (rollbackError) {
+    if (unmarkResult.isErr()) {
       resolved.logger.error(
         {
           event: 'llm_agent_response_unmark_failed',
           slack_event_id: env.eventId,
-          err: rollbackError,
+          err: unmarkResult.error,
         },
         'failed to roll back event_log row after Slack post failure',
       )
     }
-    throw error
+    throw postResult.error
   }
 
   await trySetAssistantStatus({

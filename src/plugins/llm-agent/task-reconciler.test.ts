@@ -1,4 +1,5 @@
 import { TaskNotFoundError } from '@a2a-js/sdk/client'
+import { ok, okAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -98,13 +99,15 @@ describe('startTaskReconciler', () => {
         loadingMessages: undefined,
       },
     ])
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask(),
-      state: 'completed',
-      settled: true,
-      createdAt: CREATED_AT,
-      updatedAt: NOW,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask(),
+        state: 'completed',
+        settled: true,
+        createdAt: CREATED_AT,
+        updatedAt: NOW,
+      }),
+    )
     expect(eventLogStore.markedResponded).toEqual(['Ev1'])
     expect(result).toEqual({ settled: 1, pruned: 0 })
   })
@@ -146,12 +149,14 @@ describe('startTaskReconciler', () => {
 
     expect(getTaskCalls).toEqual([])
     expect(slackClient.calls).toEqual([])
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask(),
-      settled: false,
-      createdAt: recentlyUpdated,
-      updatedAt: recentlyUpdated,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask(),
+        settled: false,
+        createdAt: recentlyUpdated,
+        updatedAt: recentlyUpdated,
+      }),
+    )
     expect(result).toEqual({ settled: 0, pruned: 0 })
   })
 
@@ -194,12 +199,14 @@ describe('startTaskReconciler', () => {
           'llm-agent reconciler could not poll a task: its remote agent is no longer registered',
       },
     ])
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask(),
-      settled: false,
-      createdAt: CREATED_AT,
-      updatedAt: CREATED_AT,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask(),
+        settled: false,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      }),
+    )
     expect(result).toEqual({ settled: 0, pruned: 0 })
   })
 
@@ -235,15 +242,17 @@ describe('startTaskReconciler', () => {
 
     const result = await reconciler.runOnce()
 
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask({
-        state: 'failed',
-        deadlineAt: new Date('2026-01-09T00:00:00Z'),
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask({
+          state: 'failed',
+          deadlineAt: new Date('2026-01-09T00:00:00Z'),
+        }),
+        settled: true,
+        createdAt: CREATED_AT,
+        updatedAt: NOW,
       }),
-      settled: true,
-      createdAt: CREATED_AT,
-      updatedAt: NOW,
-    })
+    )
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',
@@ -295,15 +304,17 @@ describe('startTaskReconciler', () => {
 
     const result = await reconciler.runOnce()
 
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask({
-        state: 'failed',
-        deadlineAt: new Date('2026-01-09T00:00:00Z'),
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask({
+          state: 'failed',
+          deadlineAt: new Date('2026-01-09T00:00:00Z'),
+        }),
+        settled: false,
+        createdAt: CREATED_AT,
+        updatedAt: NOW,
       }),
-      settled: false,
-      createdAt: CREATED_AT,
-      updatedAt: NOW,
-    })
+    )
     expect(eventLogStore.markedResponded).toEqual([])
     // Not counted as settled: the post failed and the row rolled back to
     // unsettled, so this tick did not actually decide the row's outcome.
@@ -347,15 +358,17 @@ describe('startTaskReconciler', () => {
 
     const result = await reconciler.runOnce()
 
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask({
-        state: 'input-required',
-        deadlineAt: new Date('2026-01-09T00:00:00Z'),
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask({
+          state: 'input-required',
+          deadlineAt: new Date('2026-01-09T00:00:00Z'),
+        }),
+        settled: false,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
       }),
-      settled: false,
-      createdAt: CREATED_AT,
-      updatedAt: CREATED_AT,
-    })
+    )
     expect(slackClient.calls).toEqual([])
     expect(result).toEqual({ settled: 0, pruned: 0 })
   })
@@ -390,12 +403,14 @@ describe('startTaskReconciler', () => {
 
     const result = await reconciler.runOnce()
 
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask({ state: 'failed' }),
-      settled: true,
-      createdAt: CREATED_AT,
-      updatedAt: NOW,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask({ state: 'failed' }),
+        settled: true,
+        createdAt: CREATED_AT,
+        updatedAt: NOW,
+      }),
+    )
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',
@@ -443,12 +458,14 @@ describe('startTaskReconciler', () => {
     // transitionGuard's default 'failed' guard only permits submitted/working
     // rows; without requireCurrentStates: ['input-required'] here, this row
     // would never settle and would sit unsettled (and un-pruned) forever.
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask({ state: 'failed' }),
-      settled: true,
-      createdAt: CREATED_AT,
-      updatedAt: NOW,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask({ state: 'failed' }),
+        settled: true,
+        createdAt: CREATED_AT,
+        updatedAt: NOW,
+      }),
+    )
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',
@@ -500,12 +517,14 @@ describe('startTaskReconciler', () => {
 
     const result = await reconciler.runOnce()
 
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      ...baseTask({ state: 'failed' }),
-      settled: true,
-      createdAt: CREATED_AT,
-      updatedAt: NOW,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        ...baseTask({ state: 'failed' }),
+        settled: true,
+        createdAt: CREATED_AT,
+        updatedAt: NOW,
+      }),
+    )
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',
@@ -525,7 +544,7 @@ describe('startTaskReconciler', () => {
     // a2a-task-tracker.test.ts's own deleteSettledOlderThan tests; this only
     // verifies the reconciler derives the right cutoff and threads the count
     // through, mirroring event-log-retention.test.ts's own prune-wiring test.
-    const deleteSettledOlderThan = vi.fn(async (): Promise<number> => 3)
+    const deleteSettledOlderThan = vi.fn(() => okAsync(3))
     const tracker = {
       ...createFakeA2aTaskTracker(),
       deleteSettledOlderThan,
