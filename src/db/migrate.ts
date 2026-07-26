@@ -10,4 +10,8 @@ await runMigrations(databaseUrl)
 // Separate migration system: LangGraph's PostgresSaver owns the checkpoint
 // schema and creates its own tables, so this runs alongside (not through)
 // the Drizzle migrations above.
-await setupConversationCheckpointSchema(databaseUrl)
+const checkpointSchemaResult =
+  await setupConversationCheckpointSchema(databaseUrl)
+if (checkpointSchemaResult.isErr()) {
+  throw checkpointSchemaResult.error
+}

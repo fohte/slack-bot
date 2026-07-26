@@ -6,6 +6,7 @@ import {
   Plan,
   type PlanIssue,
 } from '@fohte/blog-publisher-contract'
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { z } from 'zod'
 
 import { ServiceError, ServiceUnavailable } from '@/plugins/blog/errors'
@@ -64,27 +65,34 @@ export const createBlogServiceClient = (
     if (body !== undefined) headers['content-type'] = 'application/json'
     if (traceId !== undefined) headers['x-trace-id'] = traceId
 
+    const extras = { method, path }
     const init: RequestInit = { method, headers }
     if (body !== undefined) init.body = JSON.stringify(body)
     let response: Response
     try {
       response = await fetchImpl(`${baseUrl}${path}`, init)
     } catch (err) {
-      throw new ServiceUnavailable(
-        `Failed to reach blog-publisher service: ${describeError(err)}`,
-        { cause: err, traceId },
+      return reportAndThrow(
+        new ServiceUnavailable(
+          `Failed to reach blog-publisher service: ${describeError(err)}`,
+          { cause: err, traceId },
+        ),
+        extras,
       )
     }
 
     if (!response.ok) {
       const text = await safeReadText(response)
       const parsed = parseErrorBody(text)
-      throw new ServiceError(parsed.message, {
-        status: response.status,
-        code: parsed.code,
-        issues: parsed.issues,
-        traceId,
-      })
+      return reportAndThrow(
+        new ServiceError(parsed.message, {
+          status: response.status,
+          code: parsed.code,
+          issues: parsed.issues,
+          traceId,
+        }),
+        extras,
+      )
     }
 
     const text = await safeReadText(response)
@@ -92,16 +100,22 @@ export const createBlogServiceClient = (
     try {
       json = JSON.parse(text)
     } catch (err) {
-      throw new ServiceError(
-        `Response body is not valid JSON: ${describeError(err)}`,
-        { status: response.status, code: 'InvalidResponseBody', traceId },
+      return reportAndThrow(
+        new ServiceError(
+          `Response body is not valid JSON: ${describeError(err)}`,
+          { status: response.status, code: 'InvalidResponseBody', traceId },
+        ),
+        extras,
       )
     }
     const parsedResult = schema.safeParse(json)
     if (!parsedResult.success) {
-      throw new ServiceError(
-        `Response body did not match schema: ${parsedResult.error.message}`,
-        { status: response.status, code: 'InvalidResponseSchema', traceId },
+      return reportAndThrow(
+        new ServiceError(
+          `Response body did not match schema: ${parsedResult.error.message}`,
+          { status: response.status, code: 'InvalidResponseSchema', traceId },
+        ),
+        extras,
       )
     }
     return parsedResult.data
@@ -140,6 +154,18 @@ export const createBlogServiceClient = (
         traceId,
       ),
   }
+}
+
+// Groups every blog-publisher service request failure under one Sentry
+// issue per boundary rather than per call site.
+const BLOG_SERVICE_CLIENT_FINGERPRINT = 'blog.service-client.request-failed'
+
+const reportAndThrow = (
+  err: unknown,
+  extras: Record<string, unknown>,
+): never => {
+  captureWithFingerprint(err, BLOG_SERVICE_CLIENT_FINGERPRINT, { extras })
+  throw err
 }
 
 interface ParsedError {

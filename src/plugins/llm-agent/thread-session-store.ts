@@ -1,7 +1,9 @@
 import { and, eq, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+import { ResultAsync } from 'neverthrow'
 
 import { threadSessionMap } from '@/db/schema'
+import { ThreadSessionStoreError } from '@/types/errors'
 
 export interface ThreadSessionKey {
   readonly slackTeamId: string
@@ -14,46 +16,63 @@ export interface ThreadSessionUpsert extends ThreadSessionKey {
 }
 
 export interface ThreadSessionStore {
-  lookup(key: ThreadSessionKey): Promise<string | undefined>
-  upsert(record: ThreadSessionUpsert): Promise<void>
+  lookup(
+    key: ThreadSessionKey,
+  ): ResultAsync<string | undefined, ThreadSessionStoreError>
+  upsert(
+    record: ThreadSessionUpsert,
+  ): ResultAsync<void, ThreadSessionStoreError>
 }
 
 export const createThreadSessionStore = (
   db: PostgresJsDatabase,
 ): ThreadSessionStore => ({
-  async lookup(key) {
-    const rows = await db
-      .select({ opencodeSessionId: threadSessionMap.opencodeSessionId })
-      .from(threadSessionMap)
-      .where(
-        and(
-          eq(threadSessionMap.slackTeamId, key.slackTeamId),
-          eq(threadSessionMap.slackChannelId, key.slackChannelId),
-          eq(threadSessionMap.threadRootTs, key.threadRootTs),
+  lookup(key) {
+    return ResultAsync.fromPromise(
+      db
+        .select({ opencodeSessionId: threadSessionMap.opencodeSessionId })
+        .from(threadSessionMap)
+        .where(
+          and(
+            eq(threadSessionMap.slackTeamId, key.slackTeamId),
+            eq(threadSessionMap.slackChannelId, key.slackChannelId),
+            eq(threadSessionMap.threadRootTs, key.threadRootTs),
+          ),
+        )
+        .limit(1),
+      (caughtErr) =>
+        new ThreadSessionStoreError(
+          'failed to look up thread session',
+          caughtErr,
         ),
-      )
-      .limit(1)
-    return rows[0]?.opencodeSessionId
+    ).map((rows) => rows[0]?.opencodeSessionId)
   },
-  async upsert(record) {
-    await db
-      .insert(threadSessionMap)
-      .values({
-        slackTeamId: record.slackTeamId,
-        slackChannelId: record.slackChannelId,
-        threadRootTs: record.threadRootTs,
-        opencodeSessionId: record.opencodeSessionId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          threadSessionMap.slackTeamId,
-          threadSessionMap.slackChannelId,
-          threadSessionMap.threadRootTs,
-        ],
-        set: {
+  upsert(record) {
+    return ResultAsync.fromPromise(
+      db
+        .insert(threadSessionMap)
+        .values({
+          slackTeamId: record.slackTeamId,
+          slackChannelId: record.slackChannelId,
+          threadRootTs: record.threadRootTs,
           opencodeSessionId: record.opencodeSessionId,
-          updatedAt: sql`now()`,
-        },
-      })
+        })
+        .onConflictDoUpdate({
+          target: [
+            threadSessionMap.slackTeamId,
+            threadSessionMap.slackChannelId,
+            threadSessionMap.threadRootTs,
+          ],
+          set: {
+            opencodeSessionId: record.opencodeSessionId,
+            updatedAt: sql`now()`,
+          },
+        }),
+      (caughtErr) =>
+        new ThreadSessionStoreError(
+          'failed to upsert thread session',
+          caughtErr,
+        ),
+    ).map(() => undefined)
   },
 })

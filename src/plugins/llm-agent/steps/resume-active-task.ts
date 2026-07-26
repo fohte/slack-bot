@@ -82,30 +82,30 @@ const transitionBestEffort = async (
   to: A2aTaskLifecycle,
   events: { readonly racedEvent: string; readonly failedEvent: string },
 ): Promise<void> => {
-  try {
-    const { updated } = await resolved.a2aTaskTracker.transition(
-      activeTask.taskId,
-      to,
-    )
-    if (!updated) {
-      resolved.logger.warn(
-        {
-          event: events.racedEvent,
-          agent_name: activeTask.agentName,
-          task_id: activeTask.taskId,
-        },
-        'llm-agent tracked row had already moved on before this transition could apply',
-      )
-    }
-  } catch (error) {
+  const transitionResult = await resolved.a2aTaskTracker.transition(
+    activeTask.taskId,
+    to,
+  )
+  if (transitionResult.isErr()) {
     resolved.logger.warn(
       {
         event: events.failedEvent,
         agent_name: activeTask.agentName,
         task_id: activeTask.taskId,
-        err: error,
+        err: transitionResult.error,
       },
       'llm-agent failed to record a task transition locally; the underlying A2A operation still succeeded',
+    )
+    return
+  }
+  if (!transitionResult.value.updated) {
+    resolved.logger.warn(
+      {
+        event: events.racedEvent,
+        agent_name: activeTask.agentName,
+        task_id: activeTask.taskId,
+      },
+      'llm-agent tracked row had already moved on before this transition could apply',
     )
   }
 }
@@ -157,25 +157,24 @@ const redelegate = async (
 
   const taskId = parsed.data.id
   const state = parsed.data.status.state
-  try {
-    await resolved.a2aTaskTracker.recordDelegated({
-      taskId,
-      contextId: activeTask.contextId,
-      agentName: activeTask.agentName,
-      slackTeamId: env.teamId,
-      slackChannelId: env.channelId,
-      threadRootTs: env.threadRootTs,
-      slackEventId: env.eventId,
-      state,
-      deadlineAt: new Date(resolved.now().getTime() + resolved.taskDeadlineMs),
-    })
-  } catch (error) {
+  const recordResult = await resolved.a2aTaskTracker.recordDelegated({
+    taskId,
+    contextId: activeTask.contextId,
+    agentName: activeTask.agentName,
+    slackTeamId: env.teamId,
+    slackChannelId: env.channelId,
+    threadRootTs: env.threadRootTs,
+    slackEventId: env.eventId,
+    state,
+    deadlineAt: new Date(resolved.now().getTime() + resolved.taskDeadlineMs),
+  })
+  if (recordResult.isErr()) {
     resolved.logger.warn(
       {
         event: 'llm_agent_resume_redelegate_record_failed',
         agent_name: activeTask.agentName,
         task_id: taskId,
-        err: error,
+        err: recordResult.error,
       },
       'llm-agent redelegated a task but failed to record it locally',
     )

@@ -1,5 +1,3 @@
-import { ResultAsync } from 'neverthrow'
-
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
@@ -36,11 +34,12 @@ export const startEventLogRetention = (
 
   const runOnce = async (): Promise<number> => {
     const cutoff = new Date(now() - ttlMs)
-    const result = await ResultAsync.fromPromise(
-      options.eventLogStore.pruneOlderThan(cutoff),
-      (caughtErr) =>
-        new EventLogPruneError('failed to prune event_log', caughtErr),
-    )
+    const result = await options.eventLogStore
+      .pruneOlderThan(cutoff)
+      .mapErr(
+        (caughtErr) =>
+          new EventLogPruneError('failed to prune event_log', caughtErr),
+      )
 
     if (result.isErr()) {
       logger.error(

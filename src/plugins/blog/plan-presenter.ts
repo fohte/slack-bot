@@ -1,7 +1,12 @@
 import type { Plan } from '@fohte/blog-publisher-contract'
+import type { Result } from 'neverthrow'
+import { err, fromThrowable, ok } from 'neverthrow'
 
 import { translateIssues } from '@/plugins/blog/error-translator'
-import { ButtonValueOverflow } from '@/plugins/blog/errors'
+import {
+  ButtonValueOverflow,
+  PlanButtonValueDecodeError,
+} from '@/plugins/blog/errors'
 
 export const BUTTON_VALUE_LIMIT = 2000
 
@@ -17,12 +22,14 @@ export interface RenderPlanResult {
   readonly buttonValue: string | undefined
 }
 
-export const encodeDocIds = (docIds: readonly string[]): string => {
+export const encodeDocIds = (
+  docIds: readonly string[],
+): Result<string, ButtonValueOverflow> => {
   const value = JSON.stringify({ docIds: [...docIds] })
   if (value.length > BUTTON_VALUE_LIMIT) {
-    throw new ButtonValueOverflow(value.length, BUTTON_VALUE_LIMIT)
+    return err(new ButtonValueOverflow(value.length, BUTTON_VALUE_LIMIT))
   }
-  return value
+  return ok(value)
 }
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -32,38 +39,48 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const escapeMrkdwn = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-export const decodeDocIds = (value: string): string[] => {
-  const json: unknown = JSON.parse(value)
-  if (!isRecord(json)) {
-    throw new Error('Invalid button value: not an object')
-  }
-  const docIds = json['docIds']
-  if (!Array.isArray(docIds)) {
-    throw new Error('Invalid button value: docIds missing')
-  }
-  if (!docIds.every((d): d is string => typeof d === 'string')) {
-    throw new Error('Invalid button value: docIds must be strings')
-  }
-  return docIds
-}
+const parseButtonValueJson = fromThrowable(
+  (value: string) => JSON.parse(value) as unknown,
+  (error) =>
+    new PlanButtonValueDecodeError(
+      'Invalid button value: not valid JSON',
+      error,
+    ),
+)
+
+export const decodeDocIds = (
+  value: string,
+): Result<string[], PlanButtonValueDecodeError> =>
+  parseButtonValueJson(value).andThen((json) => {
+    if (!isRecord(json)) {
+      return err(
+        new PlanButtonValueDecodeError('Invalid button value: not an object'),
+      )
+    }
+    const docIds = json['docIds']
+    if (!Array.isArray(docIds)) {
+      return err(
+        new PlanButtonValueDecodeError('Invalid button value: docIds missing'),
+      )
+    }
+    if (!docIds.every((d): d is string => typeof d === 'string')) {
+      return err(
+        new PlanButtonValueDecodeError(
+          'Invalid button value: docIds must be strings',
+        ),
+      )
+    }
+    return ok(docIds)
+  })
 
 export const renderPlanBlocks = (
   options: RenderPlanOptions,
 ): RenderPlanResult => {
   const { plan } = options
   const docIds = plan.items.map((i) => i.docId)
-  let buttonValue: string | undefined
-  let applyHidden = false
-  try {
-    buttonValue = encodeDocIds(docIds)
-  } catch (err) {
-    if (err instanceof ButtonValueOverflow) {
-      applyHidden = true
-      buttonValue = undefined
-    } else {
-      throw err
-    }
-  }
+  const encoded = encodeDocIds(docIds)
+  const buttonValue = encoded.isOk() ? encoded.value : undefined
+  const applyHidden = encoded.isErr()
   const applyDisabled = plan.errors.length > 0
 
   const blocks: unknown[] = [

@@ -1,4 +1,5 @@
 import type { Message, Task } from '@a2a-js/sdk'
+import { ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -103,13 +104,15 @@ describe('createResponseFinalizer', () => {
         },
       ])
       expect(eventLogStore.markedResponded).toEqual(['Ev1'])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask(),
-        state: 'completed',
-        settled: true,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask(),
+          state: 'completed',
+          settled: true,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
 
     it('posts a dedicated message instead of the task text when error_kind is usage_limit', async () => {
@@ -143,13 +146,15 @@ describe('createResponseFinalizer', () => {
           loadingMessages: undefined,
         },
       ])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask(),
-        state: 'failed',
-        settled: true,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask(),
+          state: 'failed',
+          settled: true,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
 
     it('paraphrases the task text through the persona paraphraser before posting', async () => {
@@ -370,13 +375,15 @@ describe('createResponseFinalizer', () => {
 
       await finalizer.finalize('task-1')
 
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask(),
-        state: 'completed',
-        settled: false,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask(),
+          state: 'completed',
+          settled: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
       expect(eventLogStore.markedResponded).toEqual([])
 
       const retryingSlackClient = createStubSlackClient()
@@ -398,13 +405,15 @@ describe('createResponseFinalizer', () => {
           loadingMessages: undefined,
         },
       ])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask(),
-        state: 'completed',
-        settled: true,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask(),
+          state: 'completed',
+          settled: true,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
   })
 
@@ -437,12 +446,14 @@ describe('createResponseFinalizer', () => {
         },
       ])
       expect(eventLogStore.markedResponded).toEqual([])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask({ state: 'input-required' }),
-        settled: false,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask({ state: 'input-required' }),
+          settled: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
 
     it('paraphrases the question through the persona paraphraser before posting', async () => {
@@ -501,12 +512,14 @@ describe('createResponseFinalizer', () => {
       // forever: transitionGuard only allows entering input-required from
       // an active-execution state, so a row already at input-required could
       // never transition into it again to retry the post.
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask({ state: 'working' }),
-        settled: false,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask({ state: 'working' }),
+          settled: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
 
       const retryingSlackClient = createStubSlackClient()
       const retryFinalizer = createResponseFinalizer({
@@ -583,12 +596,14 @@ describe('createResponseFinalizer', () => {
       await finalizer.finalize('task-1')
 
       expect(slackClient.calls).toEqual([])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask({ state: 'working' }),
-        settled: false,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask({ state: 'working' }),
+          settled: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
   })
 
@@ -722,12 +737,14 @@ describe('createResponseFinalizer', () => {
             'llm-agent failed to fetch tasks/get while finalizing a task',
         },
       ])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask(),
-        settled: false,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask(),
+          settled: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
   })
 
@@ -764,12 +781,14 @@ describe('createResponseFinalizer', () => {
             'llm-agent received a task payload without a usable status from tasks/get',
         },
       ])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask(),
-        settled: false,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask(),
+          settled: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
   })
 
@@ -787,7 +806,7 @@ describe('createResponseFinalizer', () => {
       })
 
       await finalizer.finalizeTask(
-        (await tracker.findByTaskId('task-1'))!,
+        (await tracker.findByTaskId('task-1'))._unsafeUnwrap()!,
         taskWith('completed', textMessage('Recorded your meal.')),
       )
 
@@ -802,13 +821,15 @@ describe('createResponseFinalizer', () => {
         },
       ])
       expect(eventLogStore.markedResponded).toEqual(['Ev1'])
-      expect(await tracker.findByTaskId('task-1')).toEqual({
-        ...baseTask(),
-        state: 'completed',
-        settled: true,
-        createdAt: NOW,
-        updatedAt: NOW,
-      })
+      expect(await tracker.findByTaskId('task-1')).toEqual(
+        ok({
+          ...baseTask(),
+          state: 'completed',
+          settled: true,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      )
     })
   })
 })

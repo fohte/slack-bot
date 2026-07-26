@@ -134,3 +134,38 @@ export class DuplicateMcpToolNameError extends Error {
     super(`duplicate MCP tool name '${toolName}' across configured MCP servers`)
   }
 }
+
+export class ThreadSessionStoreError extends Error {
+  override readonly name = 'ThreadSessionStoreError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
+export class ConversationCheckpointSchemaSetupError extends Error {
+  override readonly name = 'ConversationCheckpointSchemaSetupError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
+export class A2aTaskTrackerError extends Error {
+  override readonly name = 'A2aTaskTrackerError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
+export class EventLogStoreError extends Error {
+  override readonly name = 'EventLogStoreError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
+export class PersonaParaphraseError extends Error {
+  override readonly name = 'PersonaParaphraseError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}

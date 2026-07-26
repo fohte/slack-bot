@@ -49,3 +49,10 @@ export class ButtonValueOverflow extends Error {
     this.limit = limit
   }
 }
+
+export class PlanButtonValueDecodeError extends Error {
+  override readonly name = 'PlanButtonValueDecodeError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}

@@ -1,3 +1,5 @@
+import { ResultAsync } from 'neverthrow'
+
 import type { ImageBlock } from '@/plugins/llm-agent/conversation-agent'
 import { imageBlockFromResizedImage } from '@/plugins/llm-agent/conversation-agent'
 import type {
@@ -121,22 +123,23 @@ export const resolveImageBlocks = async (
       )
       continue
     }
-    let bytes: Uint8Array
-    try {
-      const result = await resolved.slackClient.downloadFile(url)
-      bytes = result.bytes
-    } catch (err) {
+    const downloadResult = await ResultAsync.fromPromise(
+      resolved.slackClient.downloadFile(url),
+      (caughtErr) => caughtErr,
+    )
+    if (downloadResult.isErr()) {
       resolved.logger.warn(
         {
           event: 'llm_agent_slack_image_download_failed',
           event_id: env.eventId,
           slack_file_id: file.id,
-          err,
+          err: downloadResult.error,
         },
         'slack image download failed; dropping this attachment',
       )
       continue
     }
+    const bytes = downloadResult.value.bytes
     const perImageCap = Math.min(
       SINGLE_IMAGE_BYTE_CAP,
       TOTAL_IMAGE_BYTE_CAP - totalBytes,

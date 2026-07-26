@@ -1,7 +1,9 @@
 import { and, eq, isNotNull, lt, ne } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+import { ResultAsync } from 'neverthrow'
 
 import { eventLog } from '@/db/schema'
+import { EventLogStoreError } from '@/types/errors'
 
 // Caps a single findDispatchedUnresponded query so a large backlog (e.g.
 // during an extended outage) cannot pull an unbounded result set into
@@ -35,13 +37,17 @@ export interface AcceptedSiblingQuery {
 }
 
 export interface EventLogStore {
-  recordReceived(record: EventLogRecord): Promise<EventLogOutcome>
-  deleteReceived(slackEventId: string): Promise<void>
+  recordReceived(
+    record: EventLogRecord,
+  ): ResultAsync<EventLogOutcome, EventLogStoreError>
+  deleteReceived(slackEventId: string): ResultAsync<void, EventLogStoreError>
   markTaskName(
     slackEventId: string,
     taskName: string,
-  ): Promise<{ updated: number }>
-  findByTaskName(taskName: string): Promise<EventLogRow | undefined>
+  ): ResultAsync<{ updated: number }, EventLogStoreError>
+  findByTaskName(
+    taskName: string,
+  ): ResultAsync<EventLogRow | undefined, EventLogStoreError>
   // Rows dispatched (task_name set) but not yet responded, received before
   // `receivedBefore`. Backs the response reconciler that recovers Task
   // completions a dead Pod never got to post to Slack. There is no separate
@@ -51,154 +57,200 @@ export interface EventLogStore {
   // needs the true backlog size must call repeatedly across ticks.
   findDispatchedUnresponded(
     receivedBefore: Date,
-  ): Promise<readonly EventLogRow[]>
-  markResponded(slackEventId: string): Promise<{ updated: number }>
-  unmarkResponded(slackEventId: string): Promise<{ updated: number }>
-  pruneOlderThan(cutoff: Date): Promise<number>
+  ): ResultAsync<readonly EventLogRow[], EventLogStoreError>
+  markResponded(
+    slackEventId: string,
+  ): ResultAsync<{ updated: number }, EventLogStoreError>
+  unmarkResponded(
+    slackEventId: string,
+  ): ResultAsync<{ updated: number }, EventLogStoreError>
+  pruneOlderThan(cutoff: Date): ResultAsync<number, EventLogStoreError>
   // True when another already-accepted event describes the same physical
   // Slack message (same team+channel+messageTs). Used to detect the
   // `message`/`app_mention` pair Slack sends for a single mention.
-  hasAcceptedSibling(query: AcceptedSiblingQuery): Promise<boolean>
+  hasAcceptedSibling(
+    query: AcceptedSiblingQuery,
+  ): ResultAsync<boolean, EventLogStoreError>
 }
 
 const normalize = (value: string | null): string | undefined =>
   value === null ? undefined : value
 
 export const createEventLogStore = (db: PostgresJsDatabase): EventLogStore => ({
-  async recordReceived(record) {
-    const inserted = await db
-      .insert(eventLog)
-      .values({
-        slackEventId: record.slackEventId,
-        outcome: 'accepted',
-        slackTeamId: record.slackTeamId ?? null,
-        slackChannelId: record.slackChannelId ?? null,
-        threadRootTs: record.threadRootTs ?? null,
-        messageTs: record.messageTs ?? null,
-      })
-      .onConflictDoNothing({ target: eventLog.slackEventId })
-      .returning({ slackEventId: eventLog.slackEventId })
-    return inserted.length > 0 ? 'accepted' : 'rejected_duplicate'
+  recordReceived(record) {
+    return ResultAsync.fromPromise(
+      db
+        .insert(eventLog)
+        .values({
+          slackEventId: record.slackEventId,
+          outcome: 'accepted',
+          slackTeamId: record.slackTeamId ?? null,
+          slackChannelId: record.slackChannelId ?? null,
+          threadRootTs: record.threadRootTs ?? null,
+          messageTs: record.messageTs ?? null,
+        })
+        .onConflictDoNothing({ target: eventLog.slackEventId })
+        .returning({ slackEventId: eventLog.slackEventId }),
+      (caughtErr) =>
+        new EventLogStoreError('failed to record received event', caughtErr),
+    ).map((inserted) =>
+      inserted.length > 0 ? 'accepted' : 'rejected_duplicate',
+    )
   },
-  async deleteReceived(slackEventId) {
-    await db.delete(eventLog).where(eq(eventLog.slackEventId, slackEventId))
+  deleteReceived(slackEventId) {
+    return ResultAsync.fromPromise(
+      db.delete(eventLog).where(eq(eventLog.slackEventId, slackEventId)),
+      (caughtErr) =>
+        new EventLogStoreError('failed to delete received event', caughtErr),
+    ).map(() => undefined)
   },
-  async markTaskName(slackEventId, taskName) {
-    const updated = await db
-      .update(eventLog)
-      .set({ taskName })
-      .where(eq(eventLog.slackEventId, slackEventId))
-      .returning({ slackEventId: eventLog.slackEventId })
-    return { updated: updated.length }
+  markTaskName(slackEventId, taskName) {
+    return ResultAsync.fromPromise(
+      db
+        .update(eventLog)
+        .set({ taskName })
+        .where(eq(eventLog.slackEventId, slackEventId))
+        .returning({ slackEventId: eventLog.slackEventId }),
+      (caughtErr) =>
+        new EventLogStoreError('failed to mark event task name', caughtErr),
+    ).map((updated) => ({ updated: updated.length }))
   },
-  async findByTaskName(taskName) {
-    const rows = await db
-      .select({
-        slackEventId: eventLog.slackEventId,
-        outcome: eventLog.outcome,
-        slackTeamId: eventLog.slackTeamId,
-        slackChannelId: eventLog.slackChannelId,
-        threadRootTs: eventLog.threadRootTs,
-        taskName: eventLog.taskName,
-      })
-      .from(eventLog)
-      .where(eq(eventLog.taskName, taskName))
-      .orderBy(eventLog.receivedAt)
-      .limit(1)
-    const row = rows[0]
-    if (row === undefined) return undefined
-    return {
-      slackEventId: row.slackEventId,
-      outcome: row.outcome,
-      slackTeamId: normalize(row.slackTeamId),
-      slackChannelId: normalize(row.slackChannelId),
-      threadRootTs: normalize(row.threadRootTs),
-      taskName: normalize(row.taskName),
-    }
+  findByTaskName(taskName) {
+    return ResultAsync.fromPromise(
+      db
+        .select({
+          slackEventId: eventLog.slackEventId,
+          outcome: eventLog.outcome,
+          slackTeamId: eventLog.slackTeamId,
+          slackChannelId: eventLog.slackChannelId,
+          threadRootTs: eventLog.threadRootTs,
+          taskName: eventLog.taskName,
+        })
+        .from(eventLog)
+        .where(eq(eventLog.taskName, taskName))
+        .orderBy(eventLog.receivedAt)
+        .limit(1),
+      (caughtErr) =>
+        new EventLogStoreError('failed to find event by task name', caughtErr),
+    ).map((rows) => {
+      const row = rows[0]
+      if (row === undefined) return undefined
+      return {
+        slackEventId: row.slackEventId,
+        outcome: row.outcome,
+        slackTeamId: normalize(row.slackTeamId),
+        slackChannelId: normalize(row.slackChannelId),
+        threadRootTs: normalize(row.threadRootTs),
+        taskName: normalize(row.taskName),
+      }
+    })
   },
-  async findDispatchedUnresponded(receivedBefore) {
-    const rows = await db
-      .select({
-        slackEventId: eventLog.slackEventId,
-        outcome: eventLog.outcome,
-        slackTeamId: eventLog.slackTeamId,
-        slackChannelId: eventLog.slackChannelId,
-        threadRootTs: eventLog.threadRootTs,
-        taskName: eventLog.taskName,
-      })
-      .from(eventLog)
-      .where(
-        and(
-          isNotNull(eventLog.taskName),
-          ne(eventLog.outcome, 'responded'),
-          lt(eventLog.receivedAt, receivedBefore),
+  findDispatchedUnresponded(receivedBefore) {
+    return ResultAsync.fromPromise(
+      db
+        .select({
+          slackEventId: eventLog.slackEventId,
+          outcome: eventLog.outcome,
+          slackTeamId: eventLog.slackTeamId,
+          slackChannelId: eventLog.slackChannelId,
+          threadRootTs: eventLog.threadRootTs,
+          taskName: eventLog.taskName,
+        })
+        .from(eventLog)
+        .where(
+          and(
+            isNotNull(eventLog.taskName),
+            ne(eventLog.outcome, 'responded'),
+            lt(eventLog.receivedAt, receivedBefore),
+          ),
+        )
+        .orderBy(eventLog.receivedAt)
+        .limit(FIND_DISPATCHED_UNRESPONDED_LIMIT),
+      (caughtErr) =>
+        new EventLogStoreError(
+          'failed to find dispatched unresponded events',
+          caughtErr,
         ),
-      )
-      .orderBy(eventLog.receivedAt)
-      .limit(FIND_DISPATCHED_UNRESPONDED_LIMIT)
-    return rows.map((row) => ({
-      slackEventId: row.slackEventId,
-      outcome: row.outcome,
-      slackTeamId: normalize(row.slackTeamId),
-      slackChannelId: normalize(row.slackChannelId),
-      threadRootTs: normalize(row.threadRootTs),
-      taskName: normalize(row.taskName),
-    }))
+    ).map((rows) =>
+      rows.map((row) => ({
+        slackEventId: row.slackEventId,
+        outcome: row.outcome,
+        slackTeamId: normalize(row.slackTeamId),
+        slackChannelId: normalize(row.slackChannelId),
+        threadRootTs: normalize(row.threadRootTs),
+        taskName: normalize(row.taskName),
+      })),
+    )
   },
-  async markResponded(slackEventId) {
+  markResponded(slackEventId) {
     // Only transition rows that are not yet responded; the conditional
     // makes this a serialization point so concurrent watcher ticks elect a
     // single winner for the Slack post.
-    const updated = await db
-      .update(eventLog)
-      .set({ outcome: 'responded' })
-      .where(
-        and(
-          eq(eventLog.slackEventId, slackEventId),
-          ne(eventLog.outcome, 'responded'),
-        ),
-      )
-      .returning({ slackEventId: eventLog.slackEventId })
-    return { updated: updated.length }
+    return ResultAsync.fromPromise(
+      db
+        .update(eventLog)
+        .set({ outcome: 'responded' })
+        .where(
+          and(
+            eq(eventLog.slackEventId, slackEventId),
+            ne(eventLog.outcome, 'responded'),
+          ),
+        )
+        .returning({ slackEventId: eventLog.slackEventId }),
+      (caughtErr) =>
+        new EventLogStoreError('failed to mark event responded', caughtErr),
+    ).map((updated) => ({ updated: updated.length }))
   },
-  async unmarkResponded(slackEventId) {
-    const updated = await db
-      .update(eventLog)
-      .set({ outcome: 'accepted' })
-      .where(
-        and(
-          eq(eventLog.slackEventId, slackEventId),
-          eq(eventLog.outcome, 'responded'),
-        ),
-      )
-      .returning({ slackEventId: eventLog.slackEventId })
-    return { updated: updated.length }
+  unmarkResponded(slackEventId) {
+    return ResultAsync.fromPromise(
+      db
+        .update(eventLog)
+        .set({ outcome: 'accepted' })
+        .where(
+          and(
+            eq(eventLog.slackEventId, slackEventId),
+            eq(eventLog.outcome, 'responded'),
+          ),
+        )
+        .returning({ slackEventId: eventLog.slackEventId }),
+      (caughtErr) =>
+        new EventLogStoreError('failed to unmark event responded', caughtErr),
+    ).map((updated) => ({ updated: updated.length }))
   },
-  async pruneOlderThan(cutoff) {
-    const deleted = await db
-      .delete(eventLog)
-      .where(lt(eventLog.receivedAt, cutoff))
-      .returning({ slackEventId: eventLog.slackEventId })
-    return deleted.length
+  pruneOlderThan(cutoff) {
+    return ResultAsync.fromPromise(
+      db
+        .delete(eventLog)
+        .where(lt(eventLog.receivedAt, cutoff))
+        .returning({ slackEventId: eventLog.slackEventId }),
+      (caughtErr) =>
+        new EventLogStoreError('failed to prune event_log', caughtErr),
+    ).map((deleted) => deleted.length)
   },
-  async hasAcceptedSibling({
+  hasAcceptedSibling({
     slackTeamId,
     slackChannelId,
     messageTs,
     excludeSlackEventId,
   }) {
-    const rows = await db
-      .select({ slackEventId: eventLog.slackEventId })
-      .from(eventLog)
-      .where(
-        and(
-          eq(eventLog.slackTeamId, slackTeamId),
-          eq(eventLog.slackChannelId, slackChannelId),
-          eq(eventLog.messageTs, messageTs),
-          ne(eventLog.slackEventId, excludeSlackEventId),
+    return ResultAsync.fromPromise(
+      db
+        .select({ slackEventId: eventLog.slackEventId })
+        .from(eventLog)
+        .where(
+          and(
+            eq(eventLog.slackTeamId, slackTeamId),
+            eq(eventLog.slackChannelId, slackChannelId),
+            eq(eventLog.messageTs, messageTs),
+            ne(eventLog.slackEventId, excludeSlackEventId),
+          ),
+        )
+        .limit(1),
+      (caughtErr) =>
+        new EventLogStoreError(
+          'failed to check for an accepted sibling event',
+          caughtErr,
         ),
-      )
-      .limit(1)
-    return rows.length > 0
+    ).map((rows) => rows.length > 0)
   },
 })
