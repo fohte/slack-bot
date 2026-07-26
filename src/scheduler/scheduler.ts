@@ -43,8 +43,10 @@ export interface SchedulerOptions {
 
 const MIN_INTERVAL_MS = 1000
 
-const toResult = <T>(promise: Promise<T>): ResultAsync<T, unknown> =>
-  ResultAsync.fromPromise(promise, (err) => err)
+// Wraps the call itself (not an already-created promise) so a callback that
+// throws synchronously before returning a promise is captured too.
+const toResult = <T>(fn: () => Promise<T>): ResultAsync<T, unknown> =>
+  ResultAsync.fromThrowable(fn, (err) => err)()
 
 export const createScheduler = (
   options: SchedulerOptions,
@@ -82,8 +84,9 @@ export const createScheduler = (
     if (!isRunning(state)) return
     if (now() - state.startedAt > state.def.maxDurationMs) {
       transition(state, 'timed-out')
-      if (state.def.onTimeout !== undefined) {
-        const result = await toResult(state.def.onTimeout())
+      const onTimeout = state.def.onTimeout
+      if (onTimeout !== undefined) {
+        const result = await toResult(() => onTimeout())
         if (result.isErr()) {
           logger.error(
             {
@@ -97,7 +100,7 @@ export const createScheduler = (
       }
       return
     }
-    const tickResult = await toResult(state.def.tick())
+    const tickResult = await toResult(() => state.def.tick())
     if (!isRunning(state)) return
     if (tickResult.isOk()) {
       if (tickResult.value.done) {
@@ -106,8 +109,9 @@ export const createScheduler = (
       }
     } else {
       const err = tickResult.error
-      if (state.def.onError !== undefined) {
-        const onErrorResult = await toResult(state.def.onError(err))
+      const onError = state.def.onError
+      if (onError !== undefined) {
+        const onErrorResult = await toResult(() => onError(err))
         if (onErrorResult.isErr()) {
           logger.error(
             {
@@ -141,10 +145,8 @@ export const createScheduler = (
   }
 
   return {
-    // Left as throw, matching the fail-fast invariant-violation convention
-    // used by registry.ts's register() and config.ts's loadConfig() for
-    // programmer errors caught at registration/startup time rather than
-    // runtime failures of external calls.
+    // Argument validation throws synchronously at registration time;
+    // callers are expected to fix the call site, not handle a Result.
     schedule(def) {
       if (def.intervalMs < MIN_INTERVAL_MS) {
         throw new SchedulerInvalidArgumentError(
