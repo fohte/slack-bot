@@ -6,6 +6,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base'
+import { errAsync } from 'neverthrow'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -32,6 +33,7 @@ import { DISPATCH_FAILURE_TEXT } from '@/plugins/llm-agent/steps/report-dispatch
 import { createDeferred } from '@/server/_test-utils'
 import { createInFlightTasks } from '@/server/in-flight-tasks'
 import type { SlackWebClient } from '@/slack/web-client'
+import { A2aTaskTrackerError } from '@/types/errors'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
@@ -465,22 +467,18 @@ describe('createTaskDispatcher', () => {
   })
 
   it('propagates a gating failure so the plugin layer can roll back event_log', async () => {
-    const failure = new Error('db unavailable')
+    const failure = new A2aTaskTrackerError('db unavailable')
     const a2aTaskTracker = createFakeA2aTaskTracker()
-    a2aTaskTracker.findActiveInputRequired = async () => {
-      throw failure
-    }
+    a2aTaskTracker.findActiveInputRequired = () => errAsync(failure)
     const dispatch = createTaskDispatcher(baseOptions({ a2aTaskTracker }))
 
     await expect(dispatch(acceptedMention())).rejects.toBe(failure)
   })
 
   it('notifies the Slack thread and clears the assistant status when a gating failure occurs', async () => {
-    const failure = new Error('db unavailable')
+    const failure = new A2aTaskTrackerError('db unavailable')
     const a2aTaskTracker = createFakeA2aTaskTracker()
-    a2aTaskTracker.findActiveInputRequired = async () => {
-      throw failure
-    }
+    a2aTaskTracker.findActiveInputRequired = () => errAsync(failure)
     const slackClient = createStubSlackClient()
     const dispatch = createTaskDispatcher(
       baseOptions({ slackClient, a2aTaskTracker }),
@@ -637,11 +635,9 @@ describe('createTaskDispatcher OTel span', () => {
   })
 
   it('records the exception on the span when the gating step fails', async () => {
-    const failure = new Error('db unavailable')
+    const failure = new A2aTaskTrackerError('db unavailable')
     const a2aTaskTracker = createFakeA2aTaskTracker()
-    a2aTaskTracker.findActiveInputRequired = async () => {
-      throw failure
-    }
+    a2aTaskTracker.findActiveInputRequired = () => errAsync(failure)
     const dispatch = createTaskDispatcher(baseOptions({ a2aTaskTracker }))
 
     await dispatch(acceptedMention()).catch(() => {})

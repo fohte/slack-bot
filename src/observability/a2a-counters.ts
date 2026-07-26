@@ -25,7 +25,7 @@ export type A2aReconcilerSettledReason = 'polling' | 'deadline'
 // Deferred until first use: metrics.getMeter(...) returns a ProxyMeter whose
 // createCounter binds to whatever delegate is registered at that moment,
 // so calling it before the OTel SDK starts would pin the counter to a noop
-// forever (mirrors src/observability/counters.ts).
+// forever.
 let tasksCounter: Counter | undefined
 let pushNotificationsCounter: Counter | undefined
 let reconcilerSettledCounter: Counter | undefined

@@ -1,6 +1,7 @@
 import type { Message, Task } from '@a2a-js/sdk'
 import { ToolMessage } from '@langchain/core/messages'
 import { Hono } from 'hono'
+import { ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -154,20 +155,22 @@ describe('A2A task lifecycle: delegation -> push notification -> settlement', ()
       },
     ])
     expect(eventLogStore.markedResponded).toEqual(['Ev1'])
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      taskId: 'task-1',
-      contextId: 'ctx-1',
-      agentName: 'meshi',
-      slackTeamId: 'T1',
-      slackChannelId: 'C1',
-      threadRootTs: '111.222',
-      slackEventId: 'Ev1',
-      state: 'completed',
-      settled: true,
-      deadlineAt: new Date('2026-01-01T00:15:00Z'),
-      createdAt: delegatedAt,
-      updatedAt: clock,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        taskId: 'task-1',
+        contextId: 'ctx-1',
+        agentName: 'meshi',
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        slackEventId: 'Ev1',
+        state: 'completed',
+        settled: true,
+        deadlineAt: new Date('2026-01-01T00:15:00Z'),
+        createdAt: delegatedAt,
+        updatedAt: clock,
+      }),
+    )
   })
 
   it('rejects a push notification with an invalid token and leaves the delegated task unsettled', async () => {
@@ -199,20 +202,22 @@ describe('A2A task lifecycle: delegation -> push notification -> settlement', ()
     expect(response.status).toBe(401)
     expect(getTaskCalls).toEqual([])
     expect(slackClient.calls).toEqual([])
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      taskId: 'task-1',
-      contextId: 'ctx-1',
-      agentName: 'meshi',
-      slackTeamId: 'T1',
-      slackChannelId: 'C1',
-      threadRootTs: '111.222',
-      slackEventId: 'Ev1',
-      state: 'submitted',
-      settled: false,
-      deadlineAt: new Date('2026-01-01T00:15:00Z'),
-      createdAt: now,
-      updatedAt: now,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        taskId: 'task-1',
+        contextId: 'ctx-1',
+        agentName: 'meshi',
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        slackEventId: 'Ev1',
+        state: 'submitted',
+        settled: false,
+        deadlineAt: new Date('2026-01-01T00:15:00Z'),
+        createdAt: now,
+        updatedAt: now,
+      }),
+    )
   })
 
   it('settles a task via reconciler polling when no push notification ever arrives', async () => {
@@ -270,20 +275,22 @@ describe('A2A task lifecycle: delegation -> push notification -> settlement', ()
       },
     ])
     expect(eventLogStore.markedResponded).toEqual(['Ev1'])
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      taskId: 'task-1',
-      contextId: 'ctx-1',
-      agentName: 'meshi',
-      slackTeamId: 'T1',
-      slackChannelId: 'C1',
-      threadRootTs: '111.222',
-      slackEventId: 'Ev1',
-      state: 'completed',
-      settled: true,
-      deadlineAt: new Date('2026-01-10T00:15:00Z'),
-      createdAt: new Date('2026-01-10T00:00:00Z'),
-      updatedAt: clock,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        taskId: 'task-1',
+        contextId: 'ctx-1',
+        agentName: 'meshi',
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        slackEventId: 'Ev1',
+        state: 'completed',
+        settled: true,
+        deadlineAt: new Date('2026-01-10T00:15:00Z'),
+        createdAt: new Date('2026-01-10T00:00:00Z'),
+        updatedAt: clock,
+      }),
+    )
   })
 
   it('fails a task past its deadline via the reconciler, without polling, when no push arrives', async () => {
@@ -340,20 +347,22 @@ describe('A2A task lifecycle: delegation -> push notification -> settlement', ()
       },
     ])
     expect(eventLogStore.markedResponded).toEqual(['Ev1'])
-    expect(await tracker.findByTaskId('task-1')).toEqual({
-      taskId: 'task-1',
-      contextId: 'ctx-1',
-      agentName: 'meshi',
-      slackTeamId: 'T1',
-      slackChannelId: 'C1',
-      threadRootTs: '111.222',
-      slackEventId: 'Ev1',
-      state: 'failed',
-      settled: true,
-      deadlineAt: new Date('2026-01-10T00:01:00Z'),
-      createdAt: new Date('2026-01-10T00:00:00Z'),
-      updatedAt: clock,
-    })
+    expect(await tracker.findByTaskId('task-1')).toEqual(
+      ok({
+        taskId: 'task-1',
+        contextId: 'ctx-1',
+        agentName: 'meshi',
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        slackEventId: 'Ev1',
+        state: 'failed',
+        settled: true,
+        deadlineAt: new Date('2026-01-10T00:01:00Z'),
+        createdAt: new Date('2026-01-10T00:00:00Z'),
+        updatedAt: clock,
+      }),
+    )
   })
 
   it('settles two tasks delegated in parallel from the same Slack event independently, via the push notification endpoint', async () => {
@@ -445,33 +454,37 @@ describe('A2A task lifecycle: delegation -> push notification -> settlement', ()
     // markResponded only actually flips once (the second settle races an
     // already-responded event_log row), yet both tasks still posted.
     expect(eventLogStore.markedResponded).toEqual(['Ev1'])
-    expect(await tracker.findByTaskId('task-a')).toEqual({
-      taskId: 'task-a',
-      contextId: 'ctx-a',
-      agentName: 'meshi',
-      slackTeamId: 'T1',
-      slackChannelId: 'C1',
-      threadRootTs: '111.222',
-      slackEventId: 'Ev1',
-      state: 'completed',
-      settled: true,
-      deadlineAt: new Date('2026-01-01T00:15:00Z'),
-      createdAt: delegatedAt,
-      updatedAt: clock,
-    })
-    expect(await tracker.findByTaskId('task-b')).toEqual({
-      taskId: 'task-b',
-      contextId: 'ctx-b',
-      agentName: 't-rader',
-      slackTeamId: 'T1',
-      slackChannelId: 'C1',
-      threadRootTs: '111.222',
-      slackEventId: 'Ev1',
-      state: 'completed',
-      settled: true,
-      deadlineAt: new Date('2026-01-01T00:15:00Z'),
-      createdAt: delegatedAt,
-      updatedAt: clock,
-    })
+    expect(await tracker.findByTaskId('task-a')).toEqual(
+      ok({
+        taskId: 'task-a',
+        contextId: 'ctx-a',
+        agentName: 'meshi',
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        slackEventId: 'Ev1',
+        state: 'completed',
+        settled: true,
+        deadlineAt: new Date('2026-01-01T00:15:00Z'),
+        createdAt: delegatedAt,
+        updatedAt: clock,
+      }),
+    )
+    expect(await tracker.findByTaskId('task-b')).toEqual(
+      ok({
+        taskId: 'task-b',
+        contextId: 'ctx-b',
+        agentName: 't-rader',
+        slackTeamId: 'T1',
+        slackChannelId: 'C1',
+        threadRootTs: '111.222',
+        slackEventId: 'Ev1',
+        state: 'completed',
+        settled: true,
+        deadlineAt: new Date('2026-01-01T00:15:00Z'),
+        createdAt: delegatedAt,
+        updatedAt: clock,
+      }),
+    )
   })
 })

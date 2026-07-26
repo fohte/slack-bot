@@ -1,9 +1,11 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
+import { ResultAsync } from 'neverthrow'
 
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
 import { stripThinkBlocks } from '@/plugins/llm-agent/conversation-agent/strip-think-blocks'
+import { PersonaParaphraseError } from '@/types/errors'
 
 // Wraps personaPrompt (tone only, see ConversationAgentOptions.personaPrompt)
 // with an instruction to rewrite rather than answer, so the same prompt a
@@ -45,25 +47,30 @@ export const createPersonaParaphraser = (
     async paraphrase(text) {
       if (personaPrompt === undefined || personaPrompt === '') return text
 
-      try {
-        const reply = await options.model.invoke([
+      const result = await ResultAsync.fromPromise(
+        options.model.invoke([
           new SystemMessage(`${personaPrompt}\n\n${PARAPHRASE_INSTRUCTION}`),
           new HumanMessage(text),
-        ])
-        const { text: paraphrased } = stripThinkBlocks(reply.text)
-        return paraphrased.length > 0 ? paraphrased : text
-      } catch (error) {
+        ]),
+        (caughtErr) =>
+          new PersonaParaphraseError('failed to paraphrase text', caughtErr),
+      )
+
+      if (result.isErr()) {
         // Fail-open: the caller already has a safe, plain-text response, so
         // a paraphrase failure must never block posting it to Slack.
         logger.warn(
           {
             event: 'llm_agent_persona_paraphrase_failed',
-            err: error,
+            err: result.error.cause,
           },
           'llm-agent failed to paraphrase a response into persona tone; posting the original text',
         )
         return text
       }
+
+      const { text: paraphrased } = stripThinkBlocks(result.value.text)
+      return paraphrased.length > 0 ? paraphrased : text
     },
   }
 }

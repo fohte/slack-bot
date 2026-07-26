@@ -1,3 +1,4 @@
+import { errAsync, okAsync, type ResultAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -6,24 +7,28 @@ import {
   startEventLogRetention,
 } from '@/plugins/llm-agent/event-log-retention'
 import type { EventLogStore } from '@/plugins/llm-agent/event-log-store'
+import { EventLogStoreError } from '@/types/errors'
 
 const createStore = (
-  pruneImpl: (cutoff: Date) => Promise<number> = async () => 0,
+  pruneImpl: (cutoff: Date) => ResultAsync<number, EventLogStoreError> = () =>
+    okAsync(0),
 ): EventLogStore => ({
   recordReceived: vi.fn(),
   deleteReceived: vi.fn(),
-  markTaskName: vi.fn(async () => ({ updated: 0 })),
-  findByTaskName: vi.fn(async () => undefined),
-  findDispatchedUnresponded: vi.fn(async () => []),
-  markResponded: vi.fn(async () => ({ updated: 0 })),
-  unmarkResponded: vi.fn(async () => ({ updated: 0 })),
+  markTaskName: vi.fn(() => okAsync({ updated: 0 })),
+  findByTaskName: vi.fn(() => okAsync(undefined)),
+  findDispatchedUnresponded: vi.fn(() => okAsync([])),
+  markResponded: vi.fn(() => okAsync({ updated: 0 })),
+  unmarkResponded: vi.fn(() => okAsync({ updated: 0 })),
   pruneOlderThan: vi.fn(pruneImpl),
-  hasAcceptedSibling: vi.fn(async () => false),
+  hasAcceptedSibling: vi.fn(() => okAsync(false)),
 })
 
 describe('startEventLogRetention', () => {
   it('runOnce calls pruneOlderThan with now - ttlMs and returns the removed count', async () => {
-    const prune = vi.fn(async (): Promise<number> => 3)
+    const prune = vi.fn((): ResultAsync<number, EventLogStoreError> =>
+      okAsync(3),
+    )
     const store = { ...createStore(), pruneOlderThan: prune }
     const handle = startEventLogRetention({
       eventLogStore: store,
@@ -39,9 +44,9 @@ describe('startEventLogRetention', () => {
   })
 
   it('swallows pruneOlderThan errors and returns 0', async () => {
-    const prune = vi.fn(async () => {
-      throw new Error('db down')
-    })
+    const prune = vi.fn((): ResultAsync<number, EventLogStoreError> =>
+      errAsync(new EventLogStoreError('db down')),
+    )
     const store = { ...createStore(), pruneOlderThan: prune }
     const handle = startEventLogRetention({
       eventLogStore: store,

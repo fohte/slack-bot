@@ -319,10 +319,12 @@ export const createTaskDispatcher = (
           // A failure here must reach onAccepted for the event_log
           // rollback; the actual LLM/A2A work runs detached so the Slack
           // HTTP handler can ack quickly.
-          const activeTask =
+          const activeTaskResult =
             await resolved.a2aTaskTracker.findActiveInputRequired(
               threadKeyFor(env),
             )
+          if (activeTaskResult.isErr()) throw activeTaskResult.error
+          const activeTask = activeTaskResult.value
           const mentionCompletion = runMentionInBackground(
             env,
             activeTask,

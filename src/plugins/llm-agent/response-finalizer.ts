@@ -1,4 +1,5 @@
 import type { Part, Task, TextPart } from '@a2a-js/sdk'
+import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 
 import type { Logger } from '@/logger/logger'
@@ -159,25 +160,27 @@ export const createResponseFinalizer = (
     row: A2aTaskRow,
     text: string,
   ): Promise<boolean> => {
-    try {
-      await postThreadMessage(
+    const postResult = await ResultAsync.fromPromise(
+      postThreadMessage(
         options.slackClient,
         { channel: row.slackChannelId, threadTs: row.threadRootTs },
         text,
-      )
-      return true
-    } catch (error) {
+      ),
+      (caughtErr) => caughtErr,
+    )
+    if (postResult.isErr()) {
       logger.error(
         {
           event: 'llm_agent_a2a_finalize_post_failed',
           task_id: row.taskId,
           agent_name: row.agentName,
-          err: error,
+          err: postResult.error,
         },
         'llm-agent failed to post a finalized A2A task result to Slack',
       )
       return false
     }
+    return true
   }
 
   // Terminal settle: transition() eagerly flips `settled` before the post is
@@ -192,10 +195,23 @@ export const createResponseFinalizer = (
     task: Task,
     state: A2aTaskTerminalState,
   ): Promise<A2aPushNotificationResult> => {
-    const { updated } = await options.a2aTaskTracker.transition(row.taskId, {
-      state,
-    })
-    if (!updated) return 'duplicate'
+    const transitionResult = await options.a2aTaskTracker.transition(
+      row.taskId,
+      { state },
+    )
+    if (transitionResult.isErr()) {
+      logger.error(
+        {
+          event: 'llm_agent_a2a_finalize_transition_failed',
+          task_id: row.taskId,
+          agent_name: row.agentName,
+          err: transitionResult.error,
+        },
+        'llm-agent failed to transition a task while finalizing it',
+      )
+      return 'error'
+    }
+    if (!transitionResult.value.updated) return 'duplicate'
 
     const errorKind = extractErrorKind(task)
     const text =
@@ -204,14 +220,13 @@ export const createResponseFinalizer = (
         : await paraphraseText(row, extractTaskText(task))
     const posted = await postToThread(row, text)
     if (!posted) {
-      try {
-        await options.a2aTaskTracker.unsettle(row.taskId)
-      } catch (error) {
+      const unsettleResult = await options.a2aTaskTracker.unsettle(row.taskId)
+      if (unsettleResult.isErr()) {
         logger.error(
           {
             event: 'llm_agent_a2a_finalize_unsettle_failed',
             task_id: row.taskId,
-            err: error,
+            err: unsettleResult.error,
           },
           'llm-agent failed to roll back the settled flag after a Slack post failure',
         )
@@ -219,19 +234,20 @@ export const createResponseFinalizer = (
       return 'error'
     }
 
-    try {
-      await options.eventLogStore.markResponded(row.slackEventId)
-    } catch (error) {
-      // Best-effort bookkeeping only: this flag records that *an* answer for
-      // the originating Slack event has gone out, not whether *this* task's
-      // post succeeded (already decided above), so a failure here never
-      // rolls back the post that already happened.
+    // Best-effort bookkeeping only: this flag records that *an* answer for
+    // the originating Slack event has gone out, not whether *this* task's
+    // post succeeded (already decided above), so a failure here never
+    // rolls back the post that already happened.
+    const markRespondedResult = await options.eventLogStore.markResponded(
+      row.slackEventId,
+    )
+    if (markRespondedResult.isErr()) {
       logger.warn(
         {
           event: 'llm_agent_a2a_finalize_mark_responded_failed',
           task_id: row.taskId,
           slack_event_id: row.slackEventId,
-          err: error,
+          err: markRespondedResult.error,
         },
         'llm-agent failed to mark event_log responded after posting a finalized A2A task result',
       )
@@ -249,10 +265,23 @@ export const createResponseFinalizer = (
     row: A2aTaskRow,
     task: Task,
   ): Promise<A2aPushNotificationResult> => {
-    const { updated } = await options.a2aTaskTracker.transition(row.taskId, {
-      state: 'input-required',
-    })
-    if (!updated) return 'duplicate'
+    const transitionResult = await options.a2aTaskTracker.transition(
+      row.taskId,
+      { state: 'input-required' },
+    )
+    if (transitionResult.isErr()) {
+      logger.error(
+        {
+          event: 'llm_agent_a2a_finalize_transition_failed',
+          task_id: row.taskId,
+          agent_name: row.agentName,
+          err: transitionResult.error,
+        },
+        'llm-agent failed to transition a task while finalizing it',
+      )
+      return 'error'
+    }
+    if (!transitionResult.value.updated) return 'duplicate'
     const posted = await postToThread(
       row,
       await paraphraseText(row, extractTaskText(task)),
@@ -265,17 +294,16 @@ export const createResponseFinalizer = (
       // Without this, the row would be stuck at input-required with the
       // question never having reached Slack, and no future observation
       // could ever post it.
-      try {
-        await options.a2aTaskTracker.transition(row.taskId, {
-          state: row.state,
-          requireCurrentStates: ['input-required'],
-        })
-      } catch (error) {
+      const revertResult = await options.a2aTaskTracker.transition(row.taskId, {
+        state: row.state,
+        requireCurrentStates: ['input-required'],
+      })
+      if (revertResult.isErr()) {
         logger.error(
           {
             event: 'llm_agent_a2a_finalize_revert_failed',
             task_id: row.taskId,
-            err: error,
+            err: revertResult.error,
           },
           'llm-agent failed to revert an input-required task after a Slack post failure',
         )
@@ -330,7 +358,21 @@ export const createResponseFinalizer = (
     // submitted / working: a heartbeat observation, not a settle decision.
     // Refreshes updated_at so the reconciler's stale-row sweep doesn't treat
     // a live, still-running task as overdue.
-    await options.a2aTaskTracker.transition(row.taskId, { state })
+    const heartbeatResult = await options.a2aTaskTracker.transition(
+      row.taskId,
+      { state },
+    )
+    if (heartbeatResult.isErr()) {
+      logger.warn(
+        {
+          event: 'llm_agent_a2a_finalize_heartbeat_failed',
+          task_id: row.taskId,
+          agent_name: row.agentName,
+          err: heartbeatResult.error,
+        },
+        'llm-agent failed to refresh a task heartbeat while finalizing it',
+      )
+    }
     return 'heartbeat'
   }
 
@@ -373,11 +415,24 @@ export const createResponseFinalizer = (
     finalizeRow,
     finalizeTask: dispatchTask,
     async finalize(taskId) {
-      let row = await options.a2aTaskTracker.findByTaskId(taskId)
-      if (row === undefined) {
+      let rowResult = await options.a2aTaskTracker.findByTaskId(taskId)
+      if (rowResult.isOk() && rowResult.value === undefined) {
         await sleep(retryDelayMs)
-        row = await options.a2aTaskTracker.findByTaskId(taskId)
+        rowResult = await options.a2aTaskTracker.findByTaskId(taskId)
       }
+      if (rowResult.isErr()) {
+        logger.error(
+          {
+            event: 'llm_agent_a2a_finalize_find_task_failed',
+            task_id: taskId,
+            err: rowResult.error,
+          },
+          'llm-agent failed to look up a task by taskId while finalizing a push notification',
+        )
+        recordA2aPushNotification('error')
+        return
+      }
+      const row = rowResult.value
       if (row === undefined) {
         logger.warn(
           {

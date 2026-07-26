@@ -1,5 +1,6 @@
 import type { AgentCard, Message, MessageSendParams, Task } from '@a2a-js/sdk'
 import type { Client } from '@a2a-js/sdk/client'
+import { okAsync } from 'neverthrow'
 
 import type { Logger } from '@/logger/logger'
 import type {
@@ -122,37 +123,39 @@ export const createScriptedEventLogStore = (
   const responded = new Set<string>()
   return {
     markedResponded,
-    async recordReceived() {
-      return 'accepted'
+    recordReceived() {
+      return okAsync('accepted')
     },
-    async deleteReceived() {},
-    async markTaskName() {
-      return { updated: 0 }
+    deleteReceived() {
+      return okAsync(undefined)
     },
-    async findByTaskName() {
-      return undefined
+    markTaskName() {
+      return okAsync({ updated: 0 })
     },
-    async findDispatchedUnresponded() {
-      return []
+    findByTaskName() {
+      return okAsync(undefined)
     },
-    async markResponded(slackEventId) {
+    findDispatchedUnresponded() {
+      return okAsync([])
+    },
+    markResponded(slackEventId) {
       if (options.alreadyResponded === true || responded.has(slackEventId)) {
-        return { updated: 0 }
+        return okAsync({ updated: 0 })
       }
       responded.add(slackEventId)
       markedResponded.push(slackEventId)
-      return { updated: 1 }
+      return okAsync({ updated: 1 })
     },
-    async unmarkResponded(slackEventId) {
-      if (!responded.has(slackEventId)) return { updated: 0 }
+    unmarkResponded(slackEventId) {
+      if (!responded.has(slackEventId)) return okAsync({ updated: 0 })
       responded.delete(slackEventId)
-      return { updated: 1 }
+      return okAsync({ updated: 1 })
     },
-    async pruneOlderThan() {
-      return 0
+    pruneOlderThan() {
+      return okAsync(0)
     },
-    async hasAcceptedSibling() {
-      return false
+    hasAcceptedSibling() {
+      return okAsync(false)
     },
   }
 }
@@ -370,31 +373,32 @@ export const createFakeA2aTaskTracker = (
     recorded,
     transitions,
     unsettled,
-    async recordDelegated(rec) {
+    recordDelegated(rec) {
       recorded.push(rec)
+      return okAsync(undefined)
     },
-    async findActiveInputRequired() {
-      return options.activeInputRequired
+    findActiveInputRequired() {
+      return okAsync(options.activeInputRequired)
     },
-    async findUnsettled() {
-      return []
+    findUnsettled() {
+      return okAsync([])
     },
-    async findByTaskId(taskId) {
-      return options.rowsByTaskId?.[taskId]
+    findByTaskId(taskId) {
+      return okAsync(options.rowsByTaskId?.[taskId])
     },
-    async transition(taskId, to) {
+    transition(taskId, to) {
       transitions.push({ taskId, to })
-      return options.transitionResult ?? { updated: true }
+      return okAsync(options.transitionResult ?? { updated: true })
     },
-    async unsettle(taskId) {
+    unsettle(taskId) {
       unsettled.push(taskId)
-      return { updated: true }
+      return okAsync({ updated: true })
     },
-    async lookupContext() {
-      return options.contextId
+    lookupContext() {
+      return okAsync(options.contextId)
     },
-    async deleteSettledOlderThan() {
-      return 0
+    deleteSettledOlderThan() {
+      return okAsync(0)
     },
   }
 }
@@ -414,52 +418,58 @@ export const createInMemoryA2aTaskTracker = (
   const rows = new Map<string, A2aTaskRow>()
 
   return {
-    async recordDelegated(rec) {
-      if (rows.has(rec.taskId)) return
-      const timestamp = now()
-      rows.set(rec.taskId, {
-        ...rec,
-        settled: false,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })
+    recordDelegated(rec) {
+      if (!rows.has(rec.taskId)) {
+        const timestamp = now()
+        rows.set(rec.taskId, {
+          ...rec,
+          settled: false,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
+      }
+      return okAsync(undefined)
     },
-    async findActiveInputRequired(threadKey) {
-      return [...rows.values()]
-        .filter(
-          (row) =>
-            row.slackTeamId === threadKey.slackTeamId &&
-            row.slackChannelId === threadKey.slackChannelId &&
-            row.threadRootTs === threadKey.threadRootTs &&
-            row.state === 'input-required' &&
-            !row.settled,
-        )
-        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]
+    findActiveInputRequired(threadKey) {
+      return okAsync(
+        [...rows.values()]
+          .filter(
+            (row) =>
+              row.slackTeamId === threadKey.slackTeamId &&
+              row.slackChannelId === threadKey.slackChannelId &&
+              row.threadRootTs === threadKey.threadRootTs &&
+              row.state === 'input-required' &&
+              !row.settled,
+          )
+          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0],
+      )
     },
-    async findUnsettled(olderThan) {
-      return [...rows.values()]
-        .filter((row) => !row.settled && row.updatedAt < olderThan)
-        .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
-        .slice(0, FIND_UNSETTLED_LIMIT)
+    findUnsettled(olderThan) {
+      return okAsync(
+        [...rows.values()]
+          .filter((row) => !row.settled && row.updatedAt < olderThan)
+          .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
+          .slice(0, FIND_UNSETTLED_LIMIT),
+      )
     },
-    async findByTaskId(taskId) {
-      return rows.get(taskId)
+    findByTaskId(taskId) {
+      return okAsync(rows.get(taskId))
     },
-    async transition(taskId, to) {
+    transition(taskId, to) {
       const row = rows.get(taskId)
-      if (row === undefined || row.settled) return { updated: false }
+      if (row === undefined || row.settled) return okAsync({ updated: false })
       const guard = transitionGuard(to)
       if (
         guard.requireStates !== undefined &&
         !guard.requireStates.includes(row.state)
       ) {
-        return { updated: false }
+        return okAsync({ updated: false })
       }
       if (
         to.ifDeadlineAtOrBefore !== undefined &&
         row.deadlineAt > to.ifDeadlineAtOrBefore
       ) {
-        return { updated: false }
+        return okAsync({ updated: false })
       }
       rows.set(taskId, {
         ...row,
@@ -468,32 +478,34 @@ export const createInMemoryA2aTaskTracker = (
         deadlineAt: to.deadlineAt ?? row.deadlineAt,
         updatedAt: now(),
       })
-      return { updated: true }
+      return okAsync({ updated: true })
     },
-    async unsettle(taskId) {
+    unsettle(taskId) {
       const row = rows.get(taskId)
-      if (row === undefined || !row.settled) return { updated: false }
+      if (row === undefined || !row.settled) return okAsync({ updated: false })
       rows.set(taskId, { ...row, settled: false, updatedAt: now() })
-      return { updated: true }
+      return okAsync({ updated: true })
     },
-    async lookupContext(threadKey, agentName) {
-      return [...rows.values()]
-        .filter(
-          (row) =>
-            row.slackTeamId === threadKey.slackTeamId &&
-            row.slackChannelId === threadKey.slackChannelId &&
-            row.threadRootTs === threadKey.threadRootTs &&
-            row.agentName === agentName,
-        )
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
-        ?.contextId
+    lookupContext(threadKey, agentName) {
+      return okAsync(
+        [...rows.values()]
+          .filter(
+            (row) =>
+              row.slackTeamId === threadKey.slackTeamId &&
+              row.slackChannelId === threadKey.slackChannelId &&
+              row.threadRootTs === threadKey.threadRootTs &&
+              row.agentName === agentName,
+          )
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+          ?.contextId,
+      )
     },
-    async deleteSettledOlderThan(cutoff) {
+    deleteSettledOlderThan(cutoff) {
       const toDelete = [...rows.values()].filter(
         (row) => row.settled && row.updatedAt < cutoff,
       )
       for (const row of toDelete) rows.delete(row.taskId)
-      return toDelete.length
+      return okAsync(toDelete.length)
     },
   }
 }

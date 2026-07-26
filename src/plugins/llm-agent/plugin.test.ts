@@ -1,4 +1,5 @@
 import { emptyCheckpoint, MemorySaver } from '@langchain/langgraph'
+import { errAsync, okAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { EventContext } from '@/interaction/event-context'
@@ -9,7 +10,6 @@ import { createFakeA2aTaskTracker } from '@/plugins/llm-agent/_test-utils'
 import type { A2aTaskRow } from '@/plugins/llm-agent/a2a-task-tracker'
 import { deriveConversationThreadId } from '@/plugins/llm-agent/conversation-agent'
 import type {
-  EventLogOutcome,
   EventLogRecord,
   EventLogStore,
 } from '@/plugins/llm-agent/event-log-store'
@@ -24,6 +24,7 @@ import {
 } from '@/plugins/llm-agent/plugin'
 import { createInteractionRouter } from '@/router/router'
 import type { SlackWebClient } from '@/slack/web-client'
+import { A2aTaskTrackerError } from '@/types/errors'
 import type {
   SlackAppMentionEvent,
   SlackEvent,
@@ -54,47 +55,50 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
   const records: EventLogRecord[] = []
   return {
     records,
-    async recordReceived(record): Promise<EventLogOutcome> {
-      if (seen.has(record.slackEventId)) return 'rejected_duplicate'
+    recordReceived(record) {
+      if (seen.has(record.slackEventId)) return okAsync('rejected_duplicate')
       seen.add(record.slackEventId)
       records.push(record)
-      return 'accepted'
+      return okAsync('accepted')
     },
-    async deleteReceived(slackEventId): Promise<void> {
+    deleteReceived(slackEventId) {
       seen.delete(slackEventId)
       const index = records.findIndex((r) => r.slackEventId === slackEventId)
       if (index >= 0) records.splice(index, 1)
+      return okAsync(undefined)
     },
-    async markTaskName(): Promise<{ updated: number }> {
-      return { updated: 1 }
+    markTaskName() {
+      return okAsync({ updated: 1 })
     },
-    async findByTaskName() {
-      return undefined
+    findByTaskName() {
+      return okAsync(undefined)
     },
-    async findDispatchedUnresponded() {
-      return []
+    findDispatchedUnresponded() {
+      return okAsync([])
     },
-    async markResponded(): Promise<{ updated: number }> {
-      return { updated: 0 }
+    markResponded() {
+      return okAsync({ updated: 0 })
     },
-    async unmarkResponded(): Promise<{ updated: number }> {
-      return { updated: 0 }
+    unmarkResponded() {
+      return okAsync({ updated: 0 })
     },
-    async pruneOlderThan(): Promise<number> {
-      return 0
+    pruneOlderThan() {
+      return okAsync(0)
     },
-    async hasAcceptedSibling({
+    hasAcceptedSibling({
       slackTeamId,
       slackChannelId,
       messageTs,
       excludeSlackEventId,
-    }): Promise<boolean> {
-      return records.some(
-        (r) =>
-          r.slackEventId !== excludeSlackEventId &&
-          r.slackTeamId === slackTeamId &&
-          r.slackChannelId === slackChannelId &&
-          r.messageTs === messageTs,
+    }) {
+      return okAsync(
+        records.some(
+          (r) =>
+            r.slackEventId !== excludeSlackEventId &&
+            r.slackTeamId === slackTeamId &&
+            r.slackChannelId === slackChannelId &&
+            r.messageTs === messageTs,
+        ),
       )
     },
   }
@@ -680,8 +684,8 @@ describe('createLlmAgentPlugin', () => {
       }),
     )
     const a2aTaskTracker = createFakeA2aTaskTracker()
-    vi.spyOn(a2aTaskTracker, 'findActiveInputRequired').mockRejectedValue(
-      new Error('a2a_task query failed'),
+    vi.spyOn(a2aTaskTracker, 'findActiveInputRequired').mockReturnValue(
+      errAsync(new A2aTaskTrackerError('a2a_task query failed')),
     )
     const plugin = createLlmAgentPlugin(
       buildPluginOptions({
