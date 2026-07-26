@@ -1,7 +1,7 @@
 {
   "name": "slack-bot",
   "private": true,
-  "packageManager": "pnpm@11.11.0",
+  "packageManager": "pnpm@11.15.0",
   "type": "module",
   "scripts": {
     "start": "tsx --import ./otel-register.mjs src/main.ts",
