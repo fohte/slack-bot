@@ -1,3 +1,5 @@
+import { ResultAsync } from 'neverthrow'
+
 import type { InteractionContext } from '@/interaction/context'
 import type { Logger } from '@/logger/logger'
 import { noopLogger } from '@/logger/logger'
@@ -71,7 +73,7 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
         })
         return
       }
-      try {
+      const dispatch = async (): Promise<void> => {
         switch (body.command) {
           case '/blog-post':
             await handlePostCommand({ ctx, body, client })
@@ -88,8 +90,10 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
               text: `未対応のコマンドです: ${body.command}`,
             })
         }
-      } catch (err) {
-        await reportError(ctx, err, logger)
+      }
+      const result = await ResultAsync.fromPromise(dispatch(), (error) => error)
+      if (result.isErr()) {
+        await reportError(ctx, result.error, logger)
       }
     },
     async onBlockAction(ctx, payload) {
@@ -105,7 +109,7 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
         ctx.ack()
         return
       }
-      try {
+      const dispatch = async (): Promise<void> => {
         switch (action.action_id) {
           case 'blog:select-submit':
             await handleSelectSubmit({ ctx, payload, action, client })
@@ -135,8 +139,10 @@ export const createBlogPlugin = (options: BlogPluginOptions): Plugin => {
           default:
             ctx.ack()
         }
-      } catch (err) {
-        await reportError(ctx, err, logger)
+      }
+      const result = await ResultAsync.fromPromise(dispatch(), (error) => error)
+      if (result.isErr()) {
+        await reportError(ctx, result.error, logger)
       }
     },
   }

@@ -1,8 +1,13 @@
 import type { Plan } from '@fohte/blog-publisher-contract'
+import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
-import { ButtonValueOverflow } from '@/plugins/blog/errors'
 import {
+  ButtonValueOverflow,
+  PlanButtonValueDecodeError,
+} from '@/plugins/blog/errors'
+import {
+  BUTTON_VALUE_LIMIT,
   decodeDocIds,
   encodeDocIds,
   renderAlreadyAppliedBlocks,
@@ -54,7 +59,7 @@ describe('PlanPresenter', () => {
     expect(apply).toBeDefined()
     expect(apply?.['disabled']).toBeUndefined()
     const decoded = decodeDocIds(apply?.['value'] as string)
-    expect(decoded).toEqual(['note:a'])
+    expect(decoded).toEqual(ok(['note:a']))
   })
 
   it('marks Apply button disabled when errors > 0', () => {
@@ -92,17 +97,49 @@ describe('PlanPresenter', () => {
     expect(findButton(res.blocks, 'blog:cancel')).toBeDefined()
   })
 
-  it('encodeDocIds throws ButtonValueOverflow when exceeding 2000 chars', () => {
+  it('encodeDocIds returns ButtonValueOverflow when exceeding 2000 chars', () => {
     const big = Array.from(
       { length: 100 },
       (_, i) => `note:${'x'.repeat(40)}-${String(i)}`,
     )
-    expect(() => encodeDocIds(big)).toThrow(ButtonValueOverflow)
+    const value = JSON.stringify({ docIds: big })
+    expect(encodeDocIds(big)).toEqual(
+      err(new ButtonValueOverflow(value.length, BUTTON_VALUE_LIMIT)),
+    )
   })
 
-  it('decodeDocIds rejects malformed input', () => {
-    expect(() => decodeDocIds('{}')).toThrow()
-    expect(() => decodeDocIds('{"docIds":[1]}')).toThrow()
+  it('decodeDocIds rejects non-JSON input', () => {
+    const decoded = decodeDocIds('not-json')
+    expect(decoded.isErr()).toBe(true)
+    expect(
+      decoded._unsafeUnwrapErr() instanceof PlanButtonValueDecodeError,
+    ).toBe(true)
+  })
+
+  it('decodeDocIds rejects a JSON value that is not an object', () => {
+    expect(decodeDocIds('[]')).toEqual(
+      err(
+        new PlanButtonValueDecodeError('Invalid button value: not an object'),
+      ),
+    )
+  })
+
+  it('decodeDocIds rejects an object missing docIds', () => {
+    expect(decodeDocIds('{}')).toEqual(
+      err(
+        new PlanButtonValueDecodeError('Invalid button value: docIds missing'),
+      ),
+    )
+  })
+
+  it('decodeDocIds rejects docIds with non-string elements', () => {
+    expect(decodeDocIds('{"docIds":[1]}')).toEqual(
+      err(
+        new PlanButtonValueDecodeError(
+          'Invalid button value: docIds must be strings',
+        ),
+      ),
+    )
   })
 
   it('renderAppliedBlocks contains PR URL', () => {

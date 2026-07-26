@@ -23,7 +23,7 @@ const runHandler = async (
   const client = { apply } as unknown as BlogServiceClient
   const action: BlockActionPayloadAction = {
     action_id: 'blog:apply',
-    value: encodeDocIds(['note:a']),
+    value: encodeDocIds(['note:a'])._unsafeUnwrap(),
   }
   const payload: BlockActionsPayload = {
     type: 'block_actions',
@@ -115,7 +115,7 @@ describe('ApplyButtonHandler', () => {
     const client = { apply } as unknown as BlogServiceClient
     const action: BlockActionPayloadAction = {
       action_id: 'blog:apply',
-      value: encodeDocIds(['note:a']),
+      value: encodeDocIds(['note:a'])._unsafeUnwrap(),
     }
     const payload: BlockActionsPayload = {
       type: 'block_actions',

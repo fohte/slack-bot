@@ -1,4 +1,5 @@
 import type { CiStatus } from '@fohte/blog-publisher-contract'
+import { fromThrowable, ResultAsync } from 'neverthrow'
 
 import type { MessageUpdater } from '@/interaction/message-updater'
 import type { Logger } from '@/logger/logger'
@@ -115,14 +116,16 @@ export const createCiWatcher = (options: CiWatcherOptions): CiWatcher => {
     rendered: RenderedMessage,
     taskName: string,
   ): Promise<void> => {
-    try {
-      await updater.patch(rendered)
-    } catch (err) {
+    const result = await ResultAsync.fromPromise(
+      updater.patch(rendered),
+      (error) => error,
+    )
+    if (result.isErr()) {
       logger.error(
         {
           event: 'blog_ci_watch_patch_failed',
           task: taskName,
-          error: serializeError(err),
+          error: serializeError(result.error),
         },
         'CiWatcher failed to patch Slack message',
       )
@@ -132,60 +135,63 @@ export const createCiWatcher = (options: CiWatcherOptions): CiWatcher => {
   return {
     startWatching(input) {
       const taskName = `blog:ci-watch:${String(input.prNumber)}`
-      try {
-        options.scheduler.schedule({
-          name: taskName,
-          intervalMs,
-          maxDurationMs,
-          tick: async () => {
-            const status: CiStatus = await options.client.getCiStatus(
-              input.prNumber,
-            )
-            if (status.state === 'pending') {
-              return { done: false }
-            }
-            const rendered =
-              status.state === 'success'
-                ? renderCiSuccessBlocks({
-                    prNumber: input.prNumber,
-                    prUrl: input.prUrl,
-                    previewUrl: status.previewUrl,
-                  })
-                : renderCiFailureBlocks({
-                    prNumber: input.prNumber,
-                    prUrl: input.prUrl,
-                    failedChecks: status.failedChecks,
-                  })
-            await safePatch(input.updater, rendered, taskName)
-            return { done: true }
-          },
-          onTimeout: async () => {
-            const rendered = renderCiTimeoutBlocks({
-              prNumber: input.prNumber,
-              prUrl: input.prUrl,
-            })
-            await safePatch(input.updater, rendered, taskName)
-          },
-          onError: (err) => {
-            logger.warn(
-              {
-                event: 'blog_ci_watch_tick_error',
-                task: taskName,
+      const scheduleResult = fromThrowable(
+        () =>
+          options.scheduler.schedule({
+            name: taskName,
+            intervalMs,
+            maxDurationMs,
+            tick: async () => {
+              const status: CiStatus = await options.client.getCiStatus(
+                input.prNumber,
+              )
+              if (status.state === 'pending') {
+                return { done: false }
+              }
+              const rendered =
+                status.state === 'success'
+                  ? renderCiSuccessBlocks({
+                      prNumber: input.prNumber,
+                      prUrl: input.prUrl,
+                      previewUrl: status.previewUrl,
+                    })
+                  : renderCiFailureBlocks({
+                      prNumber: input.prNumber,
+                      prUrl: input.prUrl,
+                      failedChecks: status.failedChecks,
+                    })
+              await safePatch(input.updater, rendered, taskName)
+              return { done: true }
+            },
+            onTimeout: async () => {
+              const rendered = renderCiTimeoutBlocks({
                 prNumber: input.prNumber,
-                error: serializeError(err),
-              },
-              'CiWatcher tick failed; continuing polling',
-            )
-            return Promise.resolve()
-          },
-        })
-      } catch (err) {
+                prUrl: input.prUrl,
+              })
+              await safePatch(input.updater, rendered, taskName)
+            },
+            onError: (err) => {
+              logger.warn(
+                {
+                  event: 'blog_ci_watch_tick_error',
+                  task: taskName,
+                  prNumber: input.prNumber,
+                  error: serializeError(err),
+                },
+                'CiWatcher tick failed; continuing polling',
+              )
+              return Promise.resolve()
+            },
+          }),
+        (error) => error,
+      )()
+      if (scheduleResult.isErr()) {
         logger.warn(
           {
             event: 'blog_ci_watch_schedule_failed',
             task: taskName,
             prNumber: input.prNumber,
-            error: serializeError(err),
+            error: serializeError(scheduleResult.error),
           },
           'CiWatcher could not start scheduler task',
         )

@@ -12,6 +12,7 @@ export type { BlogPluginConfig } from '@/plugins/blog/config'
 export { loadBlogPluginConfig } from '@/plugins/blog/config'
 export {
   ButtonValueOverflow,
+  PlanButtonValueDecodeError,
   ServiceError,
   ServiceUnavailable,
 } from '@/plugins/blog/errors'
