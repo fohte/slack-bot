@@ -1,4 +1,5 @@
 import type { Note } from '@fohte/blog-publisher-contract'
+import { err } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createInteractionContext } from '#interaction/context'
@@ -107,7 +108,7 @@ describe('PostCommandHandler', () => {
       body: { command: '/blog-post' },
       client,
     })
-    expect(outcome._unsafeUnwrapErr()).toBeInstanceOf(ServiceUnavailable)
+    expect(outcome).toEqual(err(new ServiceUnavailable('down')))
   })
 
   it('propagates the followUp Result error when response_url posting fails', async () => {
@@ -132,6 +133,12 @@ describe('PostCommandHandler', () => {
       body: { command: '/blog-post' },
       client,
     })
-    expect(outcome._unsafeUnwrapErr()).toBeInstanceOf(SlackApiError)
+    expect(outcome).toEqual(
+      err(
+        new SlackApiError('response_url POST failed with HTTP 410', {
+          status: 410,
+        }),
+      ),
+    )
   })
 })

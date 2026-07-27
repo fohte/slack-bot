@@ -493,7 +493,6 @@ describe('createConversationAgent', () => {
       slackEventId: 'Ev1',
     })
 
-    expect(outcome.isErr()).toBe(true)
     const error = outcome._unsafeUnwrapErr()
     expect(error).toBeInstanceOf(ConversationAgentInvokeError)
     expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([

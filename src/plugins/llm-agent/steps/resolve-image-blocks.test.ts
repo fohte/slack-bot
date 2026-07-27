@@ -161,7 +161,7 @@ describe('resolveImageBlocks', () => {
     )
   })
 
-  it('rejects with SlackImageThumbnailUnavailableError when the file has no thumb_* URL', async () => {
+  it('returns an error with SlackImageThumbnailUnavailableError when the file has no thumb_* URL', async () => {
     const images: readonly SlackFile[] = [
       { id: 'F1', name: 'photo.jpg', mimetype: 'image/jpeg' },
     ]
@@ -173,7 +173,7 @@ describe('resolveImageBlocks', () => {
     )
   })
 
-  it('rejects with SlackImageThumbnailUnavailableError when every available thumbnail exceeds the cap', async () => {
+  it('returns an error with SlackImageThumbnailUnavailableError when every available thumbnail exceeds the cap', async () => {
     const tooBig = new Uint8Array(600 * 1024).fill(1)
     const slackClient = createSlackClientWithDownloads(
       new Map([
@@ -202,7 +202,7 @@ describe('resolveImageBlocks', () => {
     )
   })
 
-  it('rejects the whole call when one image among several has no usable thumbnail, discarding blocks already resolved for the others', async () => {
+  it('returns an error for the whole call when one image among several has no usable thumbnail, discarding blocks already resolved for the others', async () => {
     const firstBytes = new Uint8Array([1, 2, 3])
     const slackClient = createSlackClientWithDownloads(
       new Map([

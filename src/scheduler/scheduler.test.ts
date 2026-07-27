@@ -76,7 +76,7 @@ describe('InMemoryScheduler', () => {
     expect(scheduler.listActive()).toHaveLength(0)
   })
 
-  it('rejects intervals below 1000ms', () => {
+  it('returns an error for intervals below 1000ms', () => {
     const scheduler = createScheduler({ maxConcurrentTasks: 8 })
     const result = scheduler.schedule({
       name: 'bad',
@@ -110,7 +110,7 @@ describe('InMemoryScheduler', () => {
     expect(result).toEqual(err(new SchedulerLimitError(1)))
   })
 
-  it('rejects duplicate task names', () => {
+  it('returns an error for duplicate task names', () => {
     const scheduler = createScheduler({ maxConcurrentTasks: 8 })
     scheduler.schedule({
       name: 'dup',
