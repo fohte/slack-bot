@@ -4,7 +4,8 @@ import { buildSlashCommandsManifest } from '#scripts/print-slash-commands'
 
 describe('buildSlashCommandsManifest', () => {
   it('aggregates commands across plugins in order and attaches the request URL to each', () => {
-    const requestUrl = 'https://slack-bot.example.com/api/slack/commands'
+    const host = 'slack-bot.example.com'
+    const url = 'https://slack-bot.example.com/api/slack/commands'
     const plugins = [
       {
         name: 'alpha',
@@ -26,25 +27,26 @@ describe('buildSlashCommandsManifest', () => {
       },
     ]
 
-    expect(buildSlashCommandsManifest(requestUrl, plugins)).toEqual([
-      { command: '/alpha-run', description: 'Run alpha', url: requestUrl },
+    expect(buildSlashCommandsManifest(host, plugins)).toEqual([
+      { command: '/alpha-run', description: 'Run alpha', url },
       {
         command: '/alpha-config',
         description: 'Configure alpha',
         usage_hint: '<key> <value>',
         should_escape: true,
-        url: requestUrl,
+        url,
       },
       {
         command: '/beta-status',
         description: 'Show beta status',
-        url: requestUrl,
+        url,
       },
     ])
   })
 
   it('registers the production plugin list without a name or command conflict', () => {
-    const requestUrl = 'https://slack-bot.example.com/api/slack/commands'
-    expect(() => buildSlashCommandsManifest(requestUrl)).not.toThrow()
+    expect(() =>
+      buildSlashCommandsManifest('slack-bot.example.com'),
+    ).not.toThrow()
   })
 })

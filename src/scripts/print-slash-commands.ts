@@ -5,6 +5,7 @@ import {
   LLM_AGENT_COMMANDS,
   LLM_AGENT_PLUGIN_NAME,
 } from '#plugins/llm-agent/index'
+import { SLACK_COMMANDS_PATH } from '#server/http-server'
 
 export interface SlackAppManifestSlashCommand extends SlackAppManifestCommand {
   readonly url: string
@@ -22,9 +23,10 @@ const MANIFEST_PLUGINS: readonly Plugin[] = [
 ]
 
 export const buildSlashCommandsManifest = (
-  requestUrl: string,
+  host: string,
   plugins: readonly Plugin[] = MANIFEST_PLUGINS,
 ): SlackAppManifestSlashCommand[] => {
+  const requestUrl = `https://${host}${SLACK_COMMANDS_PATH}`
   const registry = createPluginRegistry()
   for (const plugin of plugins) {
     const registerResult = registry.register(plugin)
@@ -41,13 +43,13 @@ if (
   entry.endsWith('print-slash-commands.js') ||
   entry.endsWith('print-slash-commands.ts')
 ) {
-  const requestUrl = process.argv[2]
-  if (requestUrl === undefined || requestUrl === '') {
+  const host = process.argv[2]
+  if (host === undefined || host === '') {
     // eslint-disable-next-line no-restricted-syntax -- boundary: script entrypoint fail-fast, runs once at CLI invocation
     throw new Error(
-      'usage: pnpm print-slash-commands <request-url>\n' +
-        'example: pnpm print-slash-commands https://slack-bot.fohte.net/api/slack/commands',
+      'usage: pnpm print-slash-commands <host>\n' +
+        'example: pnpm print-slash-commands slack-bot.fohte.net',
     )
   }
-  console.log(JSON.stringify(buildSlashCommandsManifest(requestUrl), null, 2))
+  console.log(JSON.stringify(buildSlashCommandsManifest(host), null, 2))
 }

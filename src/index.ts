@@ -94,7 +94,7 @@ export { createSignatureVerifier } from '#security/signature-verifier'
 export type { HealthEndpoint } from '#server/health'
 export { createHealthEndpoint } from '#server/health'
 export type { HttpServer, HttpServerOptions } from '#server/http-server'
-export { createHttpServer } from '#server/http-server'
+export { createHttpServer, SLACK_COMMANDS_PATH } from '#server/http-server'
 export type { InFlightTasks } from '#server/in-flight-tasks'
 export { createInFlightTasks } from '#server/in-flight-tasks'
 export type {
