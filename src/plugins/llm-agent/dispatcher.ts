@@ -254,14 +254,17 @@ const respondWithConversationAgent = async (
 // Runs the (potentially slow) LLM/A2A work detached from the Slack HTTP
 // handler: whichever branch runs, it always ends by posting this event's
 // single response. Any unexpected failure falls back to a generic,
-// ungated dispatch-failure notification.
+// ungated dispatch-failure notification. The try/catch here is deliberately
+// broad: it is the last line of defense against a genuine bug (an actual
+// throw, not just a Result error) in any of the steps below, since a task
+// that silently hangs never gets a reply.
 export const runMentionInBackground = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow | undefined,
   resolved: ResolvedDispatcherDeps,
   logger: Logger,
 ): Promise<void> => {
-  // eslint-disable-next-line no-restricted-syntax -- boundary: fire-and-forget background execution; any failure here (thrown directly or converted from a Result below) is logged and falls back to reportDispatchFailure
+  // eslint-disable-next-line no-restricted-syntax -- boundary: fire-and-forget background execution; catches both Result errors (converted to throws below) and genuinely unexpected throws from any step, per the doc comment above
   try {
     const imagesResult = await resolveImageBlocks(resolved, env)
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly

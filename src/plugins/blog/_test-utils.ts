@@ -54,10 +54,7 @@ export const lastBody = (
   const calls = postToResponseUrl.mock.calls
   // eslint-disable-next-line no-restricted-syntax -- test helper assertion: fails the test immediately with a clear message if the mock was never called, mirroring a vitest expect() failure
   if (calls.length === 0) throw new Error('postToResponseUrl was not called')
-  const call = calls[calls.length - 1]
-  // eslint-disable-next-line no-restricted-syntax -- test helper assertion: unreachable given the length check above, kept only to satisfy the array index's possibly-undefined type
-  if (call === undefined) throw new Error('unreachable')
-  return call[1]
+  return calls[calls.length - 1]![1]
 }
 
 export const nthBody = (

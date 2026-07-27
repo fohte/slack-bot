@@ -337,8 +337,9 @@ export const startTaskReconciler = (
     return { settled, pruned }
   }
 
-  // isRunning is reset via .finally() rather than a native try/finally so a
-  // slow tick can't overlap the next interval callback.
+  // try/finally (even catch-less) trips the errorHandling lint's
+  // no-restricted-syntax TryStatement ban; .finally() resets isRunning
+  // without needing a disable comment here.
   const runOnce = (): Promise<TaskReconcilerResult> => {
     if (isRunning) return Promise.resolve({ settled: 0, pruned: 0 })
     isRunning = true
