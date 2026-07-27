@@ -12,6 +12,28 @@ Prefer creating a new focused file over appending to the largest existing one.
 
 Whenever a change makes `src/config/config.ts` or a plugin's own config module (e.g. `src/plugins/blog/config.ts`) start reading a new environment variable, add a row to the "Environment variables" table in `README.md` in the same change. Removing a variable from the code removes its row too.
 
+## Error handling rules
+
+### Return a `Result` instead of throwing
+
+`errorHandling` in `eslint.config.js` bans `throw`/`try-catch` in production code and requires every returned `Result` to be consumed (`no-restricted-syntax`, `neverthrow/must-use-result` in `@fohte/eslint-config`). Return a `Result`/`ResultAsync` from [neverthrow](https://github.com/supermacro/neverthrow) instead:
+
+```ts
+// bad: throws
+function parseConfig(raw: string): Config {
+  if (!isValid(raw)) throw new Error('invalid config')
+  return JSON.parse(raw)
+}
+
+// good: returns a Result
+function parseConfig(raw: string): Result<Config, ConfigError> {
+  if (!isValid(raw)) return err(new ConfigError('invalid config'))
+  return ok(JSON.parse(raw))
+}
+```
+
+Use `ResultAsync.fromPromise()` or `Result.fromThrowable()` to interop with a throwing API without a local try/catch. If the throw-based contract genuinely can't be wrapped that way, catch the exception, wrap it in a `BoundaryError` subclass (see `src/errors.ts`), and rethrow it — `no-restricted-syntax` bans `try`/`throw` as separate selectors, so both the `try` and the `throw` need their own `eslint-disable-next-line no-restricted-syntax` comment explaining why.
+
 ## Test code rules
 
 ### Assert on the whole output with a single equality check
