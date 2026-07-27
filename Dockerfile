@@ -38,4 +38,7 @@ COPY drizzle ./drizzle
 COPY otel-register.mjs ./
 USER node
 EXPOSE 8080
+# No HEALTHCHECK: the only deployment target is Kubernetes, whose kubelet
+# drives liveness/readiness against /health/live and /health/ready directly
+# and never consults the Docker-level healthcheck.
 CMD ["node", "--import", "./otel-register.mjs", "dist/index.js"]
