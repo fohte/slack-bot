@@ -10,8 +10,8 @@ describe('BoundaryError', () => {
 
     const wrapped = new TaskStorePersistenceError('failed to save', original)
 
-    expect(wrapped.name).toBe('TaskStorePersistenceError')
-    expect(wrapped.message).toBe('failed to save')
-    expect(wrapped.cause).toBe(original)
+    expect(wrapped).toEqual(
+      new TaskStorePersistenceError('failed to save', original),
+    )
   })
 })
