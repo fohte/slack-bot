@@ -19,7 +19,8 @@
     "test:unit": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:migrate:prod": "node dist/db/migrate.js"
+    "db:migrate:prod": "node dist/db/migrate.js",
+    "print-slash-commands": "tsx src/scripts/print-slash-commands.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.1",
