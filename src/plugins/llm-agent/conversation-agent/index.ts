@@ -13,8 +13,11 @@ export {
 } from '#plugins/llm-agent/conversation-agent/conversation-agent'
 export type { GenAiTracingMiddlewareOptions } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
 export { createGenAiTracingMiddleware } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
-export type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
-export { imageBlockFromResizedImage } from '#plugins/llm-agent/conversation-agent/image-block'
+export type {
+  DownloadedImage,
+  ImageBlock,
+} from '#plugins/llm-agent/conversation-agent/image-block'
+export { imageBlockFromDownloadedImage } from '#plugins/llm-agent/conversation-agent/image-block'
 export {
   CONVERSATION_CHECKPOINT_SCHEMA,
   createConversationCheckpointer,

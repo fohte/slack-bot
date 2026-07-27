@@ -111,6 +111,19 @@ export interface SlackFile {
   readonly url_private?: string | undefined
   readonly url_private_download?: string | undefined
   readonly permalink?: string | undefined
+  // Server-generated thumbnail URLs. Each is present only when Slack has
+  // generated that size for this file; larger tiers appear only "depending
+  // on the original file's size" (docs.slack.dev/reference/objects/file-object),
+  // so callers must treat every one of these as optional.
+  readonly thumb_64?: string | undefined
+  readonly thumb_80?: string | undefined
+  readonly thumb_160?: string | undefined
+  readonly thumb_360?: string | undefined
+  readonly thumb_480?: string | undefined
+  readonly thumb_720?: string | undefined
+  readonly thumb_800?: string | undefined
+  readonly thumb_960?: string | undefined
+  readonly thumb_1024?: string | undefined
   // Channels/groups/DMs this file has been shared into; used to scope an
   // inline file-ID reference (see files.ts) to the channel it was sent from.
   readonly channels?: readonly string[] | undefined

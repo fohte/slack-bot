@@ -1,12 +1,15 @@
 import { ResultAsync } from 'neverthrow'
 
-import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/index'
-import { imageBlockFromResizedImage } from '#plugins/llm-agent/conversation-agent/index'
+import type {
+  DownloadedImage,
+  ImageBlock,
+} from '#plugins/llm-agent/conversation-agent/index'
+import { imageBlockFromDownloadedImage } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
 } from '#plugins/llm-agent/dispatcher-deps'
-import { SLACK_FILE_DOWNLOAD_MAX_BYTES } from '#slack/web-client'
+import { SlackImageThumbnailUnavailableError } from '#types/errors'
 import type { SlackFile } from '#types/slack-payloads'
 
 // A conservative budget for base64-inlined image content blocks sent to the
@@ -23,68 +26,101 @@ const MIME_TO_EXT: ReadonlyMap<string, string> = new Map([
   ['image/webp', 'webp'],
 ])
 
-const extForImage = (file: SlackFile): string => {
-  const mime = typeof file.mimetype === 'string' ? file.mimetype : ''
-  const fromMime = MIME_TO_EXT.get(mime)
-  if (fromMime !== undefined) return fromMime
-  const name = file.name ?? file.title ?? ''
-  const dot = name.lastIndexOf('.')
-  if (dot > 0 && dot < name.length - 1) {
-    const ext = name
-      .slice(dot + 1)
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '')
-    if (ext.length > 0) return ext
-  }
-  return 'bin'
+// Slack exposes these as optional URLs, largest first: "Depending on the
+// original file's size, you may even find a thumb_480, thumb_720, thumb_960,
+// or thumb_1024 property" (docs.slack.dev/reference/objects/file-object).
+// thumb_64/80/160 are effectively always present as fallbacks for smaller
+// images.
+const candidateThumbUrls = (file: SlackFile): readonly string[] =>
+  [
+    file.thumb_1024,
+    file.thumb_960,
+    file.thumb_800,
+    file.thumb_720,
+    file.thumb_480,
+    file.thumb_360,
+    file.thumb_160,
+    file.thumb_80,
+    file.thumb_64,
+  ].filter((url): url is string => typeof url === 'string' && url.length > 0)
+
+const extFromUrl = (url: string): string | undefined => {
+  const path = url.split('?')[0] ?? url
+  const dot = path.lastIndexOf('.')
+  if (dot <= 0 || dot === path.length - 1) return undefined
+  const ext = path
+    .slice(dot + 1)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+  return ext.length > 0 ? ext : undefined
 }
 
-interface FittedImage {
-  readonly bytes: Uint8Array
-  readonly ext: string
+// Slack can re-encode a thumbnail into a different format than the original
+// upload, so the ext is read off the actual downloaded response instead of
+// trusting the original SlackFile's mimetype.
+const extForThumbnail = (
+  contentType: string | undefined,
+  url: string,
+): string => {
+  const mime = contentType?.split(';')[0]?.trim().toLowerCase()
+  const fromMime = mime !== undefined ? MIME_TO_EXT.get(mime) : undefined
+  return fromMime ?? extFromUrl(url) ?? 'jpg'
 }
 
-const fitImageToCap = async (
+// Serial: downloadFile does not retry, so issuing every candidate size for
+// one image in parallel would 429 the whole batch on a single rate-limit hit.
+const resolveThumbnail = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
   file: SlackFile,
-  bytes: Uint8Array,
   perImageCap: number,
-): Promise<FittedImage | undefined> => {
-  if (bytes.byteLength <= perImageCap) {
-    return { bytes, ext: extForImage(file) }
-  }
-  const outcome = await resolved.imageResizer.resize(bytes, perImageCap)
-  if (!outcome.ok) {
+): Promise<DownloadedImage> => {
+  const candidates = candidateThumbUrls(file)
+  for (const url of candidates) {
+    const downloadResult = await ResultAsync.fromPromise(
+      resolved.slackClient.downloadFile(url),
+      (caughtErr) => caughtErr,
+    )
+    if (downloadResult.isErr()) {
+      resolved.logger.warn(
+        {
+          event: 'llm_agent_slack_thumbnail_download_failed',
+          event_id: env.eventId,
+          slack_file_id: file.id,
+          thumbnail_url: url,
+          err: downloadResult.error,
+        },
+        'slack thumbnail download failed; trying the next smaller tier',
+      )
+      continue
+    }
+    const { bytes, contentType } = downloadResult.value
+    if (bytes.byteLength <= perImageCap) {
+      return { bytes, ext: extForThumbnail(contentType, url) }
+    }
     resolved.logger.warn(
       {
-        event: 'llm_agent_slack_image_too_large',
+        event: 'llm_agent_slack_thumbnail_too_large',
         event_id: env.eventId,
         slack_file_id: file.id,
+        thumbnail_url: url,
         bytes: bytes.byteLength,
         cap: perImageCap,
-        reason: outcome.reason,
       },
-      'slack image exceeds cap and could not be resized to fit; dropping this attachment',
+      'slack thumbnail exceeds cap; trying the next smaller tier',
     )
-    return undefined
   }
-  resolved.logger.info(
-    {
-      event: 'llm_agent_slack_image_resized',
-      event_id: env.eventId,
-      slack_file_id: file.id,
-      original_bytes: bytes.byteLength,
-      resized_bytes: outcome.bytes.byteLength,
-      cap: perImageCap,
-    },
-    'slack image exceeded cap; resized to fit',
+  throw new SlackImageThumbnailUnavailableError(
+    `slack file ${file.id ?? '(unknown id)'} has no thumb_* variant that fits the ${String(perImageCap)}-byte cap (checked ${String(candidates.length)} candidate size(s))`,
   )
-  return { bytes: outcome.bytes, ext: outcome.ext }
 }
 
 // Serial: downloadFile does not retry, so issuing all images in parallel
-// would 429 the whole batch on a single rate-limit hit.
+// would 429 the whole batch on a single rate-limit hit. An image with no
+// usable thumbnail rejects this whole call — including blocks already
+// resolved for earlier images — rather than being dropped on its own, so the
+// caller's existing failure path surfaces it as a full mention failure
+// instead of a silently incomplete reply.
 export const resolveImageBlocks = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
@@ -105,49 +141,13 @@ export const resolveImageBlocks = async (
       )
       break
     }
-    const url = file.url_private_download ?? file.url_private
-    if (typeof url !== 'string' || url.length === 0) continue
-    if (
-      typeof file.size === 'number' &&
-      file.size > SLACK_FILE_DOWNLOAD_MAX_BYTES
-    ) {
-      resolved.logger.warn(
-        {
-          event: 'llm_agent_slack_image_download_too_large',
-          event_id: env.eventId,
-          slack_file_id: file.id,
-          bytes: file.size,
-          cap: SLACK_FILE_DOWNLOAD_MAX_BYTES,
-        },
-        'slack image exceeds the download size guard; dropping this attachment without downloading',
-      )
-      continue
-    }
-    const downloadResult = await ResultAsync.fromPromise(
-      resolved.slackClient.downloadFile(url),
-      (caughtErr) => caughtErr,
-    )
-    if (downloadResult.isErr()) {
-      resolved.logger.warn(
-        {
-          event: 'llm_agent_slack_image_download_failed',
-          event_id: env.eventId,
-          slack_file_id: file.id,
-          err: downloadResult.error,
-        },
-        'slack image download failed; dropping this attachment',
-      )
-      continue
-    }
-    const bytes = downloadResult.value.bytes
     const perImageCap = Math.min(
       SINGLE_IMAGE_BYTE_CAP,
       TOTAL_IMAGE_BYTE_CAP - totalBytes,
     )
-    const fitted = await fitImageToCap(resolved, env, file, bytes, perImageCap)
-    if (fitted === undefined) continue
-    totalBytes += fitted.bytes.byteLength
-    blocks.push(imageBlockFromResizedImage(fitted))
+    const thumbnail = await resolveThumbnail(resolved, env, file, perImageCap)
+    totalBytes += thumbnail.bytes.byteLength
+    blocks.push(imageBlockFromDownloadedImage(thumbnail))
   }
   return blocks
 }

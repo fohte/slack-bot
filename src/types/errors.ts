@@ -162,3 +162,7 @@ export class PersonaParaphraseError extends Error {
     super(message, cause === undefined ? undefined : { cause })
   }
 }
+
+export class SlackImageThumbnailUnavailableError extends Error {
+  override readonly name = 'SlackImageThumbnailUnavailableError'
+}
