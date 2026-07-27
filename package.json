@@ -67,7 +67,7 @@
     "@sentry/opentelemetry": "10.65.0",
     "@slack/web-api": "7.19.0",
     "drizzle-orm": "0.45.2",
-    "hono": "4.12.30",
+    "hono": "4.12.31",
     "langchain": "1.5.3",
     "neverthrow": "8.2.0",
     "pino": "10.3.1",
