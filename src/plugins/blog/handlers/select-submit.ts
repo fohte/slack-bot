@@ -1,3 +1,5 @@
+import { ResultAsync } from 'neverthrow'
+
 import type { InteractionContext } from '#interaction/context'
 import { isRecord, renderPlanBlocks } from '#plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
@@ -13,27 +15,28 @@ export interface HandleSelectSubmitInput {
   readonly client: BlogServiceClient
 }
 
-export const handleSelectSubmit = async (
+export const handleSelectSubmit = (
   input: HandleSelectSubmitInput,
-): Promise<void> => {
+): ResultAsync<void, unknown> => {
   const { ctx, payload, client } = input
   ctx.ack()
   const docIds = extractSelectedDocIds(payload)
   if (docIds.length === 0) {
-    const followUpResult = await ctx.followUp({
+    return ctx.followUp({
       response_type: 'ephemeral',
       text: ':warning: ノートが選択されていません。',
     })
-    if (followUpResult.isErr()) throw followUpResult.error
-    return
   }
-  const plan = await client.buildPlan(docIds)
-  const rendered = renderPlanBlocks({ plan })
-  const patchResult = await ctx.originalUpdater().patch({
-    text: rendered.text,
-    blocks: rendered.blocks,
+  return ResultAsync.fromPromise(
+    client.buildPlan(docIds),
+    (caughtErr) => caughtErr,
+  ).andThen((plan) => {
+    const rendered = renderPlanBlocks({ plan })
+    return ctx.originalUpdater().patch({
+      text: rendered.text,
+      blocks: rendered.blocks,
+    })
   })
-  if (patchResult.isErr()) throw patchResult.error
 }
 
 const extractSelectedValues = (action: unknown): string[] | undefined => {

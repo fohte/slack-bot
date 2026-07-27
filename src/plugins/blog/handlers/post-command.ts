@@ -1,4 +1,5 @@
 import type { Note } from '@fohte/blog-publisher-contract'
+import { ResultAsync } from 'neverthrow'
 
 import type { InteractionContext } from '#interaction/context'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
@@ -12,18 +13,21 @@ export interface HandlePostCommandInput {
   readonly client: BlogServiceClient
 }
 
-export const handlePostCommand = async (
+export const handlePostCommand = (
   input: HandlePostCommandInput,
-): Promise<void> => {
+): ResultAsync<void, unknown> => {
   const { ctx, client } = input
   ctx.ack()
-  const notes = await client.listNotes()
-  const followUpResult = await ctx.followUp({
-    response_type: 'ephemeral',
-    text: buildHeaderText(notes),
-    blocks: buildSelectBlocks(notes),
-  })
-  if (followUpResult.isErr()) throw followUpResult.error
+  return ResultAsync.fromPromise(
+    client.listNotes(),
+    (caughtErr) => caughtErr,
+  ).andThen((notes) =>
+    ctx.followUp({
+      response_type: 'ephemeral',
+      text: buildHeaderText(notes),
+      blocks: buildSelectBlocks(notes),
+    }),
+  )
 }
 
 const buildHeaderText = (notes: readonly Note[]): string => {

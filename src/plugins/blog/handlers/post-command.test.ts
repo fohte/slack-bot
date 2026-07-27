@@ -102,13 +102,12 @@ describe('PostCommandHandler', () => {
       slackClient: slack.client,
       responseUrl: 'https://hooks.example/x',
     })
-    await expect(
-      handlePostCommand({
-        ctx: result.ctx,
-        body: { command: '/blog-post' },
-        client,
-      }),
-    ).rejects.toBeInstanceOf(ServiceUnavailable)
+    const outcome = await handlePostCommand({
+      ctx: result.ctx,
+      body: { command: '/blog-post' },
+      client,
+    })
+    expect(outcome._unsafeUnwrapErr()).toBeInstanceOf(ServiceUnavailable)
   })
 
   it('propagates the followUp Result error when response_url posting fails', async () => {
@@ -128,12 +127,11 @@ describe('PostCommandHandler', () => {
       slackClient: slack.client,
       responseUrl: 'https://hooks.example/x',
     })
-    await expect(
-      handlePostCommand({
-        ctx: result.ctx,
-        body: { command: '/blog-post' },
-        client,
-      }),
-    ).rejects.toBeInstanceOf(SlackApiError)
+    const outcome = await handlePostCommand({
+      ctx: result.ctx,
+      body: { command: '/blog-post' },
+      client,
+    })
+    expect(outcome._unsafeUnwrapErr()).toBeInstanceOf(SlackApiError)
   })
 })
