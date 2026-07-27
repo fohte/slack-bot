@@ -1,8 +1,14 @@
 import { config } from '@fohte/eslint-config'
 
 export default config(
+<<<<<<< before updating
   { typescript: { typeChecked: true }, opentelemetry: { enabled: true } },
+||||||| last update
+  { typescript: { typeChecked: true } },
+=======
+>>>>>>> after updating
   {
+<<<<<<< before updating
     ignores: ['dist/**'],
   },
   {
@@ -16,5 +22,24 @@ export default config(
       '@typescript-eslint/require-await': 'off',
       '@typescript-eslint/no-confusing-void-expression': 'off',
     },
+||||||| last update
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['./*', '../*'],
+              message:
+                'Please use absolute imports instead of relative imports.',
+            },
+          ],
+        },
+      ],
+    },
+=======
+    typescript: { typeChecked: true },
+    errorHandling: {},
+>>>>>>> after updating
   },
 )

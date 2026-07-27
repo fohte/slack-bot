@@ -1,3 +1,4 @@
+<<<<<<< before updating
 export type {
   CloudflareAccessHttpClient,
   CloudflareAccessHttpClientFactory,
@@ -147,3 +148,14 @@ export type {
   ViewPayloadView,
   ViewSubmissionPayload,
 } from '#types/slack-payloads'
+||||||| last update
+export const greet = (name: string): string => {
+  return `Hello, ${name}!`
+}
+=======
+import '#bootstrap'
+
+export const greet = (name: string): string => {
+  return `Hello, ${name}!`
+}
+>>>>>>> after updating
