@@ -3,25 +3,48 @@ import { describe, expect, it } from 'vitest'
 import { buildSlashCommandsManifest } from '#scripts/print-slash-commands'
 
 describe('buildSlashCommandsManifest', () => {
-  it('returns every registered plugin command with the request URL attached', () => {
+  it('aggregates commands across plugins in order and attaches the request URL to each', () => {
     const requestUrl = 'https://slack-bot.example.com/api/slack/commands'
-    expect(buildSlashCommandsManifest(requestUrl)).toEqual([
+    const plugins = [
       {
-        command: '/blog-post',
-        description: 'Pick blog notes and create a publish PR',
+        name: 'alpha',
+        commands: [
+          { command: '/alpha-run', description: 'Run alpha' },
+          {
+            command: '/alpha-config',
+            description: 'Configure alpha',
+            usage_hint: '<key> <value>',
+            should_escape: true,
+          },
+        ],
+      },
+      {
+        name: 'beta',
+        commands: [
+          { command: '/beta-status', description: 'Show beta status' },
+        ],
+      },
+    ]
+
+    expect(buildSlashCommandsManifest(requestUrl, plugins)).toEqual([
+      { command: '/alpha-run', description: 'Run alpha', url: requestUrl },
+      {
+        command: '/alpha-config',
+        description: 'Configure alpha',
+        usage_hint: '<key> <value>',
+        should_escape: true,
         url: requestUrl,
       },
       {
-        command: '/blog-status',
-        description: 'List open blog publish PRs',
-        url: requestUrl,
-      },
-      {
-        command: '/blog-cancel',
-        description: 'Cancel an open blog publish PR',
-        usage_hint: '<pr_number>',
+        command: '/beta-status',
+        description: 'Show beta status',
         url: requestUrl,
       },
     ])
+  })
+
+  it('registers the production plugin list without a name or command conflict', () => {
+    const requestUrl = 'https://slack-bot.example.com/api/slack/commands'
+    expect(() => buildSlashCommandsManifest(requestUrl)).not.toThrow()
   })
 })
