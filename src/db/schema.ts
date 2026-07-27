@@ -4,34 +4,9 @@ import {
   check,
   index,
   pgTable,
-  primaryKey,
   text,
   timestamp,
-  uniqueIndex,
 } from 'drizzle-orm/pg-core'
-
-export const threadSessionMap = pgTable(
-  'thread_session_map',
-  {
-    slackTeamId: text('slack_team_id').notNull(),
-    slackChannelId: text('slack_channel_id').notNull(),
-    threadRootTs: text('thread_root_ts').notNull(),
-    opencodeSessionId: text('opencode_session_id').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    primaryKey({
-      name: 'thread_session_map_pk',
-      columns: [table.slackTeamId, table.slackChannelId, table.threadRootTs],
-    }),
-    uniqueIndex('thread_session_map_session_idx').on(table.opencodeSessionId),
-  ],
-)
 
 export const eventLog = pgTable(
   'event_log',

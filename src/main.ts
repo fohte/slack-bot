@@ -29,7 +29,6 @@ import {
   createRemoteAgentRegistry,
   createResponseFinalizer,
   createTaskDispatcher,
-  createThreadSessionStore,
   startEventLogRetention,
   startTaskReconciler,
 } from '#plugins/llm-agent/index'
@@ -76,7 +75,6 @@ export const bootstrap = (options: BootstrapOptions): void => {
   const postgresClient = postgres(config.databaseUrl)
   const db = drizzle(postgresClient)
   const eventLogStore = createEventLogStore(db)
-  const threadSessionStore = createThreadSessionStore(db)
   const a2aTaskTracker = createA2aTaskTracker(db)
   startEventLogRetention({ eventLogStore, logger })
 
@@ -87,7 +85,6 @@ export const bootstrap = (options: BootstrapOptions): void => {
     scheduler,
     cfAccess,
     eventLogStore,
-    threadSessionStore,
     a2aTaskTracker,
     inFlightTasks,
   }
