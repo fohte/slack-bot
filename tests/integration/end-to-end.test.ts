@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto'
 
+import { errAsync, okAsync, ResultAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { noopLogger } from '#logger/logger'
@@ -105,8 +106,9 @@ const buildServer = (plugins: readonly Plugin[]) => {
 
 describe('end-to-end (HttpServer + Router + Registry)', () => {
   it('dispatches /ping slash command and returns ack body', async () => {
-    const handler = vi.fn<NonNullable<Plugin['onCommand']>>(async (ctx) => {
+    const handler = vi.fn<NonNullable<Plugin['onCommand']>>((ctx) => {
       ctx.ack({ text: 'pong' })
+      return okAsync(undefined)
     })
     const ping: Plugin = {
       name: 'ping',
@@ -181,13 +183,11 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
     expect(json.text).toMatch(/not registered/i)
   })
 
-  it('returns ephemeral error when plugin handler throws before ack', async () => {
+  it('returns ephemeral error when plugin handler returns an error before ack', async () => {
     const ping: Plugin = {
       name: 'ping',
       commands: [{ command: '/ping', description: 'Ping' }],
-      onCommand: async () => {
-        throw new Error('handler boom')
-      },
+      onCommand: () => errAsync(new Error('handler boom')),
     }
     const { server } = buildServer([ping])
     const body = new URLSearchParams({
@@ -206,13 +206,13 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
     expect(json.text).toMatch(/error occurred/i)
   })
 
-  it('returns the ack body even when the handler throws after ack', async () => {
+  it('returns the ack body even when the handler returns an error after ack', async () => {
     const ping: Plugin = {
       name: 'ping',
       commands: [{ command: '/ping', description: 'Ping' }],
-      onCommand: async (ctx) => {
+      onCommand: (ctx) => {
         ctx.ack({ text: 'ackd' })
-        throw new Error('post-ack failure')
+        return errAsync(new Error('post-ack failure'))
       },
     }
     const { server } = buildServer([ping])
@@ -232,8 +232,9 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
   })
 
   it('routes block_actions by action_id prefix', async () => {
-    const handler = vi.fn<NonNullable<Plugin['onBlockAction']>>(async (ctx) => {
+    const handler = vi.fn<NonNullable<Plugin['onBlockAction']>>((ctx) => {
       ctx.ack()
+      return okAsync(undefined)
     })
     const plugin: Plugin = {
       name: 'crawl',
@@ -266,11 +267,10 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
   })
 
   it('routes view_submission by callback_id prefix', async () => {
-    const handler = vi.fn<NonNullable<Plugin['onViewSubmission']>>(
-      async (ctx) => {
-        ctx.ack()
-      },
-    )
+    const handler = vi.fn<NonNullable<Plugin['onViewSubmission']>>((ctx) => {
+      ctx.ack()
+      return okAsync(undefined)
+    })
     const plugin: Plugin = {
       name: 'blog',
       commands: [],
@@ -382,11 +382,15 @@ describe('end-to-end (HttpServer + Router + Registry)', () => {
       resolveSleep = r
     })
     const handlerCompleted = vi.fn()
-    const handler = vi.fn<NonNullable<Plugin['onCommand']>>(async (ctx) => {
+    const handler = vi.fn<NonNullable<Plugin['onCommand']>>((ctx) => {
       ctx.ack({ text: 'starting' })
-      await sleep
-      await ctx.followUp({ text: 'finished', replace_original: true })
-      handlerCompleted()
+      return ResultAsync.fromSafePromise(
+        (async () => {
+          await sleep
+          await ctx.followUp({ text: 'finished', replace_original: true })
+          handlerCompleted()
+        })(),
+      )
     })
     const plugin: Plugin = {
       name: 'long',

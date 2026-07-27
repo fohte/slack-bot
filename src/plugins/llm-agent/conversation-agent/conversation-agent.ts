@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto'
 
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ContentBlock } from '@langchain/core/messages'
 import { HumanMessage } from '@langchain/core/messages'
 import type { BaseCheckpointSaver } from '@langchain/langgraph'
 import { ChatOpenAI } from '@langchain/openai'
 import { createAgent } from 'langchain'
+import { errAsync, ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
@@ -21,6 +23,10 @@ import {
   DELEGATION_RUNTIME_CONTEXT_SCHEMA,
   extractDelegations,
 } from '#plugins/llm-agent/remote-agent-registry/index'
+import {
+  ConversationAgentInvokeError,
+  type ConversationThreadIdParseError,
+} from '#types/errors'
 
 export type { Delegation } from '#plugins/llm-agent/remote-agent-registry/index'
 
@@ -28,6 +34,11 @@ export type { Delegation } from '#plugins/llm-agent/remote-agent-registry/index'
 export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
 
 const GEN_AI_PROVIDER_NAME = 'opencode'
+
+// Groups every LLM invoke failure under one Sentry issue per boundary
+// rather than per call site.
+const CONVERSATION_AGENT_INVOKE_FINGERPRINT =
+  'llm-agent.conversation-agent.invoke-failed'
 
 export interface CreateOpenCodeGoChatModelOptions {
   readonly apiKey: string
@@ -79,7 +90,12 @@ export interface ConversationAgent {
   // only one branch survives as the thread's history and the other turn is
   // silently dropped. Callers must ensure at most one in-flight respond()
   // per threadId.
-  respond(input: ConversationAgentInput): Promise<ConversationOutcome>
+  respond(
+    input: ConversationAgentInput,
+  ): ResultAsync<
+    ConversationOutcome,
+    ConversationThreadIdParseError | ConversationAgentInvokeError
+  >
 }
 
 type CreateAgentTools = NonNullable<Parameters<typeof createAgent>[0]['tools']>
@@ -125,7 +141,7 @@ export const createConversationAgent = (
   })
 
   return {
-    async respond({ threadId, userText, images, slackEventId }) {
+    respond({ threadId, userText, images, slackEventId }) {
       // A stable id lets this turn's own messages be located in the
       // checkpointer's full thread history below: LangGraph's messages
       // reducer keys deduplication/append on message id, so this id is
@@ -142,47 +158,66 @@ export const createConversationAgent = (
         contentBlocks: buildHumanMessageContent(userText, images),
       })
       const parsedThreadId = parseConversationThreadId(threadId)
-      if (parsedThreadId.isErr()) throw parsedThreadId.error
+      if (parsedThreadId.isErr()) return errAsync(parsedThreadId.error)
       const { teamId, channelId, threadRootTs } = parsedThreadId.value
-      const result = await agent.invoke(
-        { messages: [message] },
-        {
-          configurable: { thread_id: threadId },
-          context: {
-            slackEventId,
-            threadKey: {
-              slackTeamId: teamId,
-              slackChannelId: channelId,
-              threadRootTs,
-            },
-            images: [...images],
-          },
-        },
-      )
-      const lastMessage = result.messages.at(-1)
-      // result.messages is the whole thread history the checkpointer has
-      // accumulated, not just this turn's new messages, so delegations from
-      // earlier turns must be excluded rather than re-reported here.
-      const turnStart = result.messages.findIndex((m) => m.id === turnMessageId)
-      const turnMessages =
-        turnStart === -1 ? result.messages : result.messages.slice(turnStart)
-      const { text, stripped } = stripThinkBlocks(lastMessage?.text ?? '')
-      if (stripped) {
-        // Signals that reasoning_split (see createOpenCodeGoChatModel above)
-        // wasn't honored end-to-end and this fallback was the only thing
-        // that kept a <think> block out of Slack.
-        logger.warn(
+      return ResultAsync.fromPromise(
+        agent.invoke(
+          { messages: [message] },
           {
-            event: 'llm_agent_think_block_leaked',
-            slack_event_id: slackEventId,
+            configurable: { thread_id: threadId },
+            context: {
+              slackEventId,
+              threadKey: {
+                slackTeamId: teamId,
+                slackChannelId: channelId,
+                threadRootTs,
+              },
+              images: [...images],
+            },
           },
-          'model reply contained a <think> block; stripped it before returning',
+        ),
+        (caughtErr) => {
+          const wrapped = new ConversationAgentInvokeError(
+            `llm-agent conversation agent invoke failed for thread ${threadId}`,
+            caughtErr,
+          )
+          captureWithFingerprint(
+            wrapped,
+            CONVERSATION_AGENT_INVOKE_FINGERPRINT,
+            {
+              extras: { threadId, slackEventId },
+            },
+          )
+          return wrapped
+        },
+      ).map((result) => {
+        const lastMessage = result.messages.at(-1)
+        // result.messages is the whole thread history the checkpointer has
+        // accumulated, not just this turn's new messages, so delegations
+        // from earlier turns must be excluded rather than re-reported here.
+        const turnStart = result.messages.findIndex(
+          (m) => m.id === turnMessageId,
         )
-      }
-      return {
-        text,
-        delegations: extractDelegations(turnMessages),
-      }
+        const turnMessages =
+          turnStart === -1 ? result.messages : result.messages.slice(turnStart)
+        const { text, stripped } = stripThinkBlocks(lastMessage?.text ?? '')
+        if (stripped) {
+          // Signals that reasoning_split (see createOpenCodeGoChatModel
+          // above) wasn't honored end-to-end and this fallback was the only
+          // thing that kept a <think> block out of Slack.
+          logger.warn(
+            {
+              event: 'llm_agent_think_block_leaked',
+              slack_event_id: slackEventId,
+            },
+            'model reply contained a <think> block; stripped it before returning',
+          )
+        }
+        return {
+          text,
+          delegations: extractDelegations(turnMessages),
+        }
+      })
     },
   }
 }

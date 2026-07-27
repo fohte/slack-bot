@@ -5,6 +5,7 @@ import type { BaseMessage } from '@langchain/core/messages'
 import { ToolMessage } from '@langchain/core/messages'
 import type { ToolRuntime } from '@langchain/core/tools'
 import { tool } from 'langchain'
+import { err, ok, type Result, ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 
 import type { Logger } from '#logger/logger'
@@ -18,6 +19,7 @@ import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-blo
 import { toFilePart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
 import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
 import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-registry/send-message-result'
+import { DuplicateDelegationToolNameError } from '#types/errors'
 
 export interface Delegation {
   readonly agentName: string
@@ -163,20 +165,21 @@ export const createDelegationTool = (
         },
       }
 
-      let rawResult: unknown
-      try {
-        rawResult = await handle.client.sendMessage(params)
-      } catch (error) {
+      const sendResult = await ResultAsync.fromPromise(
+        handle.client.sendMessage(params),
+        (caughtErr) => caughtErr,
+      )
+      if (sendResult.isErr()) {
         logger.warn(
           {
             event: 'llm_agent_remote_agent_delegation_send_failed',
             agent_name: handle.name,
-            err: error,
+            err: sendResult.error,
           },
           'llm-agent delegation tool failed to send message/send to a remote agent',
         )
         return [
-          `Delegating to ${handle.name} failed: ${describeError(error)}. ` +
+          `Delegating to ${handle.name} failed: ${describeError(sendResult.error)}. ` +
             'Tell the user the request could not be sent.',
           undefined,
         ]
@@ -185,15 +188,13 @@ export const createDelegationTool = (
       // A schema mismatch here means the request may already have reached
       // the remote agent (unlike the network failure above), so this is
       // reported as an untrackable delegation rather than a failed send.
-      let result: z.infer<typeof SEND_MESSAGE_RESULT_SCHEMA>
-      try {
-        result = SEND_MESSAGE_RESULT_SCHEMA.parse(rawResult)
-      } catch (error) {
+      const parsed = SEND_MESSAGE_RESULT_SCHEMA.safeParse(sendResult.value)
+      if (!parsed.success) {
         logger.warn(
           {
             event: 'llm_agent_remote_agent_delegation_malformed_result',
             agent_name: handle.name,
-            err: error,
+            err: parsed.error,
           },
           'llm-agent delegation tool received a malformed message/send result from a remote agent',
         )
@@ -204,6 +205,7 @@ export const createDelegationTool = (
           undefined,
         ]
       }
+      const result = parsed.data
 
       if (result.kind !== 'task') {
         logger.warn(
@@ -292,23 +294,24 @@ export const createDelegationTool = (
 export const createDelegationTools = (
   handles: readonly RemoteAgentHandle[],
   deps: DelegationToolDependencies,
-) => {
+): Result<
+  Array<ReturnType<typeof createDelegationTool>>,
+  DuplicateDelegationToolNameError
+> => {
   const seenNames = new Set<string>()
-  return handles.map((handle) => {
+  const tools: Array<ReturnType<typeof createDelegationTool>> = []
+  for (const handle of handles) {
     const toolName = delegationToolName(handle.card)
     // A collision would leave one of the two agents permanently
     // unreachable (tool dispatch resolves by name, first match wins) with
     // no error surfaced anywhere, so this fails loudly instead.
     if (seenNames.has(toolName)) {
-      throw new Error(
-        `duplicate delegation tool name '${toolName}' for remote agent ` +
-          `'${handle.name}'; Agent Card names must be unique after ` +
-          'slugification',
-      )
+      return err(new DuplicateDelegationToolNameError(toolName, handle.name))
     }
     seenNames.add(toolName)
-    return createDelegationTool(handle, deps)
-  })
+    tools.push(createDelegationTool(handle, deps))
+  }
+  return ok(tools)
 }
 
 const isDelegation = (value: unknown): value is Delegation =>

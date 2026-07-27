@@ -236,14 +236,17 @@ const respondWithConversationAgent = async (
     channelId: env.channelId,
     threadRootTs: env.threadRootTs,
   })
-  const outcome = await resolved.conversationAgent.respond({
+  const outcomeResult = await resolved.conversationAgent.respond({
     threadId,
     userText: env.text,
     images,
     slackEventId: env.eventId,
   })
-  const trimmed = outcome.text.trim()
-  return trimmed.length > 0 ? outcome.text : resolved.successFallbackText
+  if (outcomeResult.isErr()) throw outcomeResult.error
+  const trimmed = outcomeResult.value.text.trim()
+  return trimmed.length > 0
+    ? outcomeResult.value.text
+    : resolved.successFallbackText
 }
 
 // Runs the (potentially slow) LLM/A2A work detached from the Slack HTTP
@@ -257,12 +260,15 @@ export const runMentionInBackground = async (
   logger: Logger,
 ): Promise<void> => {
   try {
-    const images = await resolveImageBlocks(resolved, env)
+    const imagesResult = await resolveImageBlocks(resolved, env)
+    if (imagesResult.isErr()) throw imagesResult.error
+    const images = imagesResult.value
     const text =
       activeTask !== undefined
         ? (await resumeActiveTask(env, activeTask, resolved, images)).text
         : await respondWithConversationAgent(env, resolved, images)
-    await postFinalResponse(env, text, resolved)
+    const postResult = await postFinalResponse(env, text, resolved)
+    if (postResult.isErr()) throw postResult.error
   } catch (error) {
     logger.error(
       {

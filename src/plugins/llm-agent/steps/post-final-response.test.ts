@@ -1,3 +1,4 @@
+import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -33,7 +34,7 @@ describe('postFinalResponse', () => {
       baseDeps({ slackClient }),
     )
 
-    expect(result).toEqual({ posted: true })
+    expect(result).toEqual(ok({ posted: true }))
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',
@@ -134,8 +135,8 @@ describe('postFinalResponse', () => {
     const first = await postFinalResponse(TEST_ENV, 'first reply', deps)
     const second = await postFinalResponse(TEST_ENV, 'second reply', deps)
 
-    expect(first).toEqual({ posted: true })
-    expect(second).toEqual({ posted: false })
+    expect(first).toEqual(ok({ posted: true }))
+    expect(second).toEqual(ok({ posted: false }))
     expect(slackClient.calls.filter((c) => c.kind === 'post')).toHaveLength(1)
   })
 
@@ -151,8 +152,8 @@ describe('postFinalResponse', () => {
     const eventLogStore = createScriptedEventLogStore()
     const deps = baseDeps({ slackClient, eventLogStore })
 
-    await expect(postFinalResponse(TEST_ENV, 'reply', deps)).rejects.toBe(
-      postError,
+    expect(await postFinalResponse(TEST_ENV, 'reply', deps)).toEqual(
+      err(postError),
     )
     // The rollback must let a retry mark and post again rather than being
     // stuck thinking this event was already responded to.
@@ -160,7 +161,7 @@ describe('postFinalResponse', () => {
       ...deps,
       slackClient: stub,
     })
-    expect(retry).toEqual({ posted: true })
+    expect(retry).toEqual(ok({ posted: true }))
     expect(stub.calls.filter((c) => c.kind === 'post')).toHaveLength(1)
   })
 })

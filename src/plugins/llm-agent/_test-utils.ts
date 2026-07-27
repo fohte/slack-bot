@@ -1,6 +1,6 @@
 import type { AgentCard, Message, MessageSendParams, Task } from '@a2a-js/sdk'
 import type { Client } from '@a2a-js/sdk/client'
-import { okAsync } from 'neverthrow'
+import { okAsync, ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
 import type {
@@ -27,6 +27,10 @@ import type {
   RemoteAgentRegistry,
 } from '#plugins/llm-agent/remote-agent-registry/index'
 import type { SlackWebClient } from '#slack/web-client'
+import type {
+  ConversationAgentInvokeError,
+  ConversationThreadIdParseError,
+} from '#types/errors'
 
 export interface SlackCall {
   readonly kind: 'status' | 'post'
@@ -215,9 +219,14 @@ export const createFakeConversationAgent = (
   const calls: ConversationAgentInput[] = []
   return {
     calls,
-    async respond(input) {
+    respond(input) {
       calls.push(input)
-      return reply(input)
+      return ResultAsync.fromPromise(
+        Promise.resolve(reply(input)),
+        (error) =>
+          error as
+            ConversationThreadIdParseError | ConversationAgentInvokeError,
+      )
     },
   }
 }

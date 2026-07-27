@@ -1,4 +1,5 @@
 import type { Note } from '@fohte/blog-publisher-contract'
+import { err } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createInteractionContext } from '#interaction/context'
@@ -102,13 +103,12 @@ describe('PostCommandHandler', () => {
       slackClient: slack.client,
       responseUrl: 'https://hooks.example/x',
     })
-    await expect(
-      handlePostCommand({
-        ctx: result.ctx,
-        body: { command: '/blog-post' },
-        client,
-      }),
-    ).rejects.toBeInstanceOf(ServiceUnavailable)
+    const outcome = await handlePostCommand({
+      ctx: result.ctx,
+      body: { command: '/blog-post' },
+      client,
+    })
+    expect(outcome).toEqual(err(new ServiceUnavailable('down')))
   })
 
   it('propagates the followUp Result error when response_url posting fails', async () => {
@@ -128,12 +128,17 @@ describe('PostCommandHandler', () => {
       slackClient: slack.client,
       responseUrl: 'https://hooks.example/x',
     })
-    await expect(
-      handlePostCommand({
-        ctx: result.ctx,
-        body: { command: '/blog-post' },
-        client,
-      }),
-    ).rejects.toBeInstanceOf(SlackApiError)
+    const outcome = await handlePostCommand({
+      ctx: result.ctx,
+      body: { command: '/blog-post' },
+      client,
+    })
+    expect(outcome).toEqual(
+      err(
+        new SlackApiError('response_url POST failed with HTTP 410', {
+          status: 410,
+        }),
+      ),
+    )
   })
 })

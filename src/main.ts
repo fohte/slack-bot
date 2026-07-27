@@ -92,7 +92,8 @@ export const bootstrap = (options: BootstrapOptions): void => {
   const registry = createPluginRegistry()
   for (const input of options.plugins ?? []) {
     const plugin = resolvePlugin(input, deps)
-    registry.register(plugin)
+    const registerResult = registry.register(plugin)
+    if (registerResult.isErr()) throw registerResult.error
     logger.info(
       {
         event: 'plugin_registered',
@@ -224,13 +225,12 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
         a2aTaskTracker,
         inFlightTasks,
       }) => {
-        const tools = [
-          ...createDelegationTools(remoteAgentHandles, {
-            a2aTaskTracker,
-            logger,
-          }),
-          ...mcpTools,
-        ]
+        const delegationToolsResult = createDelegationTools(
+          remoteAgentHandles,
+          { a2aTaskTracker, logger },
+        )
+        if (delegationToolsResult.isErr()) throw delegationToolsResult.error
+        const tools = [...delegationToolsResult.value, ...mcpTools]
         const conversationAgent = createConversationAgent({
           model,
           checkpointer,

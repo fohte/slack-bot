@@ -204,10 +204,12 @@ export const startTaskReconciler = (
       return false
     }
 
-    let task: Task
-    try {
-      task = await handle.client.getTask({ id: row.taskId })
-    } catch (error) {
+    const taskResult = await ResultAsync.fromPromise(
+      handle.client.getTask({ id: row.taskId }),
+      (caughtErr) => caughtErr,
+    )
+    if (taskResult.isErr()) {
+      const error = taskResult.error
       if (error instanceof TaskNotFoundError) {
         // The default 'failed' guard only permits submitted/working rows, so
         // any other current state (input-required, or a terminal state left
@@ -249,6 +251,7 @@ export const startTaskReconciler = (
       )
       return false
     }
+    const task: Task = taskResult.value
 
     // Delegates the actual settle/post decision to the same finalizer the
     // push notification path uses, so a missed push and a reconciler poll
@@ -299,18 +302,22 @@ export const startTaskReconciler = (
         // through that cache check.
         const handles = await options.remoteAgentRegistry.listAgents()
         for (const row of rows) {
-          try {
-            if (await reconcileRow(row, handles)) settled++
-          } catch (error) {
+          const reconcileResult = await ResultAsync.fromPromise(
+            reconcileRow(row, handles),
+            (caughtErr) => caughtErr,
+          )
+          if (reconcileResult.isErr()) {
             logger.error(
               {
                 event: 'llm_agent_a2a_reconcile_row_failed',
                 task_id: row.taskId,
-                err: error,
+                err: reconcileResult.error,
               },
               'llm-agent reconciler failed to reconcile an unsettled a2a_task row',
             )
+            continue
           }
+          if (reconcileResult.value) settled++
         }
       }
 

@@ -1,5 +1,6 @@
 import type { Message, MessageSendParams } from '@a2a-js/sdk'
 import { TaskNotFoundError } from '@a2a-js/sdk/client'
+import { ResultAsync } from 'neverthrow'
 
 import type {
   A2aTaskLifecycle,
@@ -122,23 +123,24 @@ const redelegate = async (
     contextId: activeTask.contextId,
   })
 
-  let rawResult: unknown
-  try {
-    rawResult = await handle.client.sendMessage(params)
-  } catch (error) {
+  const sendResult = await ResultAsync.fromPromise(
+    handle.client.sendMessage(params),
+    (caughtErr) => caughtErr,
+  )
+  if (sendResult.isErr()) {
     resolved.logger.warn(
       {
         event: 'llm_agent_resume_redelegate_send_failed',
         agent_name: activeTask.agentName,
         context_id: activeTask.contextId,
-        err: error,
+        err: sendResult.error,
       },
       'llm-agent failed to redelegate a task whose previous instance was unresumable',
     )
     return { text: RESUME_SEND_FAILURE_TEXT }
   }
 
-  const parsed = SEND_MESSAGE_RESULT_SCHEMA.safeParse(rawResult)
+  const parsed = SEND_MESSAGE_RESULT_SCHEMA.safeParse(sendResult.value)
   if (
     !parsed.success ||
     parsed.data.kind !== 'task' ||
@@ -243,10 +245,12 @@ export const resumeActiveTask = async (
     contextId: activeTask.contextId,
   })
 
-  let rawResult: unknown
-  try {
-    rawResult = await handle.client.sendMessage(params)
-  } catch (error) {
+  const sendResult = await ResultAsync.fromPromise(
+    handle.client.sendMessage(params),
+    (caughtErr) => caughtErr,
+  )
+  if (sendResult.isErr()) {
+    const error = sendResult.error
     if (isUnresumableTaskError(error)) {
       return settleAndRedelegate(
         env,
@@ -269,7 +273,7 @@ export const resumeActiveTask = async (
     return { text: RESUME_SEND_FAILURE_TEXT }
   }
 
-  const parsed = SEND_MESSAGE_RESULT_SCHEMA.safeParse(rawResult)
+  const parsed = SEND_MESSAGE_RESULT_SCHEMA.safeParse(sendResult.value)
   if (
     !parsed.success ||
     parsed.data.kind !== 'task' ||

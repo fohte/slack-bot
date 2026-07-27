@@ -1,4 +1,5 @@
 import type { BlogPrSummary } from '@fohte/blog-publisher-contract'
+import { ResultAsync } from 'neverthrow'
 
 import type { InteractionContext } from '#interaction/context'
 import { escapeMrkdwn } from '#plugins/blog/plan-presenter'
@@ -13,18 +14,21 @@ export interface HandleStatusCommandInput {
   readonly client: BlogServiceClient
 }
 
-export const handleStatusCommand = async (
+export const handleStatusCommand = (
   input: HandleStatusCommandInput,
-): Promise<void> => {
+): ResultAsync<void, unknown> => {
   const { ctx, client } = input
   ctx.ack()
-  const prs = await client.listPrs('open')
-  const followUpResult = await ctx.followUp({
-    response_type: 'ephemeral',
-    text: buildHeader(prs),
-    blocks: buildBlocks(prs),
-  })
-  if (followUpResult.isErr()) throw followUpResult.error
+  return ResultAsync.fromPromise(
+    client.listPrs('open'),
+    (caughtErr) => caughtErr,
+  ).andThen((prs) =>
+    ctx.followUp({
+      response_type: 'ephemeral',
+      text: buildHeader(prs),
+      blocks: buildBlocks(prs),
+    }),
+  )
 }
 
 const buildHeader = (prs: readonly BlogPrSummary[]): string =>

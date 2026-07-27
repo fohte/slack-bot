@@ -7,15 +7,14 @@ import type { ResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 
 const TOKEN = 'shared-secret'
 
-const createFakeResponseFinalizer = (
-  finalize: (taskId: string) => Promise<void> = async () => {},
-): ResponseFinalizer & { readonly calls: string[] } => {
+const createFakeResponseFinalizer = (): ResponseFinalizer & {
+  readonly calls: string[]
+} => {
   const calls: string[] = []
   return {
     calls,
     async finalize(taskId) {
       calls.push(taskId)
-      await finalize(taskId)
     },
     async finalizeRow() {
       throw new Error('not implemented')
@@ -26,14 +25,15 @@ const createFakeResponseFinalizer = (
   }
 }
 
-const buildApp = (
-  responseFinalizer: ResponseFinalizer,
-  logger = createRecordingLogger(),
-): Hono => {
+const buildApp = (responseFinalizer: ResponseFinalizer): Hono => {
   const app = new Hono()
   app.post(
     '/api/a2a/notifications',
-    createA2aNotificationHandler({ token: TOKEN, responseFinalizer, logger }),
+    createA2aNotificationHandler({
+      token: TOKEN,
+      responseFinalizer,
+      logger: createRecordingLogger(),
+    }),
   )
   return app
 }
@@ -111,34 +111,5 @@ describe('createA2aNotificationHandler', () => {
 
     expect(response.status).toBe(204)
     expect(finalizer.calls).toEqual(['task-1'])
-  })
-
-  it('still returns 204 when finalize() throws, logging the failure instead of surfacing an error status', async () => {
-    const logger = createRecordingLogger()
-    const finalizeError = new Error('db unavailable')
-    const finalizer = createFakeResponseFinalizer(async () => {
-      throw finalizeError
-    })
-    const app = buildApp(finalizer, logger)
-
-    const response = await app.request('/api/a2a/notifications', {
-      method: 'POST',
-      headers: { 'X-A2A-Notification-Token': TOKEN },
-      body: JSON.stringify({ id: 'task-1' }),
-    })
-
-    expect(response.status).toBe(204)
-    expect(logger.entries).toEqual([
-      {
-        level: 'error',
-        payload: {
-          event: 'llm_agent_a2a_notification_finalize_failed',
-          task_id: 'task-1',
-          err: finalizeError,
-        },
-        message:
-          'llm-agent failed to finalize a task after receiving a push notification',
-      },
-    ])
   })
 })

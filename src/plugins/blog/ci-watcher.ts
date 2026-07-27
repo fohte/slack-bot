@@ -1,12 +1,11 @@
 import type { CiStatus } from '@fohte/blog-publisher-contract'
-import { fromThrowable } from 'neverthrow'
 
 import type { MessageUpdater } from '#interaction/message-updater'
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
 import { escapeMrkdwn } from '#plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
-import type { InMemoryScheduler, ScheduledTaskDef } from '#scheduler/scheduler'
+import type { InMemoryScheduler } from '#scheduler/scheduler'
 
 export const CI_WATCH_INTERVAL_MS = 30_000
 export const CI_WATCH_MAX_DURATION_MS = 15 * 60 * 1000
@@ -129,15 +128,10 @@ export const createCiWatcher = (options: CiWatcherOptions): CiWatcher => {
     }
   }
 
-  const safeSchedule = fromThrowable(
-    (def: ScheduledTaskDef) => options.scheduler.schedule(def),
-    (error) => error,
-  )
-
   return {
     startWatching(input) {
       const taskName = `blog:ci-watch:${String(input.prNumber)}`
-      const scheduleResult = safeSchedule({
+      const scheduleResult = options.scheduler.schedule({
         name: taskName,
         intervalMs,
         maxDurationMs,
