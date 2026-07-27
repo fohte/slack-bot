@@ -277,68 +277,70 @@ export const startTaskReconciler = (
   const runOnce = async (): Promise<TaskReconcilerResult> => {
     if (isRunning) return { settled: 0, pruned: 0 }
     isRunning = true
-
-    const findUnsettledResult = await options.a2aTaskTracker.findUnsettled(
-      new Date(now().getTime() - graceMs),
-    )
-    let rows: readonly A2aTaskRow[]
-    if (findUnsettledResult.isErr()) {
-      logger.error(
-        {
-          event: 'llm_agent_a2a_reconcile_query_failed',
-          err: findUnsettledResult.error,
-        },
-        'llm-agent reconciler failed to query unsettled a2a_task rows',
+    try {
+      const findUnsettledResult = await options.a2aTaskTracker.findUnsettled(
+        new Date(now().getTime() - graceMs),
       )
-      rows = []
-    } else {
-      rows = findUnsettledResult.value
-    }
-
-    let settled = 0
-    if (rows.length > 0) {
-      // Fetched once per tick rather than once per row; RemoteAgentRegistry
-      // caches internally but every row would still pay an async round trip
-      // through that cache check.
-      const handles = await options.remoteAgentRegistry.listAgents()
-      for (const row of rows) {
-        const reconcileResult = await ResultAsync.fromPromise(
-          reconcileRow(row, handles),
-          (caughtErr) => caughtErr,
+      let rows: readonly A2aTaskRow[]
+      if (findUnsettledResult.isErr()) {
+        logger.error(
+          {
+            event: 'llm_agent_a2a_reconcile_query_failed',
+            err: findUnsettledResult.error,
+          },
+          'llm-agent reconciler failed to query unsettled a2a_task rows',
         )
-        if (reconcileResult.isErr()) {
-          logger.error(
-            {
-              event: 'llm_agent_a2a_reconcile_row_failed',
-              task_id: row.taskId,
-              err: reconcileResult.error,
-            },
-            'llm-agent reconciler failed to reconcile an unsettled a2a_task row',
-          )
-          continue
-        }
-        if (reconcileResult.value) settled++
+        rows = []
+      } else {
+        rows = findUnsettledResult.value
       }
-    }
 
-    const pruneResult = await options.a2aTaskTracker.deleteSettledOlderThan(
-      new Date(now().getTime() - retentionMs),
-    )
-    let pruned = 0
-    if (pruneResult.isErr()) {
-      logger.error(
-        {
-          event: 'llm_agent_a2a_reconcile_prune_failed',
-          err: pruneResult.error,
-        },
-        'llm-agent reconciler failed to prune settled a2a_task rows',
+      let settled = 0
+      if (rows.length > 0) {
+        // Fetched once per tick rather than once per row; RemoteAgentRegistry
+        // caches internally but every row would still pay an async round trip
+        // through that cache check.
+        const handles = await options.remoteAgentRegistry.listAgents()
+        for (const row of rows) {
+          const reconcileResult = await ResultAsync.fromPromise(
+            reconcileRow(row, handles),
+            (caughtErr) => caughtErr,
+          )
+          if (reconcileResult.isErr()) {
+            logger.error(
+              {
+                event: 'llm_agent_a2a_reconcile_row_failed',
+                task_id: row.taskId,
+                err: reconcileResult.error,
+              },
+              'llm-agent reconciler failed to reconcile an unsettled a2a_task row',
+            )
+            continue
+          }
+          if (reconcileResult.value) settled++
+        }
+      }
+
+      const pruneResult = await options.a2aTaskTracker.deleteSettledOlderThan(
+        new Date(now().getTime() - retentionMs),
       )
-    } else {
-      pruned = pruneResult.value
-    }
+      let pruned = 0
+      if (pruneResult.isErr()) {
+        logger.error(
+          {
+            event: 'llm_agent_a2a_reconcile_prune_failed',
+            err: pruneResult.error,
+          },
+          'llm-agent reconciler failed to prune settled a2a_task rows',
+        )
+      } else {
+        pruned = pruneResult.value
+      }
 
-    isRunning = false
-    return { settled, pruned }
+      return { settled, pruned }
+    } finally {
+      isRunning = false
+    }
   }
 
   // Wraps every runOnce() invocation so a graceful-shutdown drain also
