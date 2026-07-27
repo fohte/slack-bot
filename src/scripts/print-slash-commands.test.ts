@@ -49,4 +49,10 @@ describe('buildSlashCommandsManifest', () => {
       buildSlashCommandsManifest('slack-bot.example.com'),
     ).not.toThrow()
   })
+
+  it('rejects a host that still includes a scheme', () => {
+    expect(() =>
+      buildSlashCommandsManifest('https://slack-bot.example.com'),
+    ).toThrow('host must be a bare hostname without a scheme')
+  })
 })

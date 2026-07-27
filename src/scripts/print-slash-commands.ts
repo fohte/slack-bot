@@ -26,6 +26,12 @@ export const buildSlashCommandsManifest = (
   host: string,
   plugins: readonly Plugin[] = MANIFEST_PLUGINS,
 ): SlackAppManifestSlashCommand[] => {
+  if (host.includes('://')) {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: script entrypoint fail-fast, no caller of this exported function has a Result-based flow to receive the error
+    throw new Error(
+      `host must be a bare hostname without a scheme, got: ${host}`,
+    )
+  }
   const requestUrl = `https://${host}${SLACK_COMMANDS_PATH}`
   const registry = createPluginRegistry()
   for (const plugin of plugins) {
