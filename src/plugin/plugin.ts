@@ -1,3 +1,5 @@
+import type { ResultAsync } from 'neverthrow'
+
 import type { InteractionContext } from '#interaction/context'
 import type { EventContext } from '#interaction/event-context'
 import type {
@@ -20,24 +22,30 @@ export interface SlackAppManifestCommand {
 export interface Plugin {
   readonly name: string
   readonly commands: readonly SlackAppManifestCommand[]
-  onCommand?(ctx: InteractionContext, body: SlashCommandBody): Promise<void>
+  onCommand?(
+    ctx: InteractionContext,
+    body: SlashCommandBody,
+  ): ResultAsync<void, unknown>
   onBlockAction?(
     ctx: InteractionContext,
     payload: BlockActionsPayload,
-  ): Promise<void>
+  ): ResultAsync<void, unknown>
   onViewSubmission?(
     ctx: InteractionContext,
     payload: ViewSubmissionPayload,
-  ): Promise<void>
+  ): ResultAsync<void, unknown>
   onViewClosed?(
     ctx: InteractionContext,
     payload: ViewClosedPayload,
-  ): Promise<void>
-  onShortcut?(ctx: InteractionContext, payload: ShortcutPayload): Promise<void>
+  ): ResultAsync<void, unknown>
+  onShortcut?(
+    ctx: InteractionContext,
+    payload: ShortcutPayload,
+  ): ResultAsync<void, unknown>
   onMessageAction?(
     ctx: InteractionContext,
     payload: MessageActionPayload,
-  ): Promise<void>
+  ): ResultAsync<void, unknown>
   readonly eventSubscriptions?: readonly string[]
-  onEvent?(ctx: EventContext, event: SlackEvent): Promise<void>
+  onEvent?(ctx: EventContext, event: SlackEvent): ResultAsync<void, unknown>
 }

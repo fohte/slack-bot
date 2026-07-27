@@ -92,7 +92,8 @@ export const bootstrap = (options: BootstrapOptions): void => {
   const registry = createPluginRegistry()
   for (const input of options.plugins ?? []) {
     const plugin = resolvePlugin(input, deps)
-    registry.register(plugin)
+    const registerResult = registry.register(plugin)
+    if (registerResult.isErr()) throw registerResult.error
     logger.info(
       {
         event: 'plugin_registered',

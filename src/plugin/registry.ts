@@ -1,3 +1,5 @@
+import { err, ok, type Result } from 'neverthrow'
+
 import type { Plugin, SlackAppManifestCommand } from '#plugin/plugin'
 import {
   PluginInvalidNameError,
@@ -7,8 +9,11 @@ import {
 
 const PLUGIN_NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/
 
+export type PluginRegisterError =
+  PluginInvalidNameError | PluginNameConflictError | SlashCommandConflictError
+
 export interface PluginRegistry {
-  register(plugin: Plugin): void
+  register(plugin: Plugin): Result<void, PluginRegisterError>
   lookupCommand(commandName: string): Plugin | undefined
   lookupByActionOrCallbackId(id: string): Plugin | undefined
   buildAppManifestCommands(): SlackAppManifestCommand[]
@@ -22,18 +27,20 @@ export const createPluginRegistry = (): PluginRegistry => {
   return {
     register(plugin) {
       if (!PLUGIN_NAME_PATTERN.test(plugin.name)) {
-        throw new PluginInvalidNameError(plugin.name)
+        return err(new PluginInvalidNameError(plugin.name))
       }
       if (plugins.has(plugin.name)) {
-        throw new PluginNameConflictError(plugin.name)
+        return err(new PluginNameConflictError(plugin.name))
       }
       for (const command of plugin.commands) {
         const existing = commandIndex.get(command.command)
         if (existing !== undefined) {
-          throw new SlashCommandConflictError(
-            command.command,
-            existing.name,
-            plugin.name,
+          return err(
+            new SlashCommandConflictError(
+              command.command,
+              existing.name,
+              plugin.name,
+            ),
           )
         }
       }
@@ -41,6 +48,7 @@ export const createPluginRegistry = (): PluginRegistry => {
       for (const command of plugin.commands) {
         commandIndex.set(command.command, plugin)
       }
+      return ok(undefined)
     },
     lookupCommand(commandName) {
       return commandIndex.get(commandName)

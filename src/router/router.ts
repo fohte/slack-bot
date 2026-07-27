@@ -1,4 +1,4 @@
-import { ResultAsync } from 'neverthrow'
+import type { ResultAsync } from 'neverthrow'
 
 import {
   type AckPayload,
@@ -56,7 +56,7 @@ interface DispatchArgs {
   readonly invoke: (
     plugin: Plugin,
     ctx: InteractionContext,
-  ) => Promise<void> | undefined
+  ) => ResultAsync<void, unknown> | undefined
 }
 
 export const createInteractionRouter = (
@@ -109,10 +109,7 @@ export const createInteractionRouter = (
     // Track handler completion in the background. Slack imposes a 3-second
     // ack deadline, so the HTTP response must come back as soon as ctx.ack()
     // is called or the handler returns, whichever happens first.
-    const completion = ResultAsync.fromPromise(
-      handlerCall,
-      (err: unknown) => err,
-    ).match(
+    const completion = handlerCall.match(
       () => {
         options.logger.info(
           {
@@ -191,10 +188,7 @@ export const createInteractionRouter = (
         }
         const startedAt = now()
         const handlerCall = plugin.onEvent(ctx, envelope.event)
-        const tracked = ResultAsync.fromPromise(
-          handlerCall,
-          (err: unknown) => err,
-        ).match(
+        const tracked = handlerCall.match(
           () => {
             options.logger.info(
               {
