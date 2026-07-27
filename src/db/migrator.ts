@@ -10,6 +10,7 @@ const migrationsFolder = fileURLToPath(
 
 export const runMigrations = async (databaseUrl: string): Promise<void> => {
   const client = postgres(databaseUrl, { max: 1 })
+  // eslint-disable-next-line no-restricted-syntax -- boundary: drizzle-kit migration runner, process entrypoint fail-fast; finally guarantees the postgres client closes even on migration failure
   try {
     await migrate(drizzle(client), { migrationsFolder })
   } finally {

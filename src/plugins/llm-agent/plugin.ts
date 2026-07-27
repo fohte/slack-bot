@@ -193,6 +193,7 @@ const decideForMessage = async (
       )
     }
     const [activeTaskResult, checkpoint] = await Promise.all([
+      // eslint-disable-next-line neverthrow/must-use-result -- handled below via activeTaskResult.isErr()/.isOk(); the plugin's static analysis can't trace a Result destructured out of Promise.all
       a2aTaskTracker.findActiveInputRequired(threadKey),
       checkpointer
         .get({ configurable: { thread_id: threadId } })

@@ -52,8 +52,10 @@ export const lastBody = (
   postToResponseUrl: TestSlack['postToResponseUrl'],
 ): ResponseUrlPayload => {
   const calls = postToResponseUrl.mock.calls
+  // eslint-disable-next-line no-restricted-syntax -- test helper assertion: fails the test immediately with a clear message if the mock was never called, mirroring a vitest expect() failure
   if (calls.length === 0) throw new Error('postToResponseUrl was not called')
   const call = calls[calls.length - 1]
+  // eslint-disable-next-line no-restricted-syntax -- test helper assertion: unreachable given the length check above, kept only to satisfy the array index's possibly-undefined type
   if (call === undefined) throw new Error('unreachable')
   return call[1]
 }
@@ -63,6 +65,7 @@ export const nthBody = (
   n: number,
 ): ResponseUrlPayload => {
   const call = postToResponseUrl.mock.calls[n]
+  // eslint-disable-next-line no-restricted-syntax -- test helper assertion: fails the test immediately with a clear message if the mock was called fewer than n+1 times, mirroring a vitest expect() failure
   if (call === undefined) throw new Error(`no call at index ${String(n)}`)
   return call[1]
 }

@@ -23,6 +23,7 @@ export const loadBlogPluginConfig = (
 const requireEnv = (env: NodeJS.ProcessEnv, key: string): string => {
   const value = env[key]
   if (value === undefined || value === '') {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
     throw new ConfigLoadError(
       `Required environment variable '${key}' is not set`,
     )

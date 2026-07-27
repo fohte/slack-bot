@@ -165,6 +165,7 @@ export const resolveInlineImageFiles = async (
   // parallel would 429 the whole batch on a single rate-limit hit.
   for (const fileId of fileIds) {
     let file: SlackFile | undefined
+    // eslint-disable-next-line no-restricted-syntax -- boundary: SlackWebClient.getFileInfo is a throw-based interface method by design; this caller deliberately swallows the failure and leaves the reference as plain text
     try {
       file = await slackClient.getFileInfo(fileId)
     } catch (error) {
@@ -242,6 +243,7 @@ const respondWithConversationAgent = async (
     images,
     slackEventId: env.eventId,
   })
+  // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for runMentionInBackground's catch below to handle uniformly
   if (outcomeResult.isErr()) throw outcomeResult.error
   const trimmed = outcomeResult.value.text.trim()
   return trimmed.length > 0
@@ -259,8 +261,10 @@ export const runMentionInBackground = async (
   resolved: ResolvedDispatcherDeps,
   logger: Logger,
 ): Promise<void> => {
+  // eslint-disable-next-line no-restricted-syntax -- boundary: fire-and-forget background execution; any failure here (thrown directly or converted from a Result below) is logged and falls back to reportDispatchFailure
   try {
     const imagesResult = await resolveImageBlocks(resolved, env)
+    // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (imagesResult.isErr()) throw imagesResult.error
     const images = imagesResult.value
     const text =
@@ -268,6 +272,7 @@ export const runMentionInBackground = async (
         ? (await resumeActiveTask(env, activeTask, resolved, images)).text
         : await respondWithConversationAgent(env, resolved, images)
     const postResult = await postFinalResponse(env, text, resolved)
+    // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (postResult.isErr()) throw postResult.error
   } catch (error) {
     logger.error(
@@ -307,6 +312,7 @@ export const createTaskDispatcher = (
         },
       },
       async (span) => {
+        // eslint-disable-next-line no-restricted-syntax -- boundary: OTel span instrumentation, finally guarantees span.end() runs even when the block below throws
         try {
           // Set the indicator before the gating lookup so a fast-completing
           // background run can never have its terminal status clear race
@@ -326,6 +332,7 @@ export const createTaskDispatcher = (
             await resolved.a2aTaskTracker.findActiveInputRequired(
               threadKeyFor(env),
             )
+          // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch below to handle uniformly
           if (activeTaskResult.isErr()) throw activeTaskResult.error
           const activeTask = activeTaskResult.value
           const mentionCompletion = runMentionInBackground(
@@ -349,6 +356,7 @@ export const createTaskDispatcher = (
             'llm-agent dispatch failed before background processing started',
           )
           await reportDispatchFailure(env, resolved)
+          // eslint-disable-next-line no-restricted-syntax -- boundary: re-throws after span/log bookkeeping so tracer.startActiveSpan still marks the span as failed
           throw err
         } finally {
           span.end()

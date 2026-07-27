@@ -97,6 +97,7 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
   app.post('/api/slack/commands', async (c) => {
     const rawBody = c.get('rawBody')
     let parsed: Record<string, string>
+    // eslint-disable-next-line no-restricted-syntax -- boundary: Hono request body parsing, invalid input is rejected with a 400 response
     try {
       parsed = parseFormUrlEncoded(rawBody)
     } catch {
@@ -113,6 +114,7 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
   app.post('/api/slack/interactivity', async (c) => {
     const rawBody = c.get('rawBody')
     let parsed: Record<string, string>
+    // eslint-disable-next-line no-restricted-syntax -- boundary: Hono request body parsing, invalid input is rejected with a 400 response
     try {
       parsed = parseFormUrlEncoded(rawBody)
     } catch {
@@ -123,6 +125,7 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
       return c.text('missing payload field', 400)
     }
     let raw: unknown
+    // eslint-disable-next-line no-restricted-syntax -- boundary: JSON.parse's throw-based contract, invalid input is rejected with a 400 response
     try {
       raw = JSON.parse(payloadString)
     } catch {
@@ -138,6 +141,7 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
   app.post('/api/slack/events', (c) => {
     const rawBody = c.get('rawBody')
     let raw: unknown
+    // eslint-disable-next-line no-restricted-syntax -- boundary: JSON.parse's throw-based contract, invalid input is rejected with a 400 response
     try {
       raw = JSON.parse(rawBody)
     } catch {

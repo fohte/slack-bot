@@ -45,6 +45,13 @@ export interface StubSlackClient extends SlackWebClient {
   readonly calls: ReadonlyArray<SlackCall>
 }
 
+// Fails the test immediately with a clear message if a test accidentally
+// invokes one of the StubSlackClient methods this file doesn't stub out.
+const notImplemented = (): never => {
+  // eslint-disable-next-line no-restricted-syntax -- test helper assertion, mirrors a vitest expect() failure
+  throw new Error('not implemented')
+}
+
 export const createStubSlackClient = (): StubSlackClient => {
   const calls: SlackCall[] = []
   return {
@@ -82,28 +89,28 @@ export const createStubSlackClient = (): StubSlackClient => {
       return { ok: true } as never
     },
     async updateMessage() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async deleteMessage() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async openView() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async updateView() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async pushView() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async postToResponseUrl() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async downloadFile() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async getFileInfo() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
   } as StubSlackClient
 }

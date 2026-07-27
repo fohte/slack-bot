@@ -54,6 +54,7 @@ export const createA2aNotificationHandler = (
     }
 
     let rawBody: unknown
+    // eslint-disable-next-line no-restricted-syntax -- boundary: Hono's Context.req.json() throw-based parse contract, invalid input is rejected with a 400 response
     try {
       rawBody = await c.req.json()
     } catch {

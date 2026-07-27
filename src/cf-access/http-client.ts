@@ -24,6 +24,7 @@ export const createCloudflareAccessHttpClientFactory = (
         async request(input, init) {
           const tokens = options.config.serviceTokenFor(pluginName)
           if (tokens === undefined) {
+            // eslint-disable-next-line no-restricted-syntax -- boundary: CloudflareAccessHttpClient.request implements the throw-based fetch(input, init): Promise<Response> contract, not a Result type
             throw new CfAccessAuthError(pluginName)
           }
           const headers = new Headers(init?.headers)
