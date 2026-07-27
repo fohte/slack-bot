@@ -3,6 +3,7 @@ import { setupConversationCheckpointSchema } from '#plugins/llm-agent/conversati
 
 const databaseUrl = process.env['DATABASE_URL']
 if (databaseUrl === undefined || databaseUrl === '') {
+  // eslint-disable-next-line no-restricted-syntax -- boundary: process entrypoint fail-fast, runs once at migration-script startup
   throw new Error('DATABASE_URL environment variable is required')
 }
 
@@ -13,5 +14,6 @@ await runMigrations(databaseUrl)
 const checkpointSchemaResult =
   await setupConversationCheckpointSchema(databaseUrl)
 if (checkpointSchemaResult.isErr()) {
+  // eslint-disable-next-line no-restricted-syntax -- boundary: process entrypoint fail-fast, runs once at migration-script startup
   throw checkpointSchemaResult.error
 }

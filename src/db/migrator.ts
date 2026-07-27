@@ -8,11 +8,9 @@ const migrationsFolder = fileURLToPath(
   new URL('../../drizzle', import.meta.url),
 )
 
-export const runMigrations = async (databaseUrl: string): Promise<void> => {
+export const runMigrations = (databaseUrl: string): Promise<void> => {
   const client = postgres(databaseUrl, { max: 1 })
-  try {
-    await migrate(drizzle(client), { migrationsFolder })
-  } finally {
-    await client.end()
-  }
+  return migrate(drizzle(client), { migrationsFolder }).finally(() =>
+    client.end(),
+  )
 }

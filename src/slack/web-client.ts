@@ -155,6 +155,7 @@ const reportAndThrow = (
   extras: Record<string, unknown>,
 ): never => {
   captureWithFingerprint(err, SLACK_WEB_CLIENT_FINGERPRINT, { extras })
+  // eslint-disable-next-line no-restricted-syntax -- boundary: SlackWebClient methods implement a throw-based Promise<T> contract, not Result; this re-throws after Sentry capture
   throw err
 }
 
@@ -172,6 +173,7 @@ const downloadSlackFile = async (
 ): Promise<SlackFileDownload> => {
   const extras = { method: 'downloadFile', url }
   let parsed: URL
+  // eslint-disable-next-line no-restricted-syntax -- boundary: wraps the URL constructor's throw-based validation contract
   try {
     parsed = new URL(url)
   } catch {
@@ -194,6 +196,7 @@ const downloadSlackFile = async (
     )
   }
   let response: Response
+  // eslint-disable-next-line no-restricted-syntax -- boundary: throw-based HTTP interop, catches fetch's network-error throw to wrap and re-throw via reportAndThrow
   try {
     response = await fetchImpl(url, {
       method: 'GET',
@@ -234,6 +237,7 @@ const downloadSlackFile = async (
     }
   }
   let buf: ArrayBuffer
+  // eslint-disable-next-line no-restricted-syntax -- boundary: Response.arrayBuffer()'s throw-based contract, catches to wrap and re-throw via reportAndThrow
   try {
     buf = await response.arrayBuffer()
   } catch (err) {
@@ -255,6 +259,7 @@ const callMethod = async <T extends WebAPICallResult>(
   method: string,
   call: () => Promise<T>,
 ): Promise<T> => {
+  // eslint-disable-next-line no-restricted-syntax -- boundary: throw-based interop with @slack/web-api's WebClient, catches its throw to wrap and re-throw via reportAndThrow
   try {
     return await call()
   } catch (err) {
@@ -306,6 +311,7 @@ const postToResponseUrl = async (
     return { channelId: undefined, messageTs: undefined, raw: text }
   }
   let json: unknown
+  // eslint-disable-next-line no-restricted-syntax -- boundary: JSON.parse's throw-based contract; a non-JSON response_url body falls back to the raw text
   try {
     json = JSON.parse(text)
   } catch {

@@ -93,6 +93,7 @@ export const bootstrap = (options: BootstrapOptions): void => {
   for (const input of options.plugins ?? []) {
     const plugin = resolvePlugin(input, deps)
     const registerResult = registry.register(plugin)
+    // eslint-disable-next-line no-restricted-syntax -- boundary: process startup fail-fast, bootstrap() runs once before serve() and has no caller to propagate a Result to
     if (registerResult.isErr()) throw registerResult.error
     logger.info(
       {
@@ -193,6 +194,7 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
     createMcpTools({ serverUrls: config.mcpServerUrls, logger }).match(
       (tools) => tools,
       (error) => {
+        // eslint-disable-next-line no-restricted-syntax -- boundary: process startup fail-fast, converts the Err back into a rejection so Promise.all fails fast instead of waiting for listAgents() too
         throw error
       },
     ),
@@ -229,6 +231,7 @@ if (entry.endsWith('main.js') || entry.endsWith('main.ts')) {
           remoteAgentHandles,
           { a2aTaskTracker, logger },
         )
+        // eslint-disable-next-line no-restricted-syntax -- boundary: process startup fail-fast, the plugin factory runs once during bootstrap() with no caller to propagate a Result to
         if (delegationToolsResult.isErr()) throw delegationToolsResult.error
         const tools = [...delegationToolsResult.value, ...mcpTools]
         const conversationAgent = createConversationAgent({

@@ -236,6 +236,7 @@ export const createGenAiTracingMiddleware = (
         [ATTR_GEN_AI_REQUEST_MODEL]: requestModel,
       })
       if (captureMessageContent) {
+        // eslint-disable-next-line no-restricted-syntax -- boundary: input-message capture must not fail the model call itself; a serialization error is recorded on the span and swallowed
         try {
           const inputMessages = request.messages.map(messageToGenAiMessage)
           span.setAttribute(
@@ -248,8 +249,10 @@ export const createGenAiTracingMiddleware = (
       }
 
       const spanContext = trace.setSpan(context.active(), span)
+      // eslint-disable-next-line no-restricted-syntax -- boundary: wraps LangChain's throw-based wrapModelCall handler contract; finally guarantees span.end() runs even when the model call throws
       try {
         const response = await context.with(spanContext, () => handler(request))
+        // eslint-disable-next-line no-restricted-syntax -- boundary: response-attribute capture must not fail the model call itself; a serialization error is recorded on the span and swallowed
         try {
           const responseModel = responseMetadataString(response, 'model_name')
           if (responseModel !== undefined) {
@@ -285,6 +288,7 @@ export const createGenAiTracingMiddleware = (
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : String(error),
         })
+        // eslint-disable-next-line no-restricted-syntax -- boundary: LangChain's wrapModelCall middleware contract requires either returning the handler's result or re-throwing its error
         throw error
       } finally {
         span.end()

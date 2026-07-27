@@ -69,6 +69,7 @@ export const createBlogServiceClient = (
     const init: RequestInit = { method, headers }
     if (body !== undefined) init.body = JSON.stringify(body)
     let response: Response
+    // eslint-disable-next-line no-restricted-syntax -- boundary: throw-based HTTP interop, catches fetch's network-error throw to wrap and re-throw via reportAndThrow
     try {
       response = await fetchImpl(`${baseUrl}${path}`, init)
     } catch (err) {
@@ -97,6 +98,7 @@ export const createBlogServiceClient = (
 
     const text = await safeReadText(response)
     let json: unknown
+    // eslint-disable-next-line no-restricted-syntax -- boundary: JSON.parse's throw-based contract, catches to wrap and re-throw via reportAndThrow
     try {
       json = JSON.parse(text)
     } catch (err) {
@@ -165,6 +167,7 @@ const reportAndThrow = (
   extras: Record<string, unknown>,
 ): never => {
   captureWithFingerprint(err, BLOG_SERVICE_CLIENT_FINGERPRINT, { extras })
+  // eslint-disable-next-line no-restricted-syntax -- boundary: BlogServiceClient methods implement a throw-based Promise<T> contract, not Result; this re-throws after Sentry capture
   throw err
 }
 
@@ -182,6 +185,7 @@ const parseErrorBody = (text: string): ParsedError => {
       issues: undefined,
     }
   }
+  // eslint-disable-next-line no-restricted-syntax -- boundary: JSON.parse's throw-based contract; a malformed error body falls through to the generic UnknownError shape below
   try {
     const json: unknown = JSON.parse(text)
     const parsed = ErrorBody.safeParse(json)
@@ -203,6 +207,7 @@ const parseErrorBody = (text: string): ParsedError => {
 }
 
 const safeReadText = async (response: Response): Promise<string> => {
+  // eslint-disable-next-line no-restricted-syntax -- boundary: Response.text()'s throw-based contract; a failed read falls back to an empty body
   try {
     return await response.text()
   } catch {

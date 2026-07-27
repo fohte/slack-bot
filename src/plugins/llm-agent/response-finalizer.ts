@@ -422,6 +422,7 @@ export const createResponseFinalizer = (
       let rowResult = await options.a2aTaskTracker.findByTaskId(taskId)
       if (rowResult.isOk() && rowResult.value === undefined) {
         await sleep(retryDelayMs)
+        // eslint-disable-next-line neverthrow/must-use-result -- handled below via rowResult.isErr(); the plugin's static analysis doesn't trace a Result reassigned to an existing `let` binding
         rowResult = await options.a2aTaskTracker.findByTaskId(taskId)
       }
       if (rowResult.isErr()) {
