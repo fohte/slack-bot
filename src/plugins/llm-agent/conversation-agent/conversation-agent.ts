@@ -35,8 +35,8 @@ export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
 
 const GEN_AI_PROVIDER_NAME = 'opencode'
 
-// Groups every LLM invoke failure under one Sentry issue per thread rather
-// than per call site.
+// Groups every LLM invoke failure under one Sentry issue per boundary
+// rather than per call site.
 const CONVERSATION_AGENT_INVOKE_FINGERPRINT =
   'llm-agent.conversation-agent.invoke-failed'
 
