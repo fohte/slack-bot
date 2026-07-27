@@ -1,3 +1,5 @@
+import { ResultAsync } from 'neverthrow'
+
 import type { InteractionContext } from '#interaction/context'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type { SlashCommandBody } from '#types/slack-payloads'
@@ -8,27 +10,28 @@ export interface HandleCancelCommandInput {
   readonly client: BlogServiceClient
 }
 
-export const handleCancelCommand = async (
+export const handleCancelCommand = (
   input: HandleCancelCommandInput,
-): Promise<void> => {
+): ResultAsync<void, unknown> => {
   const { ctx, body, client } = input
   ctx.ack()
   const arg = (body.text ?? '').trim()
   const prNumber = parsePrNumber(arg)
   if (prNumber === undefined) {
-    const followUpResult = await ctx.followUp({
+    return ctx.followUp({
       response_type: 'ephemeral',
       text: ':warning: 使用法: `/blog-cancel <pr_number>`',
     })
-    if (followUpResult.isErr()) throw followUpResult.error
-    return
   }
-  await client.cancelPr(prNumber)
-  const followUpResult = await ctx.followUp({
-    response_type: 'ephemeral',
-    text: `:white_check_mark: PR #${String(prNumber)} を close しました。`,
-  })
-  if (followUpResult.isErr()) throw followUpResult.error
+  return ResultAsync.fromPromise(
+    client.cancelPr(prNumber),
+    (caughtErr) => caughtErr,
+  ).andThen(() =>
+    ctx.followUp({
+      response_type: 'ephemeral',
+      text: `:white_check_mark: PR #${String(prNumber)} を close しました。`,
+    }),
+  )
 }
 
 const parsePrNumber = (raw: string): number | undefined => {

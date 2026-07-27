@@ -1,4 +1,5 @@
 import type { ApplyResult } from '@fohte/blog-publisher-contract'
+import { err } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createInteractionContext } from '#interaction/context'
@@ -108,8 +109,9 @@ describe('ApplyButtonHandler', () => {
 
   it('patches the original message with an error when apply throws', async () => {
     const slack = makeSlack()
+    const applyError = new Error('boom')
     const apply = vi.fn(async () => {
-      throw new Error('boom')
+      throw applyError
     })
     const client = { apply } as unknown as BlogServiceClient
     const action: BlockActionPayloadAction = {
@@ -126,9 +128,9 @@ describe('ApplyButtonHandler', () => {
       slackClient: slack.client,
       responseUrl: 'https://hooks.example/x',
     })
-    await expect(
-      handleApplyButton({ ctx: result.ctx, payload, action, client }),
-    ).rejects.toThrow('boom')
+    expect(
+      await handleApplyButton({ ctx: result.ctx, payload, action, client }),
+    ).toEqual(err(applyError))
     const last = JSON.stringify(lastBody(slack.postToResponseUrl))
     expect(last).not.toContain('Apply 中')
     expect(last).toContain('予期しないエラー')

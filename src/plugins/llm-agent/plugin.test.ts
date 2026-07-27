@@ -1,5 +1,5 @@
 import { emptyCheckpoint, MemorySaver } from '@langchain/langgraph'
-import { errAsync, okAsync } from 'neverthrow'
+import { err, errAsync, okAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { EventContext } from '#interaction/event-context'
@@ -196,7 +196,7 @@ describe('createLlmAgentPlugin', () => {
   })
 
   it('dispatches message and app_mention events through the router', async () => {
-    const onEvent = vi.fn<OnEventFn>(async () => {})
+    const onEvent = vi.fn<OnEventFn>(() => okAsync(undefined))
     const plugin = createLlmAgentPlugin(buildPluginOptions())
     const wrappedPlugin = { ...plugin, onEvent }
     const registry = createPluginRegistry()
@@ -253,7 +253,7 @@ describe('createLlmAgentPlugin', () => {
   })
 
   it('does not dispatch events whose type is not subscribed', async () => {
-    const onEvent = vi.fn<OnEventFn>(async () => {})
+    const onEvent = vi.fn<OnEventFn>(() => okAsync(undefined))
     const plugin = createLlmAgentPlugin(buildPluginOptions())
     const wrappedPlugin = { ...plugin, onEvent }
     const registry = createPluginRegistry()
@@ -384,9 +384,9 @@ describe('createLlmAgentPlugin', () => {
     )
     const envelope = buildMessageEnvelope('Ev-retryable')
 
-    await expect(
-      plugin.onEvent?.({ envelope }, envelope.event),
-    ).rejects.toThrow(error)
+    expect(await plugin.onEvent?.({ envelope }, envelope.event)).toEqual(
+      err(error),
+    )
     expect(eventLogStore.records).toEqual([])
 
     await plugin.onEvent?.({ envelope }, envelope.event)

@@ -54,6 +54,7 @@ export const createA2aNotificationHandler = (
     }
 
     let rawBody: unknown
+    // eslint-disable-next-line no-restricted-syntax -- boundary: Hono's Context.req.json() throw-based parse contract, invalid input is rejected with a 400 response
     try {
       rawBody = await c.req.json()
     } catch {
@@ -66,23 +67,11 @@ export const createA2aNotificationHandler = (
       return c.text('invalid task payload', 400)
     }
 
-    try {
-      await options.responseFinalizer.finalize(parsed.data.id)
-    } catch (error) {
-      // The sender (DefaultPushNotificationSender) never retries regardless
-      // of the response status, so there is nothing to gain from surfacing
-      // this as a 5xx; log it and let the next push or the reconciler pick
-      // the task back up.
-      recordA2aPushNotification('error')
-      logger.error(
-        {
-          event: 'llm_agent_a2a_notification_finalize_failed',
-          task_id: parsed.data.id,
-          err: error,
-        },
-        'llm-agent failed to finalize a task after receiving a push notification',
-      )
-    }
+    // finalize() never rejects: every failure is logged and swallowed
+    // internally, so there is nothing left for this endpoint to catch or
+    // report. The sender (DefaultPushNotificationSender) never retries
+    // regardless of the response status either way.
+    await options.responseFinalizer.finalize(parsed.data.id)
 
     return c.body(null, 204)
   }

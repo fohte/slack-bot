@@ -140,20 +140,23 @@ export const createResponseFinalizer = (
     text: string,
   ): Promise<string> => {
     if (options.personaParaphraser === undefined) return text
-    try {
-      return await options.personaParaphraser.paraphrase(text)
-    } catch (error) {
+    const result = await ResultAsync.fromPromise(
+      options.personaParaphraser.paraphrase(text),
+      (caughtErr) => caughtErr,
+    )
+    if (result.isErr()) {
       logger.warn(
         {
           event: 'llm_agent_a2a_finalize_paraphrase_failed',
           task_id: row.taskId,
           agent_name: row.agentName,
-          err: error,
+          err: result.error,
         },
         'llm-agent failed to paraphrase a finalized task text; posting the original text',
       )
       return text
     }
+    return result.value
   }
 
   const postToThread = async (
@@ -391,16 +394,17 @@ export const createResponseFinalizer = (
       return
     }
 
-    let rawTask: unknown
-    try {
-      rawTask = await handle.client.getTask({ id: row.taskId })
-    } catch (error) {
+    const rawTaskResult = await ResultAsync.fromPromise(
+      handle.client.getTask({ id: row.taskId }),
+      (caughtErr) => caughtErr,
+    )
+    if (rawTaskResult.isErr()) {
       logger.warn(
         {
           event: 'llm_agent_a2a_finalize_get_task_failed',
           task_id: row.taskId,
           agent_name: row.agentName,
-          err: error,
+          err: rawTaskResult.error,
         },
         'llm-agent failed to fetch tasks/get while finalizing a task',
       )
@@ -408,7 +412,7 @@ export const createResponseFinalizer = (
       return
     }
 
-    recordA2aPushNotification(await dispatchTask(row, rawTask))
+    recordA2aPushNotification(await dispatchTask(row, rawTaskResult.value))
   }
 
   return {
@@ -418,6 +422,7 @@ export const createResponseFinalizer = (
       let rowResult = await options.a2aTaskTracker.findByTaskId(taskId)
       if (rowResult.isOk() && rowResult.value === undefined) {
         await sleep(retryDelayMs)
+        // eslint-disable-next-line neverthrow/must-use-result -- handled below via rowResult.isErr(); the plugin's static analysis doesn't trace a Result reassigned to an existing `let` binding
         rowResult = await options.a2aTaskTracker.findByTaskId(taskId)
       }
       if (rowResult.isErr()) {

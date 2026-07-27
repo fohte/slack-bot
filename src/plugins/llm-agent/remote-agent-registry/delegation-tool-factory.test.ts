@@ -1,6 +1,7 @@
 import type { AgentCard, Message, MessageSendParams, Task } from '@a2a-js/sdk'
 import type { Client } from '@a2a-js/sdk/client'
 import { ToolMessage } from '@langchain/core/messages'
+import { err } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import { createFakeA2aTaskTracker } from '#plugins/llm-agent/_test-utils'
@@ -13,6 +14,7 @@ import {
   delegationToolName,
 } from '#plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
 import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
+import { DuplicateDelegationToolNameError } from '#types/errors'
 
 const THREAD_KEY: ThreadKey = {
   slackTeamId: 'T1',
@@ -304,7 +306,7 @@ describe('createDelegationTools', () => {
 
     const tools = createDelegationTools([meshi, tRader], {
       a2aTaskTracker: createFakeTracker(),
-    })
+    })._unsafeUnwrap()
 
     expect(tools.map((t) => t.name)).toEqual([
       'delegate_to_meshi',
@@ -322,10 +324,12 @@ describe('createDelegationTools', () => {
       cardFor({ name: 'Meshi' }),
     )
 
-    expect(() =>
-      createDelegationTools([first, second], {
-        a2aTaskTracker: createFakeTracker(),
-      }),
-    ).toThrow(/duplicate delegation tool name/)
+    const result = createDelegationTools([first, second], {
+      a2aTaskTracker: createFakeTracker(),
+    })
+
+    expect(result).toEqual(
+      err(new DuplicateDelegationToolNameError('delegate_to_meshi', 'Meshi')),
+    )
   })
 })

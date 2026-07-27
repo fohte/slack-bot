@@ -1,3 +1,4 @@
+import { okAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { PluginDeps } from '#plugin/deps'
@@ -26,10 +27,11 @@ describe('resolvePlugin', () => {
     const factory = vi.fn((deps: PluginDeps): Plugin => ({
       name: 'factory-built',
       commands: [],
-      async onCommand(ctx) {
+      onCommand(ctx) {
         // touch deps to assert they are accessible inside the factory closure
         ctx.ack()
         deps.scheduler.listActive()
+        return okAsync(undefined)
       },
     }))
     const deps = stubDeps()

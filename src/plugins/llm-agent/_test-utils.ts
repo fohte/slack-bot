@@ -1,6 +1,6 @@
 import type { AgentCard, Message, MessageSendParams, Task } from '@a2a-js/sdk'
 import type { Client } from '@a2a-js/sdk/client'
-import { okAsync } from 'neverthrow'
+import { okAsync, ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
 import type {
@@ -27,6 +27,10 @@ import type {
   RemoteAgentRegistry,
 } from '#plugins/llm-agent/remote-agent-registry/index'
 import type { SlackWebClient } from '#slack/web-client'
+import type {
+  ConversationAgentInvokeError,
+  ConversationThreadIdParseError,
+} from '#types/errors'
 
 export interface SlackCall {
   readonly kind: 'status' | 'post'
@@ -39,6 +43,13 @@ export interface SlackCall {
 
 export interface StubSlackClient extends SlackWebClient {
   readonly calls: ReadonlyArray<SlackCall>
+}
+
+// Fails the test immediately with a clear message if a test accidentally
+// invokes one of the StubSlackClient methods this file doesn't stub out.
+const notImplemented = (): never => {
+  // eslint-disable-next-line no-restricted-syntax -- test helper assertion, mirrors a vitest expect() failure
+  throw new Error('not implemented')
 }
 
 export const createStubSlackClient = (): StubSlackClient => {
@@ -78,28 +89,28 @@ export const createStubSlackClient = (): StubSlackClient => {
       return { ok: true } as never
     },
     async updateMessage() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async deleteMessage() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async openView() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async updateView() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async pushView() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async postToResponseUrl() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async downloadFile() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
     async getFileInfo() {
-      throw new Error('not implemented')
+      return notImplemented()
     },
   } as StubSlackClient
 }
@@ -215,9 +226,14 @@ export const createFakeConversationAgent = (
   const calls: ConversationAgentInput[] = []
   return {
     calls,
-    async respond(input) {
+    respond(input) {
       calls.push(input)
-      return reply(input)
+      return ResultAsync.fromPromise(
+        Promise.resolve(reply(input)),
+        (error) =>
+          error as
+            ConversationThreadIdParseError | ConversationAgentInvokeError,
+      )
     },
   }
 }

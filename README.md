@@ -88,6 +88,7 @@ A plugin is an object that declares a `name`, the `commands` it owns, and one or
 
 ```typescript
 import { bootstrap, type Plugin } from 'slack-bot'
+import { ResultAsync } from 'neverthrow'
 
 const pingPlugin: Plugin = {
   name: 'ping',
@@ -97,21 +98,20 @@ const pingPlugin: Plugin = {
       description: 'Reply with pong.',
     },
   ],
-  async onCommand(ctx, body) {
+  onCommand(ctx, body) {
     // Acknowledge synchronously within the 3-second Slack deadline.
     ctx.ack({ text: 'thinking...' })
 
-    // Long-running work happens after ack().
-    const reply = await computeReply(body.text)
-
-    // Edit the original ack message. patch()/followUp() return a
-    // neverthrow Result instead of throwing.
-    const patchResult = await ctx.originalUpdater().patch({ text: reply })
-    if (patchResult.isErr()) throw patchResult.error
-
-    // Or send a new follow-up message via response_url.
-    const followUpResult = await ctx.followUp({ text: 'done' })
-    if (followUpResult.isErr()) throw followUpResult.error
+    // Long-running work happens after ack(). patch()/followUp() return a
+    // neverthrow ResultAsync; propagate it as onCommand's own return value
+    // instead of unwrapping it with throw.
+    return ResultAsync.fromSafePromise(computeReply(body.text)).andThen(
+      (reply) =>
+        ctx
+          .originalUpdater()
+          .patch({ text: reply })
+          .andThen(() => ctx.followUp({ text: 'done' })),
+    )
   },
 }
 
@@ -122,33 +122,41 @@ When a plugin needs core services (the in-memory scheduler, the Cloudflare Acces
 
 ```typescript
 import { bootstrap, type PluginFactory } from 'slack-bot'
+import { errAsync, okAsync } from 'neverthrow'
 
 const crawlPlugin: PluginFactory = ({ scheduler, cfAccess, logger }) => {
   const http = cfAccess.forPlugin('crawl')
   return {
     name: 'crawl',
     commands: [{ command: '/crawl-run', description: 'Start a crawl.' }],
-    async onCommand(ctx, body) {
+    onCommand(ctx, body) {
       ctx.ack({ text: 'starting...' })
-      scheduler.schedule({
-        name: `crawl:${body.text}`,
-        intervalMs: 5000,
-        maxDurationMs: 30 * 60 * 1000,
-        async tick() {
-          const res = await http.request(
-            `https://crawlers.fohte.net/api/runs/${body.text}`,
-          )
-          const status = (await res.json()) as { done: boolean }
-          const patchResult = await ctx
-            .originalUpdater()
-            .patch({ text: `status: ${String(status.done)}` })
-          if (patchResult.isErr()) throw patchResult.error
-          return { done: status.done }
-        },
-        async onError(err) {
-          logger.error({ event: 'crawl_tick_error', err: String(err) })
-        },
-      })
+      // schedule() returns a Result instead of throwing; propagate it as
+      // onCommand's own return value instead of unwrapping it with throw.
+      return scheduler
+        .schedule({
+          name: `crawl:${body.text}`,
+          intervalMs: 5000,
+          maxDurationMs: 30 * 60 * 1000,
+          async tick() {
+            const res = await http.request(
+              `https://crawlers.fohte.net/api/runs/${body.text}`,
+            )
+            const status = (await res.json()) as { done: boolean }
+            const patchResult = await ctx
+              .originalUpdater()
+              .patch({ text: `status: ${String(status.done)}` })
+            if (patchResult.isErr()) throw patchResult.error
+            return { done: status.done }
+          },
+          async onError(err) {
+            logger.error({ event: 'crawl_tick_error', err: String(err) })
+          },
+        })
+        .match(
+          () => okAsync(undefined),
+          (error) => errAsync(error),
+        )
     },
   }
 }

@@ -1,3 +1,4 @@
+import { err } from 'neverthrow'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createScheduler } from '#scheduler/scheduler'
@@ -28,12 +29,14 @@ describe('InMemoryScheduler', () => {
       .mockResolvedValueOnce({ done: false })
       .mockResolvedValue({ done: true })
     const scheduler = createScheduler({ maxConcurrentTasks: 8 })
-    const handle = scheduler.schedule({
-      name: 'task-1',
-      intervalMs: 1000,
-      maxDurationMs: 60_000,
-      tick,
-    })
+    const handle = scheduler
+      .schedule({
+        name: 'task-1',
+        intervalMs: 1000,
+        maxDurationMs: 60_000,
+        tick,
+      })
+      ._unsafeUnwrap()
 
     await vi.advanceTimersByTimeAsync(1000)
     expect(tick).toHaveBeenCalledTimes(1)
@@ -73,19 +76,24 @@ describe('InMemoryScheduler', () => {
     expect(scheduler.listActive()).toHaveLength(0)
   })
 
-  it('rejects intervals below 1000ms', () => {
+  it('returns an error for intervals below 1000ms', () => {
     const scheduler = createScheduler({ maxConcurrentTasks: 8 })
-    expect(() =>
-      scheduler.schedule({
-        name: 'bad',
-        intervalMs: 500,
-        maxDurationMs: 5000,
-        tick: vi.fn(),
-      }),
-    ).toThrow(SchedulerInvalidArgumentError)
+    const result = scheduler.schedule({
+      name: 'bad',
+      intervalMs: 500,
+      maxDurationMs: 5000,
+      tick: vi.fn(),
+    })
+    expect(result).toEqual(
+      err(
+        new SchedulerInvalidArgumentError(
+          'intervalMs must be >= 1000 (got 500)',
+        ),
+      ),
+    )
   })
 
-  it('throws when concurrent task limit is exceeded', () => {
+  it('returns an error when concurrent task limit is exceeded', () => {
     const scheduler = createScheduler({ maxConcurrentTasks: 1 })
     scheduler.schedule({
       name: 'a',
@@ -93,17 +101,16 @@ describe('InMemoryScheduler', () => {
       maxDurationMs: 60_000,
       tick: vi.fn().mockResolvedValue({ done: false }),
     })
-    expect(() =>
-      scheduler.schedule({
-        name: 'b',
-        intervalMs: 1000,
-        maxDurationMs: 60_000,
-        tick: vi.fn().mockResolvedValue({ done: false }),
-      }),
-    ).toThrow(SchedulerLimitError)
+    const result = scheduler.schedule({
+      name: 'b',
+      intervalMs: 1000,
+      maxDurationMs: 60_000,
+      tick: vi.fn().mockResolvedValue({ done: false }),
+    })
+    expect(result).toEqual(err(new SchedulerLimitError(1)))
   })
 
-  it('rejects duplicate task names', () => {
+  it('returns an error for duplicate task names', () => {
     const scheduler = createScheduler({ maxConcurrentTasks: 8 })
     scheduler.schedule({
       name: 'dup',
@@ -111,25 +118,26 @@ describe('InMemoryScheduler', () => {
       maxDurationMs: 60_000,
       tick: vi.fn().mockResolvedValue({ done: false }),
     })
-    expect(() =>
-      scheduler.schedule({
-        name: 'dup',
-        intervalMs: 1000,
-        maxDurationMs: 60_000,
-        tick: vi.fn().mockResolvedValue({ done: false }),
-      }),
-    ).toThrow(SchedulerDuplicateNameError)
+    const result = scheduler.schedule({
+      name: 'dup',
+      intervalMs: 1000,
+      maxDurationMs: 60_000,
+      tick: vi.fn().mockResolvedValue({ done: false }),
+    })
+    expect(result).toEqual(err(new SchedulerDuplicateNameError('dup')))
   })
 
   it('cancel stops the task', async () => {
     const tick = vi.fn().mockResolvedValue({ done: false })
     const scheduler = createScheduler({ maxConcurrentTasks: 8 })
-    const handle = scheduler.schedule({
-      name: 'cancellable',
-      intervalMs: 1000,
-      maxDurationMs: 60_000,
-      tick,
-    })
+    const handle = scheduler
+      .schedule({
+        name: 'cancellable',
+        intervalMs: 1000,
+        maxDurationMs: 60_000,
+        tick,
+      })
+      ._unsafeUnwrap()
     handle.cancel()
     expect(handle.status).toBe('cancelled')
     await vi.advanceTimersByTimeAsync(5000)

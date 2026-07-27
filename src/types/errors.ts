@@ -166,3 +166,19 @@ export class PersonaParaphraseError extends Error {
 export class SlackImageThumbnailUnavailableError extends Error {
   override readonly name = 'SlackImageThumbnailUnavailableError'
 }
+
+export class ConversationAgentInvokeError extends Error {
+  override readonly name = 'ConversationAgentInvokeError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
+export class DuplicateDelegationToolNameError extends Error {
+  override readonly name = 'DuplicateDelegationToolNameError'
+  constructor(toolName: string, agentName: string) {
+    super(
+      `duplicate delegation tool name '${toolName}' for remote agent '${agentName}'; Agent Card names must be unique after slugification`,
+    )
+  }
+}

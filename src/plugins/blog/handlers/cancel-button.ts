@@ -1,3 +1,5 @@
+import type { ResultAsync } from 'neverthrow'
+
 import type { InteractionContext } from '#interaction/context'
 import { renderCancelledBlocks } from '#plugins/blog/plan-presenter'
 import type {
@@ -11,15 +13,14 @@ export interface HandleCancelButtonInput {
   readonly action: BlockActionPayloadAction
 }
 
-export const handleCancelButton = async (
+export const handleCancelButton = (
   input: HandleCancelButtonInput,
-): Promise<void> => {
+): ResultAsync<void, unknown> => {
   const { ctx } = input
   ctx.ack()
   const rendered = renderCancelledBlocks()
-  const patchResult = await ctx.originalUpdater().patch({
+  return ctx.originalUpdater().patch({
     text: rendered.text,
     blocks: rendered.blocks,
   })
-  if (patchResult.isErr()) throw patchResult.error
 }

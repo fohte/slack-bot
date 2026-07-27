@@ -1,4 +1,4 @@
-import { ResultAsync } from 'neverthrow'
+import { errAsync, okAsync, ResultAsync } from 'neverthrow'
 
 import {
   CLEAR_STATUS,
@@ -22,64 +22,66 @@ export interface PostFinalResponseResult {
 // delegation acknowledgement, or a resume outcome — all funnel through
 // here), gated by event_log so a redelivered event can never double-post.
 // Clears the assistant-status indicator once the post succeeds.
-export const postFinalResponse = async (
+export const postFinalResponse = (
   env: SlackEnvelope,
   text: string,
   resolved: ResolvedDispatcherDeps,
-): Promise<PostFinalResponseResult> => {
-  const markResult = await resolved.eventLogStore.markResponded(env.eventId)
-  if (markResult.isErr()) throw markResult.error
-  const { updated } = markResult.value
-  if (updated === 0) {
-    resolved.logger.info(
-      {
-        event: 'llm_agent_task_responded_already',
-        slack_event_id: env.eventId,
-      },
-      'llm-agent skipping Slack post; event_log row already marked responded',
-    )
-    return { posted: false }
-  }
-
-  const postResult = await ResultAsync.fromPromise(
-    postThreadMessage(
-      resolved.slackClient,
-      { channel: env.channelId, threadTs: env.threadRootTs },
-      text,
-    ),
-    (caughtErr) => caughtErr,
-  )
-  if (postResult.isErr()) {
-    const unmarkResult = await resolved.eventLogStore.unmarkResponded(
-      env.eventId,
-    )
-    if (unmarkResult.isErr()) {
-      resolved.logger.error(
+): ResultAsync<PostFinalResponseResult, unknown> =>
+  resolved.eventLogStore.markResponded(env.eventId).andThen(({ updated }) => {
+    if (updated === 0) {
+      resolved.logger.info(
         {
-          event: 'llm_agent_response_unmark_failed',
+          event: 'llm_agent_task_responded_already',
           slack_event_id: env.eventId,
-          err: unmarkResult.error,
         },
-        'failed to roll back event_log row after Slack post failure',
+        'llm-agent skipping Slack post; event_log row already marked responded',
       )
+      return okAsync<PostFinalResponseResult, unknown>({ posted: false })
     }
-    throw postResult.error
-  }
 
-  await trySetAssistantStatus({
-    slackClient: resolved.slackClient,
-    target: { channelId: env.channelId, threadTs: env.threadRootTs },
-    status: CLEAR_STATUS,
-    logger: resolved.logger,
+    return ResultAsync.fromPromise(
+      postThreadMessage(
+        resolved.slackClient,
+        { channel: env.channelId, threadTs: env.threadRootTs },
+        text,
+      ),
+      (caughtErr) => caughtErr,
+    )
+      .andThen(() =>
+        ResultAsync.fromSafePromise(
+          trySetAssistantStatus({
+            slackClient: resolved.slackClient,
+            target: { channelId: env.channelId, threadTs: env.threadRootTs },
+            status: CLEAR_STATUS,
+            logger: resolved.logger,
+          }),
+        ),
+      )
+      .map((): PostFinalResponseResult => {
+        resolved.logger.info(
+          {
+            event: 'llm_agent_task_responded',
+            slack_event_id: env.eventId,
+          },
+          'llm-agent posted response to Slack',
+        )
+        return { posted: true }
+      })
+      .orElse((postErr) =>
+        ResultAsync.fromSafePromise(
+          resolved.eventLogStore.unmarkResponded(env.eventId).match(
+            () => undefined,
+            (unmarkErr) => {
+              resolved.logger.error(
+                {
+                  event: 'llm_agent_response_unmark_failed',
+                  slack_event_id: env.eventId,
+                  err: unmarkErr,
+                },
+                'failed to roll back event_log row after Slack post failure',
+              )
+            },
+          ),
+        ).andThen(() => errAsync(postErr)),
+      )
   })
-
-  resolved.logger.info(
-    {
-      event: 'llm_agent_task_responded',
-      slack_event_id: env.eventId,
-    },
-    'llm-agent posted response to Slack',
-  )
-
-  return { posted: true }
-}

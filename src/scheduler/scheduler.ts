@@ -1,4 +1,4 @@
-import { ResultAsync } from 'neverthrow'
+import { err, ok, type Result, ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
@@ -27,8 +27,13 @@ export interface TaskHandle {
   cancel(): void
 }
 
+export type SchedulerScheduleError =
+  | SchedulerInvalidArgumentError
+  | SchedulerDuplicateNameError
+  | SchedulerLimitError
+
 export interface InMemoryScheduler {
-  schedule(def: ScheduledTaskDef): TaskHandle
+  schedule(def: ScheduledTaskDef): Result<TaskHandle, SchedulerScheduleError>
   listActive(): readonly TaskHandle[]
 }
 
@@ -145,24 +150,26 @@ export const createScheduler = (
   }
 
   return {
-    // Argument validation throws synchronously at registration time;
-    // callers are expected to fix the call site, not handle a Result.
     schedule(def) {
       if (def.intervalMs < MIN_INTERVAL_MS) {
-        throw new SchedulerInvalidArgumentError(
-          `intervalMs must be >= ${String(MIN_INTERVAL_MS)} (got ${String(def.intervalMs)})`,
+        return err(
+          new SchedulerInvalidArgumentError(
+            `intervalMs must be >= ${String(MIN_INTERVAL_MS)} (got ${String(def.intervalMs)})`,
+          ),
         )
       }
       if (def.maxDurationMs <= 0) {
-        throw new SchedulerInvalidArgumentError(
-          `maxDurationMs must be > 0 (got ${String(def.maxDurationMs)})`,
+        return err(
+          new SchedulerInvalidArgumentError(
+            `maxDurationMs must be > 0 (got ${String(def.maxDurationMs)})`,
+          ),
         )
       }
       if (tasks.has(def.name)) {
-        throw new SchedulerDuplicateNameError(def.name)
+        return err(new SchedulerDuplicateNameError(def.name))
       }
       if (tasks.size >= options.maxConcurrentTasks) {
-        throw new SchedulerLimitError(options.maxConcurrentTasks)
+        return err(new SchedulerLimitError(options.maxConcurrentTasks))
       }
       const handle = createMutableHandle(def.name, () => {
         const state = tasks.get(def.name)
@@ -177,7 +184,7 @@ export const createScheduler = (
       }
       tasks.set(def.name, state)
       schedule(state)
-      return handle
+      return ok(handle)
     },
     listActive() {
       return Array.from(tasks.values()).map((t) => t.handle)

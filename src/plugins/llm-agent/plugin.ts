@@ -1,4 +1,5 @@
 import type { BaseCheckpointSaver } from '@langchain/langgraph'
+import { err, ok, type Result, ResultAsync } from 'neverthrow'
 
 import type { EventContext } from '#interaction/event-context'
 import type { Logger } from '#logger/logger'
@@ -192,6 +193,7 @@ const decideForMessage = async (
       )
     }
     const [activeTaskResult, checkpoint] = await Promise.all([
+      // eslint-disable-next-line neverthrow/must-use-result -- handled below via activeTaskResult.isErr()/.isOk(); the plugin's static analysis can't trace a Result destructured out of Promise.all
       a2aTaskTracker.findActiveInputRequired(threadKey),
       checkpointer
         .get({ configurable: { thread_id: threadId } })
@@ -222,7 +224,7 @@ const decideForAppMention = async (
   eventLogStore: EventLogStore,
   eventId: string,
   teamId: string | undefined,
-): Promise<GateDecision> => {
+): Promise<Result<GateDecision, unknown>> => {
   if (
     teamId !== undefined &&
     fields.channel !== undefined &&
@@ -238,20 +240,153 @@ const decideForAppMention = async (
       messageTs: fields.ts,
       excludeSlackEventId: eventId,
     })
-    if (hasSiblingResult.isErr()) throw hasSiblingResult.error
+    if (hasSiblingResult.isErr()) return err(hasSiblingResult.error)
     if (hasSiblingResult.value) {
-      return { accept: false, reason: 'duplicate_of_message' }
+      return ok({ accept: false, reason: 'duplicate_of_message' })
     }
   }
-  return { accept: true, reason: 'app_mention' }
+  return ok({ accept: true, reason: 'app_mention' })
+}
+
+const runOnEvent = async (
+  ctx: EventContext,
+  event: SlackEvent,
+  options: LlmAgentPluginOptions,
+  logger: Logger,
+  mentionPattern: RegExp,
+): Promise<Result<void, unknown>> => {
+  const { eventLogStore, checkpointer, a2aTaskTracker, onAccepted } = options
+  if (isBotMessage(event)) return ok(undefined)
+
+  const eventId = ctx.envelope.event_id
+  if (eventId === undefined || eventId === '') {
+    logger.warn(
+      {
+        event: 'llm_agent_event_missing_id',
+        event_type: event.type,
+        team_id: ctx.envelope.team_id,
+      },
+      'llm-agent received event without event_id; skipping',
+    )
+    return ok(undefined)
+  }
+
+  const fields = extractFields(event)
+
+  let decision: GateDecision
+  if (event.type === 'app_mention') {
+    const decisionResult = await decideForAppMention(
+      fields,
+      eventLogStore,
+      eventId,
+      ctx.envelope.team_id,
+    )
+    if (decisionResult.isErr()) return err(decisionResult.error)
+    decision = decisionResult.value
+  } else if (event.type === 'message') {
+    decision = await decideForMessage(
+      event,
+      fields,
+      mentionPattern,
+      checkpointer,
+      a2aTaskTracker,
+      ctx.envelope.team_id,
+      logger,
+    )
+  } else {
+    decision = { accept: false, reason: 'unsupported_event' }
+  }
+
+  if (!decision.accept) {
+    logger.info(
+      {
+        event: 'llm_agent_event_gated',
+        event_type: event.type,
+        event_id: eventId,
+        team_id: ctx.envelope.team_id,
+        reason: decision.reason,
+        ...fields,
+      },
+      'llm-agent skipped event by gating rule',
+    )
+    return ok(undefined)
+  }
+
+  const threadRootTs = fields.thread_ts ?? fields.ts
+
+  const recordResult = await eventLogStore.recordReceived({
+    slackEventId: eventId,
+    slackTeamId: ctx.envelope.team_id,
+    slackChannelId: fields.channel,
+    threadRootTs,
+    messageTs: fields.ts,
+  })
+  if (recordResult.isErr()) {
+    logger.error(
+      {
+        event: 'llm_agent_event_log_failed',
+        event_type: event.type,
+        event_id: eventId,
+        err: recordResult.error,
+      },
+      'failed to record event in event_log',
+    )
+    return err(recordResult.error)
+  }
+  const outcome: EventLogOutcome = recordResult.value
+
+  logger.info(
+    {
+      event:
+        outcome === 'accepted'
+          ? 'llm_agent_event_accepted'
+          : 'llm_agent_event_duplicate_skipped',
+      event_type: event.type,
+      event_id: eventId,
+      team_id: ctx.envelope.team_id,
+      outcome,
+      gate_reason: decision.reason,
+      ...fields,
+    },
+    outcome === 'accepted'
+      ? 'llm-agent accepted event'
+      : 'llm-agent skipped duplicate event',
+  )
+
+  if (outcome === 'accepted' && onAccepted !== undefined) {
+    const onAcceptedResult = await ResultAsync.fromPromise(
+      Promise.resolve(onAccepted({ ctx, event })),
+      (error) => error,
+    )
+    if (onAcceptedResult.isErr()) {
+      // Roll back the accepted row so that a subsequent Slack retry is
+      // re-processed instead of being silently dropped as
+      // rejected_duplicate. A concurrent retry that has already taken the
+      // rejected_duplicate branch can still slip through; the next-task
+      // Task CR pipeline owns full at-least-once delivery.
+      const deleteResult = await eventLogStore.deleteReceived(eventId)
+      if (deleteResult.isErr()) {
+        logger.error(
+          {
+            event: 'llm_agent_event_log_rollback_failed',
+            event_id: eventId,
+            err: deleteResult.error,
+          },
+          'failed to roll back event_log row after onAccepted failure',
+        )
+      }
+      return err(onAcceptedResult.error)
+    }
+  }
+
+  return ok(undefined)
 }
 
 export const createLlmAgentPlugin = (
   options: LlmAgentPluginOptions,
 ): Plugin => {
   const logger = options.logger ?? noopLogger
-  const { eventLogStore, checkpointer, a2aTaskTracker, botUserId, onAccepted } =
-    options
+  const { botUserId } = options
   // Slack mentions appear as `<@U123>` or `<@U123|label>`.
   const mentionPattern = new RegExp(`<@${botUserId}(?:\\|[^>]*)?>`, 'u')
 
@@ -259,125 +394,10 @@ export const createLlmAgentPlugin = (
     name: LLM_AGENT_PLUGIN_NAME,
     commands: LLM_AGENT_COMMANDS,
     eventSubscriptions: LLM_AGENT_EVENT_SUBSCRIPTIONS,
-    async onEvent(ctx, event) {
-      if (isBotMessage(event)) return
-
-      const eventId = ctx.envelope.event_id
-      if (eventId === undefined || eventId === '') {
-        logger.warn(
-          {
-            event: 'llm_agent_event_missing_id',
-            event_type: event.type,
-            team_id: ctx.envelope.team_id,
-          },
-          'llm-agent received event without event_id; skipping',
-        )
-        return
-      }
-
-      const fields = extractFields(event)
-
-      let decision: GateDecision
-      if (event.type === 'app_mention') {
-        decision = await decideForAppMention(
-          fields,
-          eventLogStore,
-          eventId,
-          ctx.envelope.team_id,
-        )
-      } else if (event.type === 'message') {
-        decision = await decideForMessage(
-          event,
-          fields,
-          mentionPattern,
-          checkpointer,
-          a2aTaskTracker,
-          ctx.envelope.team_id,
-          logger,
-        )
-      } else {
-        decision = { accept: false, reason: 'unsupported_event' }
-      }
-
-      if (!decision.accept) {
-        logger.info(
-          {
-            event: 'llm_agent_event_gated',
-            event_type: event.type,
-            event_id: eventId,
-            team_id: ctx.envelope.team_id,
-            reason: decision.reason,
-            ...fields,
-          },
-          'llm-agent skipped event by gating rule',
-        )
-        return
-      }
-
-      const threadRootTs = fields.thread_ts ?? fields.ts
-
-      const recordResult = await eventLogStore.recordReceived({
-        slackEventId: eventId,
-        slackTeamId: ctx.envelope.team_id,
-        slackChannelId: fields.channel,
-        threadRootTs,
-        messageTs: fields.ts,
-      })
-      if (recordResult.isErr()) {
-        logger.error(
-          {
-            event: 'llm_agent_event_log_failed',
-            event_type: event.type,
-            event_id: eventId,
-            err: recordResult.error,
-          },
-          'failed to record event in event_log',
-        )
-        throw recordResult.error
-      }
-      const outcome: EventLogOutcome = recordResult.value
-
-      logger.info(
-        {
-          event:
-            outcome === 'accepted'
-              ? 'llm_agent_event_accepted'
-              : 'llm_agent_event_duplicate_skipped',
-          event_type: event.type,
-          event_id: eventId,
-          team_id: ctx.envelope.team_id,
-          outcome,
-          gate_reason: decision.reason,
-          ...fields,
-        },
-        outcome === 'accepted'
-          ? 'llm-agent accepted event'
-          : 'llm-agent skipped duplicate event',
-      )
-
-      if (outcome === 'accepted' && onAccepted !== undefined) {
-        try {
-          await onAccepted({ ctx, event })
-        } catch (error) {
-          // Roll back the accepted row so that a subsequent Slack retry is
-          // re-processed instead of being silently dropped as
-          // rejected_duplicate. A concurrent retry that has already taken the
-          // rejected_duplicate branch can still slip through; the next-task
-          // Task CR pipeline owns full at-least-once delivery.
-          const deleteResult = await eventLogStore.deleteReceived(eventId)
-          if (deleteResult.isErr()) {
-            logger.error(
-              {
-                event: 'llm_agent_event_log_rollback_failed',
-                event_id: eventId,
-                err: deleteResult.error,
-              },
-              'failed to roll back event_log row after onAccepted failure',
-            )
-          }
-          throw error
-        }
-      }
+    onEvent(ctx, event) {
+      return ResultAsync.fromSafePromise(
+        runOnEvent(ctx, event, options, logger, mentionPattern),
+      ).andThen((result) => result)
     },
   }
 }

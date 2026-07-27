@@ -121,13 +121,16 @@ const optionalUrlList = (
   return raw.split(',').map((entry) => {
     const url = entry.trim()
     if (url === '') {
+      // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
       throw new ConfigLoadError(
         `Environment variable '${key}' contains an empty URL entry`,
       )
     }
+    // eslint-disable-next-line no-restricted-syntax -- boundary: wraps the URL constructor's throw-based validation contract
     try {
       new URL(url)
     } catch {
+      // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
       throw new ConfigLoadError(
         `Environment variable '${key}' contains an invalid URL entry '${url}'`,
       )
@@ -139,6 +142,7 @@ const optionalUrlList = (
 const requireEnv = (env: NodeJS.ProcessEnv, key: string): string => {
   const value = env[key]
   if (value === undefined || value === '') {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
     throw new ConfigLoadError(
       `Required environment variable '${key}' is not set`,
     )
@@ -155,6 +159,7 @@ const parsePositiveInt = (
   if (raw === undefined || raw === '') return fallback
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed) || parsed <= 0) {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
     throw new ConfigLoadError(
       `Environment variable '${key}' must be a positive integer (got '${raw}')`,
     )
@@ -171,6 +176,7 @@ const parseNonNegativeInt = (
   if (raw === undefined || raw === '') return fallback
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed) || parsed < 0) {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
     throw new ConfigLoadError(
       `Environment variable '${key}' must be a non-negative integer (got '${raw}')`,
     )
@@ -186,6 +192,7 @@ const parseLogLevel = (
   const raw = env[key]
   if (raw === undefined || raw === '') return fallback
   if (!isLogLevel(raw)) {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
     throw new ConfigLoadError(
       `Environment variable '${key}' must be one of ${LOG_LEVELS.join(', ')} (got '${raw}')`,
     )

@@ -1,3 +1,4 @@
+import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import type { Plugin } from '#plugin/plugin'
@@ -21,7 +22,7 @@ describe('PluginRegistry', () => {
   it('registers plugins and looks up by command name', () => {
     const registry = createPluginRegistry()
     const plugin = samplePlugin()
-    registry.register(plugin)
+    expect(registry.register(plugin)).toEqual(ok(undefined))
     expect(registry.lookupCommand('/crawl-list')?.name).toBe('crawl')
     expect(registry.lookupCommand('/crawl-run')?.name).toBe('crawl')
     expect(registry.lookupCommand('/unknown')).toBeUndefined()
@@ -37,35 +38,37 @@ describe('PluginRegistry', () => {
     expect(registry.lookupByActionOrCallbackId(':orphan')).toBeUndefined()
   })
 
-  it('throws when plugin name is invalid', () => {
+  it('returns an error when plugin name is invalid', () => {
     const registry = createPluginRegistry()
-    const tryRegister = (name: string) => () => {
-      registry.register(samplePlugin({ name }))
-    }
-    expect(tryRegister('BadName')).toThrow(PluginInvalidNameError)
-    expect(tryRegister('0starts-digit')).toThrow(PluginInvalidNameError)
-    expect(tryRegister('')).toThrow(PluginInvalidNameError)
+    const register = (name: string) => registry.register(samplePlugin({ name }))
+    expect(register('BadName')).toEqual(
+      err(new PluginInvalidNameError('BadName')),
+    )
+    expect(register('0starts-digit')).toEqual(
+      err(new PluginInvalidNameError('0starts-digit')),
+    )
+    expect(register('')).toEqual(err(new PluginInvalidNameError('')))
   })
 
-  it('throws on duplicate plugin name', () => {
+  it('returns an error on duplicate plugin name', () => {
     const registry = createPluginRegistry()
     registry.register(samplePlugin())
-    expect(() => {
-      registry.register(samplePlugin({ commands: [] }))
-    }).toThrow(PluginNameConflictError)
+    const result = registry.register(samplePlugin({ commands: [] }))
+    expect(result).toEqual(err(new PluginNameConflictError('crawl')))
   })
 
-  it('throws on duplicate slash command across plugins', () => {
+  it('returns an error on duplicate slash command across plugins', () => {
     const registry = createPluginRegistry()
     registry.register(samplePlugin())
-    expect(() => {
-      registry.register(
-        samplePlugin({
-          name: 'other',
-          commands: [{ command: '/crawl-list', description: 'dup' }],
-        }),
-      )
-    }).toThrow(SlashCommandConflictError)
+    const result = registry.register(
+      samplePlugin({
+        name: 'other',
+        commands: [{ command: '/crawl-list', description: 'dup' }],
+      }),
+    )
+    expect(result).toEqual(
+      err(new SlashCommandConflictError('/crawl-list', 'crawl', 'other')),
+    )
   })
 
   it('returns manifest commands across all plugins', () => {

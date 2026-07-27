@@ -204,10 +204,12 @@ export const startTaskReconciler = (
       return false
     }
 
-    let task: Task
-    try {
-      task = await handle.client.getTask({ id: row.taskId })
-    } catch (error) {
+    const taskResult = await ResultAsync.fromPromise(
+      handle.client.getTask({ id: row.taskId }),
+      (caughtErr) => caughtErr,
+    )
+    if (taskResult.isErr()) {
+      const error = taskResult.error
       if (error instanceof TaskNotFoundError) {
         // The default 'failed' guard only permits submitted/working rows, so
         // any other current state (input-required, or a terminal state left
@@ -249,6 +251,7 @@ export const startTaskReconciler = (
       )
       return false
     }
+    const task: Task = taskResult.value
 
     // Delegates the actual settle/post decision to the same finalizer the
     // push notification path uses, so a missed push and a reconciler poll
@@ -271,69 +274,78 @@ export const startTaskReconciler = (
   // not let concurrent runs pile up against the same rows.
   let isRunning = false
 
-  const runOnce = async (): Promise<TaskReconcilerResult> => {
-    if (isRunning) return { settled: 0, pruned: 0 }
-    isRunning = true
-    try {
-      const findUnsettledResult = await options.a2aTaskTracker.findUnsettled(
-        new Date(now().getTime() - graceMs),
+  const runOnceLocked = async (): Promise<TaskReconcilerResult> => {
+    const findUnsettledResult = await options.a2aTaskTracker.findUnsettled(
+      new Date(now().getTime() - graceMs),
+    )
+    let rows: readonly A2aTaskRow[]
+    if (findUnsettledResult.isErr()) {
+      logger.error(
+        {
+          event: 'llm_agent_a2a_reconcile_query_failed',
+          err: findUnsettledResult.error,
+        },
+        'llm-agent reconciler failed to query unsettled a2a_task rows',
       )
-      let rows: readonly A2aTaskRow[]
-      if (findUnsettledResult.isErr()) {
-        logger.error(
-          {
-            event: 'llm_agent_a2a_reconcile_query_failed',
-            err: findUnsettledResult.error,
-          },
-          'llm-agent reconciler failed to query unsettled a2a_task rows',
-        )
-        rows = []
-      } else {
-        rows = findUnsettledResult.value
-      }
-
-      let settled = 0
-      if (rows.length > 0) {
-        // Fetched once per tick rather than once per row; RemoteAgentRegistry
-        // caches internally but every row would still pay an async round trip
-        // through that cache check.
-        const handles = await options.remoteAgentRegistry.listAgents()
-        for (const row of rows) {
-          try {
-            if (await reconcileRow(row, handles)) settled++
-          } catch (error) {
-            logger.error(
-              {
-                event: 'llm_agent_a2a_reconcile_row_failed',
-                task_id: row.taskId,
-                err: error,
-              },
-              'llm-agent reconciler failed to reconcile an unsettled a2a_task row',
-            )
-          }
-        }
-      }
-
-      const pruneResult = await options.a2aTaskTracker.deleteSettledOlderThan(
-        new Date(now().getTime() - retentionMs),
-      )
-      let pruned = 0
-      if (pruneResult.isErr()) {
-        logger.error(
-          {
-            event: 'llm_agent_a2a_reconcile_prune_failed',
-            err: pruneResult.error,
-          },
-          'llm-agent reconciler failed to prune settled a2a_task rows',
-        )
-      } else {
-        pruned = pruneResult.value
-      }
-
-      return { settled, pruned }
-    } finally {
-      isRunning = false
+      rows = []
+    } else {
+      rows = findUnsettledResult.value
     }
+
+    let settled = 0
+    if (rows.length > 0) {
+      // Fetched once per tick rather than once per row; RemoteAgentRegistry
+      // caches internally but every row would still pay an async round trip
+      // through that cache check.
+      const handles = await options.remoteAgentRegistry.listAgents()
+      for (const row of rows) {
+        const reconcileResult = await ResultAsync.fromPromise(
+          reconcileRow(row, handles),
+          (caughtErr) => caughtErr,
+        )
+        if (reconcileResult.isErr()) {
+          logger.error(
+            {
+              event: 'llm_agent_a2a_reconcile_row_failed',
+              task_id: row.taskId,
+              err: reconcileResult.error,
+            },
+            'llm-agent reconciler failed to reconcile an unsettled a2a_task row',
+          )
+          continue
+        }
+        if (reconcileResult.value) settled++
+      }
+    }
+
+    const pruneResult = await options.a2aTaskTracker.deleteSettledOlderThan(
+      new Date(now().getTime() - retentionMs),
+    )
+    let pruned = 0
+    if (pruneResult.isErr()) {
+      logger.error(
+        {
+          event: 'llm_agent_a2a_reconcile_prune_failed',
+          err: pruneResult.error,
+        },
+        'llm-agent reconciler failed to prune settled a2a_task rows',
+      )
+    } else {
+      pruned = pruneResult.value
+    }
+
+    return { settled, pruned }
+  }
+
+  // try/finally (even catch-less) trips the errorHandling lint's
+  // no-restricted-syntax TryStatement ban; .finally() resets isRunning
+  // without needing a disable comment here.
+  const runOnce = (): Promise<TaskReconcilerResult> => {
+    if (isRunning) return Promise.resolve({ settled: 0, pruned: 0 })
+    isRunning = true
+    return runOnceLocked().finally(() => {
+      isRunning = false
+    })
   }
 
   // Wraps every runOnce() invocation so a graceful-shutdown drain also

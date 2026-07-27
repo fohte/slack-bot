@@ -1,7 +1,11 @@
 import { config } from '@fohte/eslint-config'
 
 export default config(
-  { typescript: { typeChecked: true }, opentelemetry: { enabled: true } },
+  {
+    typescript: { typeChecked: true },
+    opentelemetry: { enabled: true },
+    errorHandling: {},
+  },
   {
     ignores: ['dist/**'],
   },

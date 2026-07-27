@@ -1,12 +1,25 @@
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { MemorySaver } from '@langchain/langgraph'
 import { convertMessagesToCompletionsMessageParams } from '@langchain/openai'
 import { tool } from 'langchain'
-import { describe, expect, it } from 'vitest'
+import { err, ok } from 'neverthrow'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import type { LogFields, Logger } from '#logger/logger'
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { createConversationAgent } from '#plugins/llm-agent/conversation-agent/conversation-agent'
+import {
+  ConversationAgentInvokeError,
+  ConversationThreadIdParseError,
+} from '#types/errors'
+
+vi.mock('@fohte/service-kit/observability', () => ({
+  captureWithFingerprint: vi.fn(),
+}))
+
+const CONVERSATION_AGENT_INVOKE_FINGERPRINT =
+  'llm-agent.conversation-agent.invoke-failed'
 
 const createRecordingLogger = (): Logger & {
   readonly warnCalls: LogFields[]
@@ -27,6 +40,10 @@ const createRecordingLogger = (): Logger & {
 }
 
 describe('createConversationAgent', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('returns the model reply as text with no delegations', async () => {
     const model = createRecordingChatModel(() => 'hello from the model')
     const agent = createConversationAgent({
@@ -41,10 +58,12 @@ describe('createConversationAgent', () => {
       slackEventId: 'Ev1',
     })
 
-    expect(outcome).toEqual({
-      text: 'hello from the model',
-      delegations: [],
-    })
+    expect(outcome).toEqual(
+      ok({
+        text: 'hello from the model',
+        delegations: [],
+      }),
+    )
   })
 
   it('strips a <think> block from the model reply before returning it', async () => {
@@ -63,10 +82,12 @@ describe('createConversationAgent', () => {
       slackEventId: 'Ev1',
     })
 
-    expect(outcome).toEqual({
-      text: 'hello from the model',
-      delegations: [],
-    })
+    expect(outcome).toEqual(
+      ok({
+        text: 'hello from the model',
+        delegations: [],
+      }),
+    )
   })
 
   it('logs a warning when a <think> block had to be stripped', async () => {
@@ -190,7 +211,7 @@ describe('createConversationAgent', () => {
       slackEventId: 'Ev1',
     })
 
-    expect(outcome.text).toBe('described the photo')
+    expect(outcome._unsafeUnwrap().text).toBe('described the photo')
     const [humanMessage] = model.calls[0] ?? []
     expect(humanMessage?.content).toEqual([
       { type: 'text', text: 'what is this?' },
@@ -343,12 +364,14 @@ describe('createConversationAgent', () => {
       slackEventId: 'Ev1',
     })
 
-    expect(outcome).toEqual({
-      text: 'handed off to meshi',
-      delegations: [
-        { agentName: 'meshi', taskId: 'task-1', contextId: 'ctx-1' },
-      ],
-    })
+    expect(outcome).toEqual(
+      ok({
+        text: 'handed off to meshi',
+        delegations: [
+          { agentName: 'meshi', taskId: 'task-1', contextId: 'ctx-1' },
+        ],
+      }),
+    )
   })
 
   it('does not re-report a prior turn delegation on a later turn with no new delegation', async () => {
@@ -375,10 +398,12 @@ describe('createConversationAgent', () => {
       slackEventId: 'Ev2',
     })
 
-    expect(secondOutcome).toEqual({
-      text: 'ok, anything else?',
-      delegations: [],
-    })
+    expect(secondOutcome).toEqual(
+      ok({
+        text: 'ok, anything else?',
+        delegations: [],
+      }),
+    )
   })
 
   // MCP tools (see mcp-tools/) are plain tool() functions with no
@@ -416,10 +441,12 @@ describe('createConversationAgent', () => {
       slackEventId: 'Ev1',
     })
 
-    expect(outcome).toEqual({
-      text: 'Sorry, I could not list the strategies just now.',
-      delegations: [],
-    })
+    expect(outcome).toEqual(
+      ok({
+        text: 'Sorry, I could not list the strategies just now.',
+        delegations: [],
+      }),
+    )
     // The exact error-wrapping text (e.g. "Error: ...\n Please fix your
     // mistakes.") is createAgent's own tool-error formatting, not this
     // repo's, so only the message sequence is asserted here.
@@ -427,6 +454,53 @@ describe('createConversationAgent', () => {
       'human',
       'ai',
       'tool',
+    ])
+  })
+
+  it('returns an Err with ConversationThreadIdParseError for a malformed threadId', async () => {
+    const model = createRecordingChatModel(() => 'hello')
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+    })
+
+    const outcome = await agent.respond({
+      threadId: 'not-a-valid-thread-id',
+      userText: 'hi',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
+    expect(outcome).toEqual(
+      err(new ConversationThreadIdParseError('not-a-valid-thread-id')),
+    )
+    expect(vi.mocked(captureWithFingerprint)).not.toHaveBeenCalled()
+  })
+
+  it('reports a model invoke failure to Sentry and returns a ConversationAgentInvokeError', async () => {
+    const model = createRecordingChatModel(() => {
+      throw new Error('llm unreachable')
+    })
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+    })
+
+    const outcome = await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'hi',
+      images: [],
+      slackEventId: 'Ev1',
+    })
+
+    const error = outcome._unsafeUnwrapErr()
+    expect(error).toBeInstanceOf(ConversationAgentInvokeError)
+    expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+      [
+        error,
+        CONVERSATION_AGENT_INVOKE_FINGERPRINT,
+        { extras: { threadId: 'T1:C1:111.222', slackEventId: 'Ev1' } },
+      ],
     ])
   })
 })
