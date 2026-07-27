@@ -90,7 +90,7 @@ const handleApplyResult = (
         .patch({ text: rendered.text, blocks: rendered.blocks })
         .andThen(() => {
           if (input.onSuccess === undefined) return okAsync(undefined)
-          return ResultAsync.fromSafePromise(
+          return ResultAsync.fromPromise(
             Promise.resolve(
               input.onSuccess({
                 ctx,
@@ -99,6 +99,7 @@ const handleApplyResult = (
                 branch: result.branch,
               }),
             ),
+            (caughtErr) => caughtErr,
           )
         })
     }
