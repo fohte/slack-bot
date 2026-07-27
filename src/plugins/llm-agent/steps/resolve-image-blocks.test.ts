@@ -1,3 +1,4 @@
+import { ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -40,7 +41,7 @@ const createSlackClientWithDownloads = (
 
 describe('resolveImageBlocks', () => {
   it('returns an empty array when the envelope has no images', async () => {
-    expect(await resolveImageBlocks(baseDeps(), TEST_ENV)).toEqual([])
+    expect(await resolveImageBlocks(baseDeps(), TEST_ENV)).toEqual(ok([]))
   })
 
   it('downloads the largest available thumbnail and returns it as a base64 content block', async () => {
@@ -68,9 +69,14 @@ describe('resolveImageBlocks', () => {
       images,
     })
 
-    expect(blocks).toEqual([
-      { base64: Buffer.from(bytes).toString('base64'), mimeType: 'image/jpeg' },
-    ])
+    expect(blocks).toEqual(
+      ok([
+        {
+          base64: Buffer.from(bytes).toString('base64'),
+          mimeType: 'image/jpeg',
+        },
+      ]),
+    )
   })
 
   it('falls back to a smaller thumbnail when the largest one exceeds the per-image cap', async () => {
@@ -109,9 +115,14 @@ describe('resolveImageBlocks', () => {
       'https://files.slack.com/thumb-1024.jpg',
       'https://files.slack.com/thumb-480.jpg',
     ])
-    expect(blocks).toEqual([
-      { base64: Buffer.from(fits).toString('base64'), mimeType: 'image/jpeg' },
-    ])
+    expect(blocks).toEqual(
+      ok([
+        {
+          base64: Buffer.from(fits).toString('base64'),
+          mimeType: 'image/jpeg',
+        },
+      ]),
+    )
   })
 
   it('falls back to a smaller thumbnail when the largest one fails to download', async () => {
@@ -143,9 +154,11 @@ describe('resolveImageBlocks', () => {
       images,
     })
 
-    expect(blocks).toEqual([
-      { base64: Buffer.from(fits).toString('base64'), mimeType: 'image/png' },
-    ])
+    expect(blocks).toEqual(
+      ok([
+        { base64: Buffer.from(fits).toString('base64'), mimeType: 'image/png' },
+      ]),
+    )
   })
 
   it('rejects with SlackImageThumbnailUnavailableError when the file has no thumb_* URL', async () => {
@@ -153,9 +166,11 @@ describe('resolveImageBlocks', () => {
       { id: 'F1', name: 'photo.jpg', mimetype: 'image/jpeg' },
     ]
 
-    await expect(
-      resolveImageBlocks(baseDeps(), { ...TEST_ENV, images }),
-    ).rejects.toThrow(SlackImageThumbnailUnavailableError)
+    const result = await resolveImageBlocks(baseDeps(), { ...TEST_ENV, images })
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(
+      SlackImageThumbnailUnavailableError,
+    )
   })
 
   it('rejects with SlackImageThumbnailUnavailableError when every available thumbnail exceeds the cap', async () => {
@@ -177,9 +192,14 @@ describe('resolveImageBlocks', () => {
       },
     ]
 
-    await expect(
-      resolveImageBlocks(baseDeps({ slackClient }), { ...TEST_ENV, images }),
-    ).rejects.toThrow(SlackImageThumbnailUnavailableError)
+    const result = await resolveImageBlocks(baseDeps({ slackClient }), {
+      ...TEST_ENV,
+      images,
+    })
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(
+      SlackImageThumbnailUnavailableError,
+    )
   })
 
   it('rejects the whole call when one image among several has no usable thumbnail, discarding blocks already resolved for the others', async () => {
@@ -202,9 +222,14 @@ describe('resolveImageBlocks', () => {
       { id: 'F2', name: 'second.jpg', mimetype: 'image/jpeg' },
     ]
 
-    await expect(
-      resolveImageBlocks(baseDeps({ slackClient }), { ...TEST_ENV, images }),
-    ).rejects.toThrow(SlackImageThumbnailUnavailableError)
+    const result = await resolveImageBlocks(baseDeps({ slackClient }), {
+      ...TEST_ENV,
+      images,
+    })
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(
+      SlackImageThumbnailUnavailableError,
+    )
   })
 
   it("derives the content block's mimeType from the downloaded response, not the original file's declared mimetype", async () => {
@@ -231,9 +256,14 @@ describe('resolveImageBlocks', () => {
       images,
     })
 
-    expect(blocks).toEqual([
-      { base64: Buffer.from(bytes).toString('base64'), mimeType: 'image/jpeg' },
-    ])
+    expect(blocks).toEqual(
+      ok([
+        {
+          base64: Buffer.from(bytes).toString('base64'),
+          mimeType: 'image/jpeg',
+        },
+      ]),
+    )
   })
 
   it('stops attaching further images once the total byte budget is reached', async () => {
@@ -286,15 +316,17 @@ describe('resolveImageBlocks', () => {
       'https://files.slack.com/first-thumb.png',
       'https://files.slack.com/second-thumb.png',
     ])
-    expect(blocks).toEqual([
-      {
-        base64: Buffer.from(firstBytes).toString('base64'),
-        mimeType: 'image/png',
-      },
-      {
-        base64: Buffer.from(secondBytes).toString('base64'),
-        mimeType: 'image/png',
-      },
-    ])
+    expect(blocks).toEqual(
+      ok([
+        {
+          base64: Buffer.from(firstBytes).toString('base64'),
+          mimeType: 'image/png',
+        },
+        {
+          base64: Buffer.from(secondBytes).toString('base64'),
+          mimeType: 'image/png',
+        },
+      ]),
+    )
   })
 })

@@ -1,4 +1,4 @@
-import { ResultAsync } from 'neverthrow'
+import { err, ok, type Result, ResultAsync } from 'neverthrow'
 
 import type {
   DownloadedImage,
@@ -74,7 +74,7 @@ const resolveThumbnail = async (
   env: SlackEnvelope,
   file: SlackFile,
   perImageCap: number,
-): Promise<DownloadedImage> => {
+): Promise<Result<DownloadedImage, SlackImageThumbnailUnavailableError>> => {
   const candidates = candidateThumbUrls(file)
   for (const url of candidates) {
     const downloadResult = await ResultAsync.fromPromise(
@@ -96,7 +96,7 @@ const resolveThumbnail = async (
     }
     const { bytes, contentType } = downloadResult.value
     if (bytes.byteLength <= perImageCap) {
-      return { bytes, ext: extForThumbnail(contentType, url) }
+      return ok({ bytes, ext: extForThumbnail(contentType, url) })
     }
     resolved.logger.warn(
       {
@@ -110,8 +110,10 @@ const resolveThumbnail = async (
       'slack thumbnail exceeds cap; trying the next smaller tier',
     )
   }
-  throw new SlackImageThumbnailUnavailableError(
-    `slack file ${file.id ?? '(unknown id)'} has no thumb_* variant that fits the ${String(perImageCap)}-byte cap (checked ${String(candidates.length)} candidate size(s))`,
+  return err(
+    new SlackImageThumbnailUnavailableError(
+      `slack file ${file.id ?? '(unknown id)'} has no thumb_* variant that fits the ${String(perImageCap)}-byte cap (checked ${String(candidates.length)} candidate size(s))`,
+    ),
   )
 }
 
@@ -124,7 +126,9 @@ const resolveThumbnail = async (
 export const resolveImageBlocks = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
-): Promise<readonly ImageBlock[]> => {
+): Promise<
+  Result<readonly ImageBlock[], SlackImageThumbnailUnavailableError>
+> => {
   const blocks: ImageBlock[] = []
   let totalBytes = 0
   for (const file of env.images) {
@@ -145,9 +149,15 @@ export const resolveImageBlocks = async (
       SINGLE_IMAGE_BYTE_CAP,
       TOTAL_IMAGE_BYTE_CAP - totalBytes,
     )
-    const thumbnail = await resolveThumbnail(resolved, env, file, perImageCap)
-    totalBytes += thumbnail.bytes.byteLength
-    blocks.push(imageBlockFromDownloadedImage(thumbnail))
+    const thumbnailResult = await resolveThumbnail(
+      resolved,
+      env,
+      file,
+      perImageCap,
+    )
+    if (thumbnailResult.isErr()) return err(thumbnailResult.error)
+    totalBytes += thumbnailResult.value.bytes.byteLength
+    blocks.push(imageBlockFromDownloadedImage(thumbnailResult.value))
   }
-  return blocks
+  return ok(blocks)
 }
