@@ -51,12 +51,10 @@ Perform these steps once per Slack workspace.
 1. Create a new Slack App at https://api.slack.com/apps using "From scratch".
 2. Open **Basic Information**, copy the **Signing Secret**, and set it as `SLACK_SIGNING_SECRET`.
 3. Open **OAuth & Permissions** and add the bot scopes you need. The minimum recommended set is `chat:write`, `commands`, and `chat:write.public`. Plugins may require additional scopes (for example, `views:write` for modal-based flows). Install the app to the workspace, copy the **Bot User OAuth Token** (`xoxb-...`), and set it as `SLACK_BOT_TOKEN`. Open **App Home** (or call `auth.test` with the token) to copy the bot's user ID (`U...`) and set it as `SLACK_BOT_USER_ID`.
-4. Open **Slash Commands** and register each command exposed by the deployed plugins (for example, `/crawl-list`). Follow the hyphenated naming convention described below. Set the Request URL to `https://<your-host>/api/slack/commands`.
+4. Open **Slash Commands** and register each command exposed by the deployed plugins (for example, `/crawl-list`). Follow the hyphenated naming convention described below. Set the Request URL to `https://<your-host>/api/slack/commands`. Instead of entering commands one by one, you can generate them in bulk: run `pnpm print-slash-commands <your-host>`, copy the JSON array it prints, open the **App Manifest** tab, and replace the value of `features.slash_commands` with it. The script's plugin list (`MANIFEST_PLUGINS` in `src/scripts/print-slash-commands.ts`) is maintained separately from the one `bootstrap()` registers in `src/index.ts`, so update both when adding a plugin.
 5. Open **Interactivity & Shortcuts**, enable interactivity, and set the Request URL to `https://<your-host>/api/slack/interactivity`.
 6. Open **Event Subscriptions** (only required when a plugin uses it), enable events, and set the Request URL to `https://<your-host>/api/slack/events`. Slack sends a `url_verification` challenge on save; the bot answers it automatically.
 7. To enable the "is thinking…" loading indicator that the `llm-agent` plugin shows on accepted events, open **Agents & AI Apps**, enable the feature, and add the `assistant:write` bot scope under **OAuth & Permissions**. The indicator is set with [`assistant.threads.setStatus`](https://api.slack.com/methods/assistant.threads.setStatus), which only works inside an assistant thread (the split-view container) — calls from regular channels fail with `channel_not_supported` and are swallowed with a warn log, so leaving this step out only disables the indicator.
-
-The slash command list can also be generated as a Slack App manifest fragment via `PluginRegistry.buildAppManifestCommands()` instead of being entered by hand.
 
 ## Local development
 

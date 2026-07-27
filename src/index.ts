@@ -213,6 +213,8 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
   bootstrap({
     remoteAgentRegistry,
     personaParaphraser,
+    // Keep MANIFEST_PLUGINS in src/scripts/print-slash-commands.ts in sync
+    // with the plugins listed here when adding or removing one.
     plugins: [
       ({ logger, scheduler }) =>
         createBlogPlugin({

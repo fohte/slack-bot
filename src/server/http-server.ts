@@ -51,8 +51,10 @@ export interface HttpServer {
 // there is no request left to fail — capture only instead of re-throwing.
 const ROUTE_EVENT_FINGERPRINT = 'server.http-server.route-event-unhandled'
 
+export const SLACK_COMMANDS_PATH = '/api/slack/commands'
+
 const SLACK_PATHS = new Set([
-  '/api/slack/commands',
+  SLACK_COMMANDS_PATH,
   '/api/slack/interactivity',
   '/api/slack/events',
 ])
@@ -94,7 +96,7 @@ export const createHttpServer = (options: HttpServerOptions): HttpServer => {
     app.post(route.path, route.handler)
   }
 
-  app.post('/api/slack/commands', async (c) => {
+  app.post(SLACK_COMMANDS_PATH, async (c) => {
     const rawBody = c.get('rawBody')
     let parsed: Record<string, string>
     // eslint-disable-next-line no-restricted-syntax -- boundary: Hono request body parsing, invalid input is rejected with a 400 response
