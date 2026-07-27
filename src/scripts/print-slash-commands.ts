@@ -15,7 +15,7 @@ export interface SlackAppManifestSlashCommand extends SlackAppManifestCommand {
 // listed directly instead of going through each plugin's factory (which
 // otherwise requires full runtime deps: DB connections, the Slack client,
 // LangGraph model config, etc.). Keep this in sync with the plugins
-// registered via bootstrap() in src/main.ts — this list isn't derived from
+// registered via bootstrap() in src/index.ts — this list isn't derived from
 // it, so an addition there won't automatically appear here.
 const MANIFEST_PLUGINS: readonly Plugin[] = [
   { name: BLOG_PLUGIN_NAME, commands: BLOG_COMMANDS },
