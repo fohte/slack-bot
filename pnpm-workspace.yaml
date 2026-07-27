@@ -3,13 +3,7 @@ allowBuilds:
   esbuild: true
   # required by @opentelemetry/exporter-trace-otlp-proto's protobufjs dep
   protobufjs: true
-<<<<<<< before updating
   # required by @fohte/eslint-config -> eslint-plugin-import-x for "#*" subpath imports resolution
-||||||| last update
-  # required by @fohte/eslint-config -> eslint-plugin-import-x for "@/*" resolution
-=======
-  # required by @fohte/eslint-config -> eslint-plugin-import-x for module resolution
->>>>>>> after updating
   unrs-resolver: true
 
 # Dodge short-lived supply-chain attacks (e.g. shai-hulud, tinycolor) by

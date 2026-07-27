@@ -7,13 +7,7 @@
     "#*": "./src/*.ts"
   },
   "scripts": {
-<<<<<<< before updating
-    "start": "tsx --import ./otel-register.mjs src/main.ts",
-||||||| last update
-=======
     "start": "node --import ./otel-register.mjs dist/index.js",
->>>>>>> after updating
-    "start:prod": "node --import ./otel-register.mjs dist/main.js",
     "build": "tsup",
     "lint": "eslint .",
     "format:eslint": "eslint --fix .",

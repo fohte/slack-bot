@@ -1,161 +1,261 @@
-<<<<<<< before updating
-export type {
-  CloudflareAccessHttpClient,
-  CloudflareAccessHttpClientFactory,
-} from '#cf-access/http-client'
-export { createCloudflareAccessHttpClientFactory } from '#cf-access/http-client'
-export type { Config, LogLevel, ServiceTokenPair } from '#config/config'
-export { loadConfig } from '#config/config'
-export type {
-  AckPayload,
-  FollowUpPayload,
-  InteractionContext,
-  InteractionContextOptions,
-  InteractionContextResult,
-  InteractionSource,
-} from '#interaction/context'
-export { createInteractionContext } from '#interaction/context'
-export type { EventContext } from '#interaction/event-context'
-export type {
-  MessageUpdater,
-  SlackMessagePatch,
-  SlackMessageRef,
-} from '#interaction/message-updater'
-export {
-  createOriginalUpdater,
-  createRefUpdater,
-} from '#interaction/message-updater'
-export type { LogFields, Logger, LoggerOptions } from '#logger/logger'
-export { createLogger, noopLogger } from '#logger/logger'
-export type { PluginDeps, PluginFactory, PluginInput } from '#plugin/deps'
-export { resolvePlugin } from '#plugin/deps'
-export type { Plugin, SlackAppManifestCommand } from '#plugin/plugin'
-export type { PluginRegistry } from '#plugin/registry'
-export { createPluginRegistry } from '#plugin/registry'
-export type {
-  BlogPluginConfig,
-  BlogServiceClient,
-  BlogServiceClientOptions,
-  CiWatcher,
-  CiWatcherOptions,
-  CiWatchInput,
-} from '#plugins/blog/index'
-export {
-  BLOG_COMMANDS,
-  BLOG_PLUGIN_NAME,
-  ButtonValueOverflow,
-  CI_WATCH_INTERVAL_MS,
-  CI_WATCH_MAX_DURATION_MS,
-  createBlogPlugin,
-  createBlogServiceClient,
-  createCiWatcher,
-  loadBlogPluginConfig,
-  ServiceError,
-  ServiceUnavailable,
-} from '#plugins/blog/index'
-export type {
-  EventLogOutcome,
-  EventLogRecord,
-  EventLogRetentionHandle,
-  EventLogRetentionOptions,
-  EventLogStore,
-  LlmAgentAcceptedEvent,
-  LlmAgentPluginOptions,
-} from '#plugins/llm-agent/index'
-export {
-  createEventLogStore,
-  createLlmAgentPlugin,
-  EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS,
-  EVENT_LOG_DEFAULT_TTL_MS,
-  LLM_AGENT_COMMANDS,
-  LLM_AGENT_EVENT_SUBSCRIPTIONS,
-  LLM_AGENT_PLUGIN_NAME,
-  startEventLogRetention,
-} from '#plugins/llm-agent/index'
-export type {
-  InteractionRouter,
-  RouterOptions,
-  RouterResult,
-} from '#router/router'
-export { createInteractionRouter } from '#router/router'
-export type {
-  InMemoryScheduler,
-  ScheduledTaskDef,
-  SchedulerOptions,
-  TaskHandle,
-  TaskStatus,
-  TaskTickResult,
-} from '#scheduler/scheduler'
-export { createScheduler } from '#scheduler/scheduler'
-export type {
-  SignatureVerifier,
-  SignatureVerifierOptions,
-} from '#security/signature-verifier'
-export { createSignatureVerifier } from '#security/signature-verifier'
-export type { HealthEndpoint } from '#server/health'
-export { createHealthEndpoint } from '#server/health'
-export type { HttpServer, HttpServerOptions } from '#server/http-server'
-export { createHttpServer } from '#server/http-server'
-export type { InFlightTasks } from '#server/in-flight-tasks'
-export { createInFlightTasks } from '#server/in-flight-tasks'
-export type {
-  CloseableServer,
-  ShutdownDeps,
-  ShutdownHandler,
-} from '#server/shutdown'
-export { createShutdownHandler } from '#server/shutdown'
-export type {
-  ResponseUrlPayload,
-  ResponseUrlResult,
-  SlackWebClient,
-  SlackWebClientOptions,
-} from '#slack/web-client'
-export { createSlackWebClient } from '#slack/web-client'
-export {
-  AssistantStatusError,
-  CfAccessAuthError,
-  ConfigLoadError,
-  EventLogPruneError,
-  FollowUpUnavailableError,
-  InvalidSignatureError,
-  MalformedPayloadError,
-  PluginHandlerError,
-  PluginInvalidNameError,
-  PluginNameConflictError,
-  PluginNotFoundError,
-  ResponseUrlExhaustedError,
-  SchedulerDuplicateNameError,
-  SchedulerInvalidArgumentError,
-  SchedulerLimitError,
-  SlackApiError,
-  SlashCommandConflictError,
-  StaleTimestampError,
-} from '#types/errors'
-export type {
-  BlockActionPayloadAction,
-  BlockActionsPayload,
-  MessageActionPayload,
-  ShortcutPayload,
-  SlackAppMentionEvent,
-  SlackEvent,
-  SlackEventBase,
-  SlackEventCallback,
-  SlackInteractivityPayload,
-  SlackMessageEvent,
-  SlackUnknownEvent,
-  SlashCommandBody,
-  ViewClosedPayload,
-  ViewPayloadView,
-  ViewSubmissionPayload,
-} from '#types/slack-payloads'
-||||||| last update
-export const greet = (name: string): string => {
-  return `Hello, ${name}!`
-}
-=======
 import '#bootstrap'
 
-export const greet = (name: string): string => {
-  return `Hello, ${name}!`
+import { serve } from '@hono/node-server'
+import { drizzle } from 'drizzle-orm/postgres-js'
+import postgres from 'postgres'
+
+import { createCloudflareAccessHttpClientFactory } from '#cf-access/http-client'
+import { loadConfig } from '#config/config'
+import { createLogger } from '#logger/logger'
+import type { PluginDeps, PluginInput } from '#plugin/deps'
+import { resolvePlugin } from '#plugin/deps'
+import { createPluginRegistry } from '#plugin/registry'
+import { createBlogPlugin, loadBlogPluginConfig } from '#plugins/blog/index'
+import type {
+  PersonaParaphraser,
+  RemoteAgentRegistry,
+} from '#plugins/llm-agent/index'
+import {
+  createA2aNotificationHandler,
+  createA2aTaskTracker,
+  createConversationAgent,
+  createConversationCheckpointer,
+  createDelegationTools,
+  createEventLogStore,
+  createLlmAgentPlugin,
+  createMcpTools,
+  createOpenCodeGoChatModel,
+  createPersonaParaphraser,
+  createRemoteAgentRegistry,
+  createResponseFinalizer,
+  createTaskDispatcher,
+  startEventLogRetention,
+  startTaskReconciler,
+} from '#plugins/llm-agent/index'
+import { createInteractionRouter } from '#router/router'
+import { createScheduler } from '#scheduler/scheduler'
+import { createSignatureVerifier } from '#security/signature-verifier'
+import { createHttpServer } from '#server/http-server'
+import { createInFlightTasks } from '#server/in-flight-tasks'
+import { createShutdownHandler } from '#server/shutdown'
+import { createSlackWebClient } from '#slack/web-client'
+
+export interface BootstrapOptions {
+  readonly plugins?: readonly PluginInput[]
+  // Reused (rather than constructed fresh here) so the push notification
+  // endpoint's tasks/get calls share the same Agent Card cache the
+  // conversation agent's delegation tools already warmed at startup.
+  readonly remoteAgentRegistry: RemoteAgentRegistry
+  // Reused (rather than constructed fresh here) so responseFinalizer's
+  // persona paraphrase shares the same stateless model instance the
+  // conversation agent uses for live turns.
+  readonly personaParaphraser: PersonaParaphraser
 }
->>>>>>> after updating
+
+export const bootstrap = (options: BootstrapOptions): void => {
+  const config = loadConfig()
+  const logger = createLogger({
+    level: config.logLevel,
+    base: { service: 'slack-bot' },
+  })
+  const verifier = createSignatureVerifier({
+    signingSecret: config.slackSigningSecret,
+  })
+  const slackClient = createSlackWebClient({
+    botToken: config.slackBotToken,
+    maxRetries: config.maxWebApiRetries,
+  })
+  const scheduler = createScheduler({
+    maxConcurrentTasks: config.maxConcurrentTasks,
+    logger,
+  })
+  const cfAccess = createCloudflareAccessHttpClientFactory({ config })
+  const inFlightTasks = createInFlightTasks()
+
+  const postgresClient = postgres(config.databaseUrl)
+  const db = drizzle(postgresClient)
+  const eventLogStore = createEventLogStore(db)
+  const a2aTaskTracker = createA2aTaskTracker(db)
+  startEventLogRetention({ eventLogStore, logger })
+
+  const deps: PluginDeps = {
+    config,
+    logger,
+    slackClient,
+    scheduler,
+    cfAccess,
+    eventLogStore,
+    a2aTaskTracker,
+    inFlightTasks,
+  }
+
+  const registry = createPluginRegistry()
+  for (const input of options.plugins ?? []) {
+    const plugin = resolvePlugin(input, deps)
+    registry.register(plugin)
+    logger.info(
+      {
+        event: 'plugin_registered',
+        plugin: plugin.name,
+        commands: plugin.commands.map((c) => c.command),
+      },
+      'plugin registered',
+    )
+  }
+
+  const router = createInteractionRouter({
+    registry,
+    slackClient,
+    logger,
+  })
+  const responseFinalizer = createResponseFinalizer({
+    a2aTaskTracker,
+    remoteAgentRegistry: options.remoteAgentRegistry,
+    eventLogStore,
+    slackClient,
+    personaParaphraser: options.personaParaphraser,
+    logger,
+  })
+  const a2aNotificationHandler = createA2aNotificationHandler({
+    token: config.a2aNotificationToken,
+    responseFinalizer,
+    logger,
+  })
+  const taskReconciler = startTaskReconciler({
+    a2aTaskTracker,
+    remoteAgentRegistry: options.remoteAgentRegistry,
+    responseFinalizer,
+    eventLogStore,
+    slackClient,
+    inFlightTasks,
+    logger,
+  })
+  void taskReconciler.runOnce()
+  const server = createHttpServer({
+    verifier,
+    router,
+    logger,
+    inFlightTasks,
+    routes: [
+      { path: '/api/a2a/notifications', handler: a2aNotificationHandler },
+    ],
+  })
+  server.health.setReady()
+
+  const httpServer = serve(
+    { fetch: server.app.fetch, port: config.port },
+    (info) => {
+      logger.info(
+        { event: 'server_listening', port: info.port },
+        'slack-bot listening',
+      )
+    },
+  )
+
+  const shutdown = createShutdownHandler({
+    server: httpServer,
+    inFlightTasks,
+    logger,
+  })
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM')
+  })
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT')
+  })
+}
+
+const entry = process.argv[1] ?? ''
+if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
+  // Loaded again (redundantly but harmlessly) inside bootstrap() below;
+  // needed here to resolve delegation and MCP tools before the plugin
+  // factory runs, since createConversationAgent bakes its tool list in at
+  // construction time and PluginFactory itself is synchronous.
+  const config = loadConfig()
+  const logger = createLogger({
+    level: config.logLevel,
+    base: { service: 'slack-bot' },
+  })
+  const remoteAgentRegistry = createRemoteAgentRegistry({
+    agentUrls: config.remoteAgentUrls,
+  })
+  // Resolved once here at startup (with its own TTL cache), then reused —
+  // via the same registry instance's warm cache — by the dispatcher's own
+  // task-resume lookups. MCP tools have no such reuse elsewhere, so they're
+  // fetched once and passed straight into the tools list below.
+  const [remoteAgentHandles, mcpTools] = await Promise.all([
+    remoteAgentRegistry.listAgents(),
+    // ResultAsync never rejects on its own, so Promise.all would otherwise
+    // wait for listAgents() too before this startup invariant violation
+    // surfaces — match() converts the Err case back into a rejection to
+    // keep the original fail-fast behavior.
+    createMcpTools({ serverUrls: config.mcpServerUrls, logger }).match(
+      (tools) => tools,
+      (error) => {
+        throw error
+      },
+    ),
+  ])
+  const model = createOpenCodeGoChatModel({
+    apiKey: config.conversationAgent.opencodeApiKey,
+    model: config.conversationAgent.model,
+  })
+  const personaParaphraser = createPersonaParaphraser({
+    model,
+    personaPrompt: config.conversationAgent.personaPrompt,
+    logger,
+  })
+  const checkpointer = createConversationCheckpointer(config.databaseUrl)
+
+  bootstrap({
+    remoteAgentRegistry,
+    personaParaphraser,
+    plugins: [
+      ({ logger, scheduler }) =>
+        createBlogPlugin({
+          config: loadBlogPluginConfig(),
+          logger,
+          scheduler,
+        }),
+      ({
+        logger,
+        slackClient,
+        eventLogStore,
+        a2aTaskTracker,
+        inFlightTasks,
+      }) => {
+        const tools = [
+          ...createDelegationTools(remoteAgentHandles, {
+            a2aTaskTracker,
+            logger,
+          }),
+          ...mcpTools,
+        ]
+        const conversationAgent = createConversationAgent({
+          model,
+          checkpointer,
+          personaPrompt: config.conversationAgent.personaPrompt,
+          tools,
+          logger,
+        })
+        const onAccepted = createTaskDispatcher({
+          conversationAgent,
+          remoteAgentRegistry,
+          a2aTaskTracker,
+          eventLogStore,
+          slackClient,
+          logger,
+          inFlightTasks,
+        })
+        return createLlmAgentPlugin({
+          logger,
+          eventLogStore,
+          checkpointer,
+          a2aTaskTracker,
+          botUserId: config.slackBotUserId,
+          onAccepted,
+        })
+      },
+    ],
+  })
+}
