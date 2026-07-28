@@ -24,6 +24,7 @@ import {
   extractDelegations,
 } from '#plugins/llm-agent/remote-agent-registry/index'
 import {
+  ConversationAgentGetThreadCursorError,
   ConversationAgentInvokeError,
   type ConversationThreadIdParseError,
 } from '#types/errors'
@@ -39,6 +40,8 @@ const GEN_AI_PROVIDER_NAME = 'opencode'
 // rather than per call site.
 const CONVERSATION_AGENT_INVOKE_FINGERPRINT =
   'llm-agent.conversation-agent.invoke-failed'
+const CONVERSATION_AGENT_GET_THREAD_CURSOR_FINGERPRINT =
+  'llm-agent.conversation-agent.get-thread-cursor-failed'
 
 export interface CreateOpenCodeGoChatModelOptions {
   readonly apiKey: string
@@ -73,6 +76,21 @@ export interface ConversationOutcome {
   readonly delegations: readonly Delegation[]
 }
 
+// Result of syncing a turn's unseen thread messages into context, produced
+// by steps/sync-thread-context.ts and passed straight through to respond().
+export interface ThreadContextForTurn {
+  // <thread_context> block text; undefined when there was nothing new to
+  // inject (e.g. every unseen message was filtered out by dedup rules).
+  readonly text: string | undefined
+  // Images extracted from injected messages, ordered to match the `[画像 N]`
+  // markers embedded in `text`.
+  readonly images: readonly ImageBlock[]
+  // Max ts among the messages folded into this sync, independent of whether
+  // any of them ended up in `text`/`images`; advances getThreadCursor's
+  // result even for a turn whose sync produced no visible injection.
+  readonly contextMaxTs: string | undefined
+}
+
 export interface ConversationAgentInput {
   // team:channel:thread_root_ts, see thread-id.ts
   readonly threadId: string
@@ -81,6 +99,11 @@ export interface ConversationAgentInput {
   // Slack event driving this turn; recorded on any a2a_task row a
   // delegation tool call creates during it.
   readonly slackEventId: string
+  // ts of the Slack message that triggered this turn. Tagged onto the
+  // HumanMessage so a later turn's getThreadCursor call can resume the
+  // thread-context diff sync from where this turn left off.
+  readonly triggerTs: string
+  readonly threadContext?: ThreadContextForTurn | undefined
 }
 
 export interface ConversationAgent {
@@ -96,6 +119,12 @@ export interface ConversationAgent {
     ConversationOutcome,
     ConversationThreadIdParseError | ConversationAgentInvokeError
   >
+  // Max ts already folded into this thread's checkpoint (via either a
+  // turn's own trigger or a prior turn's thread-context sync), or undefined
+  // when no checkpoint exists yet (cold start: nothing has been seen).
+  getThreadCursor(
+    threadId: string,
+  ): ResultAsync<string | undefined, ConversationAgentGetThreadCursorError>
 }
 
 type CreateAgentTools = NonNullable<Parameters<typeof createAgent>[0]['tools']>
@@ -110,17 +139,69 @@ export interface ConversationAgentOptions {
   readonly logger?: Logger | undefined
 }
 
+const toImageContentBlock = (
+  image: ImageBlock,
+): ContentBlock.Multimodal.Image => ({
+  type: 'image',
+  mimeType: image.mimeType,
+  data: image.base64,
+})
+
+// The thread-context text block, when present, is prepended ahead of the
+// user's own text block rather than merged into it, so a prompt-cache replay
+// of this turn from the checkpoint never has to reconstruct where one ends
+// and the other begins.
 const buildHumanMessageContent = (
   userText: string,
   images: readonly ImageBlock[],
+  threadContext: ThreadContextForTurn | undefined,
 ): Array<ContentBlock.Text | ContentBlock.Multimodal.Image> => [
+  ...(threadContext?.text !== undefined
+    ? [{ type: 'text' as const, text: threadContext.text }]
+    : []),
   { type: 'text', text: userText },
-  ...images.map((image): ContentBlock.Multimodal.Image => ({
-    type: 'image',
-    mimeType: image.mimeType,
-    data: image.base64,
-  })),
+  ...(threadContext?.images ?? []).map(toImageContentBlock),
+  ...images.map(toImageContentBlock),
 ]
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+interface ThreadCursorTag {
+  readonly turnTs: string
+  readonly contextMaxTs?: string
+}
+
+const isThreadCursorTag = (value: unknown): value is ThreadCursorTag =>
+  isRecord(value) &&
+  typeof value['turnTs'] === 'string' &&
+  (value['contextMaxTs'] === undefined ||
+    typeof value['contextMaxTs'] === 'string')
+
+// Scans every HumanMessage the checkpointer has accumulated for a thread and
+// returns the max ts across their turnTs/contextMaxTs tags (see respond()'s
+// additional_kwargs above), or undefined when none are tagged yet (cold
+// start). Takes the raw (unknown-typed) messages state value rather than
+// BaseMessage[] so the LangGraph StateSnapshot's `any`-typed `values` field
+// never needs an unsafe cast at the call site.
+const computeThreadCursor = (messagesValue: unknown): string | undefined => {
+  if (!Array.isArray(messagesValue)) return undefined
+  let cursor: string | undefined
+  for (const message of messagesValue) {
+    if (!HumanMessage.isInstance(message)) continue
+    const slack: unknown = message.additional_kwargs['slack']
+    if (!isThreadCursorTag(slack)) continue
+    for (const ts of [slack.turnTs, slack.contextMaxTs]) {
+      if (
+        ts !== undefined &&
+        (cursor === undefined || Number(ts) > Number(cursor))
+      ) {
+        cursor = ts
+      }
+    }
+  }
+  return cursor
+}
 
 export const createConversationAgent = (
   options: ConversationAgentOptions,
@@ -141,7 +222,14 @@ export const createConversationAgent = (
   })
 
   return {
-    respond({ threadId, userText, images, slackEventId }) {
+    respond({
+      threadId,
+      userText,
+      images,
+      slackEventId,
+      triggerTs,
+      threadContext,
+    }) {
       // A stable id lets this turn's own messages be located in the
       // checkpointer's full thread history below: LangGraph's messages
       // reducer keys deduplication/append on message id, so this id is
@@ -155,7 +243,22 @@ export const createConversationAgent = (
         // Chat Completions/Responses converters key off of to route
         // image blocks through the standard-block conversion path instead
         // of treating them as (unrecognized) provider-native content.
-        contentBlocks: buildHumanMessageContent(userText, images),
+        contentBlocks: buildHumanMessageContent(
+          userText,
+          images,
+          threadContext,
+        ),
+        // Read back by computeThreadCursor (via getThreadCursor) to resume
+        // the next turn's thread-context diff sync from where this one left
+        // off, without ever rewriting an already-checkpointed message.
+        additional_kwargs: {
+          slack: {
+            turnTs: triggerTs,
+            ...(threadContext?.contextMaxTs !== undefined
+              ? { contextMaxTs: threadContext.contextMaxTs }
+              : {}),
+          },
+        },
       })
       const parsedThreadId = parseConversationThreadId(threadId)
       if (parsedThreadId.isErr()) return errAsync(parsedThreadId.error)
@@ -217,6 +320,28 @@ export const createConversationAgent = (
           text,
           delegations: extractDelegations(turnMessages),
         }
+      })
+    },
+    getThreadCursor(threadId) {
+      return ResultAsync.fromPromise(
+        agent.graph.getState({ configurable: { thread_id: threadId } }),
+        (caughtErr) => {
+          const wrapped = new ConversationAgentGetThreadCursorError(
+            `llm-agent conversation agent getState failed for thread ${threadId}`,
+            caughtErr,
+          )
+          captureWithFingerprint(
+            wrapped,
+            CONVERSATION_AGENT_GET_THREAD_CURSOR_FINGERPRINT,
+            { extras: { threadId } },
+          )
+          return wrapped
+        },
+      ).map((snapshot) => {
+        const values: unknown = snapshot.values
+        return computeThreadCursor(
+          isRecord(values) ? values['messages'] : undefined,
+        )
       })
     },
   }

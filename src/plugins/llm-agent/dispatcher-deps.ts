@@ -21,6 +21,9 @@ export interface SlackEnvelope {
   readonly teamId: string
   readonly channelId: string
   readonly threadRootTs: string
+  // ts of the message that triggered this turn, distinct from threadRootTs
+  // when the trigger is a reply rather than the thread's first message.
+  readonly triggerTs: string
   readonly text: string
   readonly images: readonly SlackFile[]
 }
@@ -31,6 +34,10 @@ export interface DispatcherDeps {
   readonly a2aTaskTracker: A2aTaskTracker
   readonly eventLogStore: EventLogStore
   readonly slackClient: SlackWebClient
+  // Used to distinguish the bot's own prior posts (excluded from thread
+  // context injection whenever a checkpoint already covers them) from other
+  // participants' posts.
+  readonly botUserId: string
   // Own service's push endpoint + shared token, threaded into both fresh
   // delegations (via DelegationToolDependencies, wired at the call site) and
   // task-resume message/send calls. Omitted means delegated tasks rely
@@ -49,6 +56,7 @@ export interface ResolvedDispatcherDeps {
   readonly a2aTaskTracker: A2aTaskTracker
   readonly eventLogStore: EventLogStore
   readonly slackClient: SlackWebClient
+  readonly botUserId: string
   readonly pushNotificationConfig: DelegationPushNotificationConfig | undefined
   readonly taskDeadlineMs: number
   readonly successFallbackText: string
@@ -63,6 +71,7 @@ export const resolveDeps = (deps: DispatcherDeps): ResolvedDispatcherDeps => ({
   a2aTaskTracker: deps.a2aTaskTracker,
   eventLogStore: deps.eventLogStore,
   slackClient: deps.slackClient,
+  botUserId: deps.botUserId,
   pushNotificationConfig: deps.pushNotificationConfig,
   taskDeadlineMs: deps.taskDeadlineMs ?? DEFAULT_A2A_TASK_DEADLINE_MS,
   successFallbackText: deps.successFallbackText ?? DEFAULT_SUCCESS_FALLBACK,

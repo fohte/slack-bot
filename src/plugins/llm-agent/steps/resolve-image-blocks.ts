@@ -14,8 +14,9 @@ import type { SlackFile } from '#types/slack-payloads'
 
 // A conservative budget for base64-inlined image content blocks sent to the
 // LLM API, mirroring the per-image / total caps the k8s ConfigMap-era
-// pipeline used.
-const SINGLE_IMAGE_BYTE_CAP = 500 * 1024
+// pipeline used. SINGLE_IMAGE_BYTE_CAP is also reused by
+// steps/sync-thread-context.ts for thread-context images.
+export const SINGLE_IMAGE_BYTE_CAP = 500 * 1024
 const TOTAL_IMAGE_BYTE_CAP = 700 * 1024
 
 const MIME_TO_EXT: ReadonlyMap<string, string> = new Map([
@@ -69,7 +70,10 @@ const extForThumbnail = (
 
 // Serial: downloadFile does not retry, so issuing every candidate size for
 // one image in parallel would 429 the whole batch on a single rate-limit hit.
-const resolveThumbnail = async (
+// Exported for reuse by steps/sync-thread-context.ts, which resolves
+// thumbnails for images attached to unseen thread messages through this same
+// pipeline.
+export const resolveThumbnail = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
   file: SlackFile,

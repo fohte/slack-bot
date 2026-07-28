@@ -10,6 +10,7 @@ import type { LogFields, Logger } from '#logger/logger'
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { createConversationAgent } from '#plugins/llm-agent/conversation-agent/conversation-agent'
 import {
+  ConversationAgentGetThreadCursorError,
   ConversationAgentInvokeError,
   ConversationThreadIdParseError,
 } from '#types/errors'
@@ -20,6 +21,8 @@ vi.mock('@fohte/service-kit/observability', () => ({
 
 const CONVERSATION_AGENT_INVOKE_FINGERPRINT =
   'llm-agent.conversation-agent.invoke-failed'
+const CONVERSATION_AGENT_GET_THREAD_CURSOR_FINGERPRINT =
+  'llm-agent.conversation-agent.get-thread-cursor-failed'
 
 const createRecordingLogger = (): Logger & {
   readonly warnCalls: LogFields[]
@@ -56,6 +59,7 @@ describe('createConversationAgent', () => {
       userText: 'hi',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(outcome).toEqual(
@@ -80,6 +84,7 @@ describe('createConversationAgent', () => {
       userText: 'hi',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(outcome).toEqual(
@@ -106,6 +111,7 @@ describe('createConversationAgent', () => {
       userText: 'hi',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(logger.warnCalls).toEqual([
@@ -130,6 +136,7 @@ describe('createConversationAgent', () => {
       userText: 'hi',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(logger.warnCalls).toEqual([])
@@ -150,12 +157,14 @@ describe('createConversationAgent', () => {
       userText: 'first turn',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
     await agent.respond({
       threadId,
       userText: 'second turn',
       images: [],
       slackEventId: 'Ev2',
+      triggerTs: '111.222',
     })
 
     expect(
@@ -184,12 +193,14 @@ describe('createConversationAgent', () => {
       userText: 'thread one turn',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
     await agent.respond({
       threadId: 'T1:C2:333.444',
       userText: 'thread two turn',
       images: [],
       slackEventId: 'Ev2',
+      triggerTs: '333.444',
     })
 
     expect(
@@ -209,6 +220,7 @@ describe('createConversationAgent', () => {
       userText: 'what is this?',
       images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(outcome._unsafeUnwrap().text).toBe('described the photo')
@@ -239,6 +251,7 @@ describe('createConversationAgent', () => {
       userText: 'what is this?',
       images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     const [humanMessage] = model.calls[0] ?? []
@@ -273,6 +286,7 @@ describe('createConversationAgent', () => {
       userText: 'hi',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(
@@ -334,6 +348,7 @@ describe('createConversationAgent', () => {
       userText: 'log my lunch',
       images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(capturedContext).toEqual({
@@ -362,6 +377,7 @@ describe('createConversationAgent', () => {
       userText: 'log my lunch',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(outcome).toEqual(
@@ -390,12 +406,14 @@ describe('createConversationAgent', () => {
       userText: 'log my lunch',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
     const secondOutcome = await agent.respond({
       threadId,
       userText: 'thanks',
       images: [],
       slackEventId: 'Ev2',
+      triggerTs: '111.222',
     })
 
     expect(secondOutcome).toEqual(
@@ -439,6 +457,7 @@ describe('createConversationAgent', () => {
       userText: 'list my strategies',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(outcome).toEqual(
@@ -469,6 +488,7 @@ describe('createConversationAgent', () => {
       userText: 'hi',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     expect(outcome).toEqual(
@@ -491,6 +511,7 @@ describe('createConversationAgent', () => {
       userText: 'hi',
       images: [],
       slackEventId: 'Ev1',
+      triggerTs: '111.222',
     })
 
     const error = outcome._unsafeUnwrapErr()
@@ -502,5 +523,162 @@ describe('createConversationAgent', () => {
         { extras: { threadId: 'T1:C1:111.222', slackEventId: 'Ev1' } },
       ],
     ])
+  })
+
+  describe('thread context injection', () => {
+    it('prepends the thread context text block ahead of the user text block, followed by context images then the turn own images', async () => {
+      const model = createRecordingChatModel(() => 'ok')
+      const agent = createConversationAgent({
+        model,
+        checkpointer: new MemorySaver(),
+      })
+
+      await agent.respond({
+        threadId: 'T1:C1:111.222',
+        userText: 'what happened?',
+        images: [{ base64: 'OWN', mimeType: 'image/png' }],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+        threadContext: {
+          text: '<thread_context>\n[2026-01-01T00:00:00.000Z] <@U2>: retry [画像 1]\n</thread_context>',
+          images: [{ base64: 'CTX', mimeType: 'image/jpeg' }],
+          contextMaxTs: '100.000',
+        },
+      })
+
+      const [humanMessage] = model.calls[0] ?? []
+      expect(humanMessage?.content).toEqual([
+        {
+          type: 'text',
+          text: '<thread_context>\n[2026-01-01T00:00:00.000Z] <@U2>: retry [画像 1]\n</thread_context>',
+        },
+        { type: 'text', text: 'what happened?' },
+        { type: 'image', mimeType: 'image/jpeg', data: 'CTX' },
+        { type: 'image', mimeType: 'image/png', data: 'OWN' },
+      ])
+    })
+
+    it('tags additional_kwargs.slack with turnTs and contextMaxTs', async () => {
+      const model = createRecordingChatModel(() => 'ok')
+      const agent = createConversationAgent({
+        model,
+        checkpointer: new MemorySaver(),
+      })
+
+      await agent.respond({
+        threadId: 'T1:C1:111.222',
+        userText: 'hi',
+        images: [],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+        threadContext: { text: undefined, images: [], contextMaxTs: '100.000' },
+      })
+
+      const [humanMessage] = model.calls[0] ?? []
+      expect(humanMessage?.additional_kwargs).toEqual({
+        slack: { turnTs: '111.222', contextMaxTs: '100.000' },
+      })
+    })
+
+    it('omits contextMaxTs from the tag when threadContext is absent', async () => {
+      const model = createRecordingChatModel(() => 'ok')
+      const agent = createConversationAgent({
+        model,
+        checkpointer: new MemorySaver(),
+      })
+
+      await agent.respond({
+        threadId: 'T1:C1:111.222',
+        userText: 'hi',
+        images: [],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+      })
+
+      const [humanMessage] = model.calls[0] ?? []
+      expect(humanMessage?.additional_kwargs).toEqual({
+        slack: { turnTs: '111.222' },
+      })
+    })
+  })
+
+  describe('getThreadCursor', () => {
+    it('returns undefined for a thread with no checkpoint yet', async () => {
+      const agent = createConversationAgent({
+        model: createRecordingChatModel(() => 'ok'),
+        checkpointer: new MemorySaver(),
+      })
+
+      expect(await agent.getThreadCursor('T1:C1:999.999')).toEqual(
+        ok(undefined),
+      )
+    })
+
+    it("returns the latest turn's turnTs after a turn with no thread context", async () => {
+      const agent = createConversationAgent({
+        model: createRecordingChatModel(() => 'ok'),
+        checkpointer: new MemorySaver(),
+      })
+      const threadId = 'T1:C1:111.222'
+
+      await agent.respond({
+        threadId,
+        userText: 'hi',
+        images: [],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+      })
+
+      expect(await agent.getThreadCursor(threadId)).toEqual(ok('111.222'))
+    })
+
+    it('advances across multiple turns to the newest turnTs', async () => {
+      const agent = createConversationAgent({
+        model: createRecordingChatModel(() => 'ok'),
+        checkpointer: new MemorySaver(),
+      })
+      const threadId = 'T1:C1:111.222'
+
+      await agent.respond({
+        threadId,
+        userText: 'first',
+        images: [],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+      })
+      await agent.respond({
+        threadId,
+        userText: 'second',
+        images: [],
+        slackEventId: 'Ev2',
+        triggerTs: '222.333',
+      })
+
+      expect(await agent.getThreadCursor(threadId)).toEqual(ok('222.333'))
+    })
+
+    it('reports a getState failure to Sentry and returns a ConversationAgentGetThreadCursorError', async () => {
+      class ThrowingCheckpointSaver extends MemorySaver {
+        override async getTuple(): Promise<never> {
+          throw new Error('checkpoint store unreachable')
+        }
+      }
+      const agent = createConversationAgent({
+        model: createRecordingChatModel(() => 'ok'),
+        checkpointer: new ThrowingCheckpointSaver(),
+      })
+
+      const outcome = await agent.getThreadCursor('T1:C1:111.222')
+
+      const error = outcome._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(ConversationAgentGetThreadCursorError)
+      expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+        [
+          error,
+          CONVERSATION_AGENT_GET_THREAD_CURSOR_FINGERPRINT,
+          { extras: { threadId: 'T1:C1:111.222' } },
+        ],
+      ])
+    })
   })
 })

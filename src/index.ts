@@ -249,6 +249,7 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
           a2aTaskTracker,
           eventLogStore,
           slackClient,
+          botUserId: config.slackBotUserId,
           logger,
           inFlightTasks,
         })

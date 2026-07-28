@@ -62,6 +62,9 @@ const createSlackStub = (
     async getFileInfo() {
       throw new Error('not implemented')
     },
+    async getConversationReplies() {
+      throw new Error('not implemented')
+    },
   } as SlackWebClient & { readonly calls: ReadonlyArray<CapturedCall> }
 }
 

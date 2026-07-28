@@ -174,6 +174,13 @@ export class ConversationAgentInvokeError extends Error {
   }
 }
 
+export class ConversationAgentGetThreadCursorError extends Error {
+  override readonly name = 'ConversationAgentGetThreadCursorError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
 export class DuplicateDelegationToolNameError extends Error {
   override readonly name = 'DuplicateDelegationToolNameError'
   constructor(toolName: string, agentName: string) {

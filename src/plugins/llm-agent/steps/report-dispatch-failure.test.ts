@@ -30,6 +30,7 @@ const baseDeps = (
     a2aTaskTracker: createFakeA2aTaskTracker(),
     eventLogStore: createScriptedEventLogStore(),
     slackClient,
+    botUserId: 'U_BOT',
     ...(logger !== undefined && { logger }),
   })
 
