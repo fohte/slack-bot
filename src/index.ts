@@ -20,6 +20,7 @@ import {
   createA2aTaskTracker,
   createConversationAgent,
   createConversationCheckpointer,
+  createConversationThreadStore,
   createDelegationTools,
   createEventLogStore,
   createLlmAgentPlugin,
@@ -76,6 +77,7 @@ export const bootstrap = (options: BootstrapOptions): void => {
   const db = drizzle(postgresClient)
   const eventLogStore = createEventLogStore(db)
   const a2aTaskTracker = createA2aTaskTracker(db)
+  const conversationThreadStore = createConversationThreadStore(db)
   startEventLogRetention({ eventLogStore, logger })
 
   const deps: PluginDeps = {
@@ -86,6 +88,7 @@ export const bootstrap = (options: BootstrapOptions): void => {
     cfAccess,
     eventLogStore,
     a2aTaskTracker,
+    conversationThreadStore,
     inFlightTasks,
   }
 
@@ -227,6 +230,7 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
         slackClient,
         eventLogStore,
         a2aTaskTracker,
+        conversationThreadStore,
         inFlightTasks,
       }) => {
         const delegationToolsResult = createDelegationTools(
@@ -257,6 +261,7 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
           eventLogStore,
           checkpointer,
           a2aTaskTracker,
+          conversationThreadStore,
           botUserId: config.slackBotUserId,
           onAccepted,
         })

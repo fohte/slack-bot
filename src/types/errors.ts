@@ -156,6 +156,13 @@ export class EventLogStoreError extends Error {
   }
 }
 
+export class ConversationThreadStoreError extends Error {
+  override readonly name = 'ConversationThreadStoreError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}
+
 export class PersonaParaphraseError extends Error {
   override readonly name = 'PersonaParaphraseError'
   constructor(message: string, cause?: unknown) {

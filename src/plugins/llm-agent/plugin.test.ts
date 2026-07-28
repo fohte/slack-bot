@@ -1,5 +1,5 @@
 import { emptyCheckpoint, MemorySaver } from '@langchain/langgraph'
-import { err, errAsync, okAsync } from 'neverthrow'
+import { err, errAsync, ok, okAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { EventContext } from '#interaction/event-context'
@@ -7,8 +7,9 @@ import { noopLogger } from '#logger/logger'
 import type { Plugin } from '#plugin/plugin'
 import { createPluginRegistry } from '#plugin/registry'
 import { createFakeA2aTaskTracker } from '#plugins/llm-agent/_test-utils'
-import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
+import type { A2aTaskRow, ThreadKey } from '#plugins/llm-agent/a2a-task-tracker'
 import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
+import type { ConversationThreadStore } from '#plugins/llm-agent/conversation-thread-store'
 import type {
   EventLogRecord,
   EventLogStore,
@@ -24,7 +25,10 @@ import {
 } from '#plugins/llm-agent/plugin'
 import { createInteractionRouter } from '#router/router'
 import type { SlackWebClient } from '#slack/web-client'
-import { A2aTaskTrackerError } from '#types/errors'
+import {
+  A2aTaskTrackerError,
+  ConversationThreadStoreError,
+} from '#types/errors'
 import type {
   SlackAppMentionEvent,
   SlackEvent,
@@ -104,6 +108,35 @@ const createInMemoryEventLogStore = (): InMemoryEventLogStore => {
   }
 }
 
+interface InMemoryConversationThreadStore extends ConversationThreadStore {
+  readonly activities: readonly ThreadKey[]
+}
+
+const threadKeyId = (key: ThreadKey): string =>
+  `${key.slackTeamId}:${key.slackChannelId}:${key.threadRootTs}`
+
+const createInMemoryConversationThreadStore =
+  (): InMemoryConversationThreadStore => {
+    const rows = new Map<string, ThreadKey>()
+    const activities: ThreadKey[] = []
+    return {
+      activities,
+      recordActivity(threadKey) {
+        activities.push(threadKey)
+        rows.set(threadKeyId(threadKey), threadKey)
+        return okAsync(undefined)
+      },
+      find(threadKey) {
+        const row = rows.get(threadKeyId(threadKey))
+        return okAsync(
+          row === undefined
+            ? undefined
+            : { ...row, createdAt: new Date(0), lastActivityAt: new Date(0) },
+        )
+      },
+    }
+  }
+
 const BOT_USER_ID = 'U_BOT'
 
 // Marks a thread_id as having existing conversation state, using the real
@@ -129,6 +162,7 @@ const buildPluginOptions = (
   eventLogStore: createInMemoryEventLogStore(),
   checkpointer: new MemorySaver(),
   a2aTaskTracker: createFakeA2aTaskTracker(),
+  conversationThreadStore: createInMemoryConversationThreadStore(),
   botUserId: BOT_USER_ID,
   ...overrides,
 })
@@ -709,6 +743,142 @@ describe('createLlmAgentPlugin', () => {
         slackTeamId: 'T123',
         slackChannelId: 'C123',
         threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
+  })
+
+  it('accepts mention-less channel messages when the thread has previously accepted an event, even without a checkpoint or active task', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const conversationThreadStore = createInMemoryConversationThreadStore()
+    await conversationThreadStore.recordActivity({
+      slackTeamId: 'T123',
+      slackChannelId: 'C123',
+      threadRootTs: '1700000000.000050',
+    })
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({
+        eventLogStore,
+        conversationThreadStore,
+        onAccepted,
+      }),
+    )
+    const envelope = buildMessageEnvelope('Ev-thread-participation', {
+      channel_type: 'channel',
+      text: 'retry',
+      thread_ts: '1700000000.000050',
+    })
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-thread-participation',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
+  })
+
+  it('accepts mention-less channel messages via the checkpoint hit when the conversation thread lookup fails', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const checkpointer = new MemorySaver()
+    await seedCheckpoint(
+      checkpointer,
+      deriveConversationThreadId({
+        teamId: 'T123',
+        channelId: 'C123',
+        threadRootTs: '1700000000.000050',
+      }),
+    )
+    const conversationThreadStore = createInMemoryConversationThreadStore()
+    vi.spyOn(conversationThreadStore, 'find').mockReturnValue(
+      errAsync(
+        new ConversationThreadStoreError('conversation_thread query failed'),
+      ),
+    )
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({
+        eventLogStore,
+        checkpointer,
+        conversationThreadStore,
+        onAccepted,
+      }),
+    )
+    const envelope = buildMessageEnvelope(
+      'Ev-thread-hit-conversation-lookup-down',
+      {
+        channel_type: 'channel',
+        text: 'follow up',
+        thread_ts: '1700000000.000050',
+      },
+    )
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-thread-hit-conversation-lookup-down',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000050',
+        messageTs: '1700000000.000100',
+      },
+    ])
+    expect(onAccepted.mock.calls.length).toBe(1)
+  })
+
+  it('records conversation thread activity for an accepted event', async () => {
+    const conversationThreadStore = createInMemoryConversationThreadStore()
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({ conversationThreadStore }),
+    )
+    const envelope = buildAppMentionEnvelope('Ev-record-activity')
+
+    await plugin.onEvent?.({ envelope }, envelope.event)
+
+    expect(conversationThreadStore.activities).toEqual([
+      {
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
+      },
+    ])
+  })
+
+  it('still accepts and dispatches the event when recording conversation thread activity fails', async () => {
+    const eventLogStore = createInMemoryEventLogStore()
+    const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
+    const conversationThreadStore = createInMemoryConversationThreadStore()
+    vi.spyOn(conversationThreadStore, 'recordActivity').mockReturnValue(
+      errAsync(
+        new ConversationThreadStoreError('conversation_thread upsert failed'),
+      ),
+    )
+    const plugin = createLlmAgentPlugin(
+      buildPluginOptions({
+        eventLogStore,
+        conversationThreadStore,
+        onAccepted,
+      }),
+    )
+    const envelope = buildAppMentionEnvelope('Ev-record-activity-failed')
+
+    expect(await plugin.onEvent?.({ envelope }, envelope.event)).toEqual(
+      ok(undefined),
+    )
+    expect(eventLogStore.records).toEqual([
+      {
+        slackEventId: 'Ev-record-activity-failed',
+        slackTeamId: 'T123',
+        slackChannelId: 'C123',
+        threadRootTs: '1700000000.000100',
         messageTs: '1700000000.000100',
       },
     ])

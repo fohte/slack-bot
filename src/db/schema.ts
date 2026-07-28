@@ -4,6 +4,7 @@ import {
   check,
   index,
   pgTable,
+  primaryKey,
   text,
   timestamp,
 } from 'drizzle-orm/pg-core'
@@ -79,5 +80,32 @@ export const a2aTask = pgTable(
       'a2a_task_state_check',
       sql`${table.state} in ('submitted','working','input-required','completed','failed','canceled','rejected')`,
     ),
+  ],
+)
+
+// Marks every thread the bot has ever accepted an event in, independent of
+// whether that turn's processing went on to succeed. Unlike event_log (which
+// rolls back its row when onAccepted fails so Slack's retry re-triggers
+// dispatch) and a2a_task (only written once the LLM calls a delegation
+// tool), this table is the one record that survives a crash between
+// acceptance and dispatch, so a later mention-less reply in the thread can
+// still be gated in as `thread_participation`.
+export const conversationThread = pgTable(
+  'conversation_thread',
+  {
+    slackTeamId: text('slack_team_id').notNull(),
+    slackChannelId: text('slack_channel_id').notNull(),
+    threadRootTs: text('thread_root_ts').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.slackTeamId, table.slackChannelId, table.threadRootTs],
+    }),
   ],
 )

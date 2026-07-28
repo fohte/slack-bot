@@ -51,6 +51,11 @@ export {
   setupConversationCheckpointSchema,
 } from '#plugins/llm-agent/conversation-agent/index'
 export type {
+  ConversationThreadRow,
+  ConversationThreadStore,
+} from '#plugins/llm-agent/conversation-thread-store'
+export { createConversationThreadStore } from '#plugins/llm-agent/conversation-thread-store'
+export type {
   TaskDispatcher,
   TaskDispatcherOptions,
 } from '#plugins/llm-agent/dispatcher'
