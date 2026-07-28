@@ -785,18 +785,9 @@ describe('createLlmAgentPlugin', () => {
     expect(onAccepted.mock.calls.length).toBe(1)
   })
 
-  it('accepts mention-less channel messages via the checkpoint hit when the conversation thread lookup fails', async () => {
+  it('gates mention-less channel messages when the conversation thread lookup fails and no other conversation state exists', async () => {
     const eventLogStore = createInMemoryEventLogStore()
     const onAccepted = vi.fn<(event: LlmAgentAcceptedEvent) => void>()
-    const checkpointer = new MemorySaver()
-    await seedCheckpoint(
-      checkpointer,
-      deriveConversationThreadId({
-        teamId: 'T123',
-        channelId: 'C123',
-        threadRootTs: '1700000000.000050',
-      }),
-    )
     const conversationThreadStore = createInMemoryConversationThreadStore()
     vi.spyOn(conversationThreadStore, 'find').mockReturnValue(
       errAsync(
@@ -806,32 +797,23 @@ describe('createLlmAgentPlugin', () => {
     const plugin = createLlmAgentPlugin(
       buildPluginOptions({
         eventLogStore,
-        checkpointer,
         conversationThreadStore,
         onAccepted,
       }),
     )
     const envelope = buildMessageEnvelope(
-      'Ev-thread-hit-conversation-lookup-down',
+      'Ev-thread-miss-conversation-lookup-down',
       {
         channel_type: 'channel',
-        text: 'follow up',
+        text: 'random chatter',
         thread_ts: '1700000000.000050',
       },
     )
 
     await plugin.onEvent?.({ envelope }, envelope.event)
 
-    expect(eventLogStore.records).toEqual([
-      {
-        slackEventId: 'Ev-thread-hit-conversation-lookup-down',
-        slackTeamId: 'T123',
-        slackChannelId: 'C123',
-        threadRootTs: '1700000000.000050',
-        messageTs: '1700000000.000100',
-      },
-    ])
-    expect(onAccepted.mock.calls.length).toBe(1)
+    expect(eventLogStore.records).toEqual([])
+    expect(onAccepted.mock.calls.length).toBe(0)
   })
 
   it('records conversation thread activity for an accepted event', async () => {

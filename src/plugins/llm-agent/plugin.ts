@@ -106,16 +106,21 @@ interface GateDecision {
 // gating logic below.
 const SUPPORTED_MESSAGE_SUBTYPES = new Set(['file_share'])
 
+interface ConversationStateLookups {
+  readonly checkpointer: BaseCheckpointSaver
+  readonly a2aTaskTracker: A2aTaskTracker
+  readonly conversationThreadStore: ConversationThreadStore
+}
+
 const decideForMessage = async (
   event: SlackEvent,
   fields: ExtractedFields,
   mentionPattern: RegExp,
-  checkpointer: BaseCheckpointSaver,
-  a2aTaskTracker: A2aTaskTracker,
-  conversationThreadStore: ConversationThreadStore,
+  lookups: ConversationStateLookups,
   teamId: string | undefined,
   logger: Logger,
 ): Promise<GateDecision> => {
+  const { checkpointer, a2aTaskTracker, conversationThreadStore } = lookups
   // Other subtypes (message_changed, message_deleted, channel_join, ...)
   // carry user-visible text in a nested field and Slack does not emit a
   // paired app_mention even when the edited body mentions the bot.
@@ -209,8 +214,15 @@ const decideForMessage = async (
         // eslint-disable-next-line neverthrow/must-use-result -- handled below via conversationThreadResult.isErr()/.isOk(), same reason as activeTaskResult above
         conversationThreadStore.find(threadKey),
       ])
+    // Logged unconditionally, ahead of every early return below: a failure
+    // here would otherwise go unnoticed for as long as some other lookup
+    // keeps hitting, only surfacing once this thread actually needs the
+    // fallback it should have provided.
     if (activeTaskResult.isErr()) {
       logLookupFailure('active_task', activeTaskResult.error)
+    }
+    if (conversationThreadResult.isErr()) {
+      logLookupFailure('conversation_thread', conversationThreadResult.error)
     }
     const activeTask = activeTaskResult.isOk()
       ? activeTaskResult.value
@@ -220,9 +232,6 @@ const decideForMessage = async (
     }
     if (checkpoint !== undefined) {
       return { accept: true, reason: 'thread_continuation' }
-    }
-    if (conversationThreadResult.isErr()) {
-      logLookupFailure('conversation_thread', conversationThreadResult.error)
     }
     const conversationThread = conversationThreadResult.isOk()
       ? conversationThreadResult.value
@@ -310,9 +319,7 @@ const runOnEvent = async (
       event,
       fields,
       mentionPattern,
-      checkpointer,
-      a2aTaskTracker,
-      conversationThreadStore,
+      { checkpointer, a2aTaskTracker, conversationThreadStore },
       ctx.envelope.team_id,
       logger,
     )

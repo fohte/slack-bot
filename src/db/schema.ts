@@ -90,6 +90,12 @@ export const a2aTask = pgTable(
 // tool), this table is the one record that survives a crash between
 // acceptance and dispatch, so a later mention-less reply in the thread can
 // still be gated in as `thread_participation`.
+//
+// No retention/prune job, unlike event_log and a2a_task: this intentionally
+// mirrors the LangGraph checkpointer's own unbounded retention, since
+// thread_continuation (backed by the checkpointer) already keeps a thread
+// eligible indefinitely, and thread_participation exists to cover the same
+// threads for the case where the checkpoint never got written.
 export const conversationThread = pgTable(
   'conversation_thread',
   {
@@ -104,7 +110,12 @@ export const conversationThread = pgTable(
       .defaultNow(),
   },
   (table) => [
+    // Explicit name: the default (`<table>_<col1>_<col2>_<col3>_pk`) exceeds
+    // PostgreSQL's 63-byte identifier limit for this column set and gets
+    // silently truncated, leaving drizzle's tracked snapshot out of sync
+    // with the actual constraint name in the catalog.
     primaryKey({
+      name: 'conversation_thread_pk',
       columns: [table.slackTeamId, table.slackChannelId, table.threadRootTs],
     }),
   ],
