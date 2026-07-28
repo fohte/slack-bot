@@ -14,6 +14,7 @@ const stubDeps = (): PluginDeps =>
     cfAccess: {} as PluginDeps['cfAccess'],
     eventLogStore: {} as PluginDeps['eventLogStore'],
     a2aTaskTracker: {} as PluginDeps['a2aTaskTracker'],
+    conversationThreadStore: {} as PluginDeps['conversationThreadStore'],
     inFlightTasks: {} as PluginDeps['inFlightTasks'],
   }) satisfies PluginDeps
 

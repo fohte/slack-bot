@@ -7,6 +7,7 @@ import { noopLogger } from '#logger/logger'
 import type { Plugin, SlackAppManifestCommand } from '#plugin/plugin'
 import type { A2aTaskTracker } from '#plugins/llm-agent/a2a-task-tracker'
 import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
+import type { ConversationThreadStore } from '#plugins/llm-agent/conversation-thread-store'
 import type {
   EventLogOutcome,
   EventLogStore,
@@ -35,6 +36,7 @@ export interface LlmAgentPluginOptions {
   readonly eventLogStore: EventLogStore
   readonly checkpointer: BaseCheckpointSaver
   readonly a2aTaskTracker: A2aTaskTracker
+  readonly conversationThreadStore: ConversationThreadStore
   readonly botUserId: string
   readonly logger?: Logger | undefined
   readonly onAccepted?:
@@ -86,6 +88,7 @@ type GateReason =
   | 'dm'
   | 'thread_continuation'
   | 'active_task_resumption'
+  | 'thread_participation'
   | 'mention_with_attachment'
   | 'duplicate_of_app_mention'
   | 'duplicate_of_message'
@@ -103,15 +106,21 @@ interface GateDecision {
 // gating logic below.
 const SUPPORTED_MESSAGE_SUBTYPES = new Set(['file_share'])
 
+interface ConversationStateLookups {
+  readonly checkpointer: BaseCheckpointSaver
+  readonly a2aTaskTracker: A2aTaskTracker
+  readonly conversationThreadStore: ConversationThreadStore
+}
+
 const decideForMessage = async (
   event: SlackEvent,
   fields: ExtractedFields,
   mentionPattern: RegExp,
-  checkpointer: BaseCheckpointSaver,
-  a2aTaskTracker: A2aTaskTracker,
+  lookups: ConversationStateLookups,
   teamId: string | undefined,
   logger: Logger,
 ): Promise<GateDecision> => {
+  const { checkpointer, a2aTaskTracker, conversationThreadStore } = lookups
   // Other subtypes (message_changed, message_deleted, channel_join, ...)
   // carry user-visible text in a nested field and Slack does not emit a
   // paired app_mention even when the edited body mentions the bot.
@@ -177,7 +186,7 @@ const decideForMessage = async (
     // hit — silently resurrecting the non-response bug this gate exists to
     // fix. Each lookup is caught individually and treated as a miss instead.
     const logLookupFailure = (
-      check: 'active_task' | 'checkpoint',
+      check: 'active_task' | 'checkpoint' | 'conversation_thread',
       error: unknown,
     ): void => {
       logger.warn(
@@ -192,18 +201,28 @@ const decideForMessage = async (
         'llm-agent gate lookup failed; treating as not found',
       )
     }
-    const [activeTaskResult, checkpoint] = await Promise.all([
-      // eslint-disable-next-line neverthrow/must-use-result -- handled below via activeTaskResult.isErr()/.isOk(); the plugin's static analysis can't trace a Result destructured out of Promise.all
-      a2aTaskTracker.findActiveInputRequired(threadKey),
-      checkpointer
-        .get({ configurable: { thread_id: threadId } })
-        .catch((error: unknown) => {
-          logLookupFailure('checkpoint', error)
-          return undefined
-        }),
-    ])
+    const [activeTaskResult, checkpoint, conversationThreadResult] =
+      await Promise.all([
+        // eslint-disable-next-line neverthrow/must-use-result -- handled below via activeTaskResult.isErr()/.isOk(); the plugin's static analysis can't trace a Result destructured out of Promise.all
+        a2aTaskTracker.findActiveInputRequired(threadKey),
+        checkpointer
+          .get({ configurable: { thread_id: threadId } })
+          .catch((error: unknown) => {
+            logLookupFailure('checkpoint', error)
+            return undefined
+          }),
+        // eslint-disable-next-line neverthrow/must-use-result -- handled below via conversationThreadResult.isErr()/.isOk(), same reason as activeTaskResult above
+        conversationThreadStore.find(threadKey),
+      ])
+    // Logged unconditionally, ahead of every early return below: a failure
+    // here would otherwise go unnoticed for as long as some other lookup
+    // keeps hitting, only surfacing once this thread actually needs the
+    // fallback it should have provided.
     if (activeTaskResult.isErr()) {
       logLookupFailure('active_task', activeTaskResult.error)
+    }
+    if (conversationThreadResult.isErr()) {
+      logLookupFailure('conversation_thread', conversationThreadResult.error)
     }
     const activeTask = activeTaskResult.isOk()
       ? activeTaskResult.value
@@ -213,6 +232,12 @@ const decideForMessage = async (
     }
     if (checkpoint !== undefined) {
       return { accept: true, reason: 'thread_continuation' }
+    }
+    const conversationThread = conversationThreadResult.isOk()
+      ? conversationThreadResult.value
+      : undefined
+    if (conversationThread !== undefined) {
+      return { accept: true, reason: 'thread_participation' }
     }
   }
 
@@ -255,7 +280,13 @@ const runOnEvent = async (
   logger: Logger,
   mentionPattern: RegExp,
 ): Promise<Result<void, unknown>> => {
-  const { eventLogStore, checkpointer, a2aTaskTracker, onAccepted } = options
+  const {
+    eventLogStore,
+    checkpointer,
+    a2aTaskTracker,
+    conversationThreadStore,
+    onAccepted,
+  } = options
   if (isBotMessage(event)) return ok(undefined)
 
   const eventId = ctx.envelope.event_id
@@ -288,8 +319,7 @@ const runOnEvent = async (
       event,
       fields,
       mentionPattern,
-      checkpointer,
-      a2aTaskTracker,
+      { checkpointer, a2aTaskTracker, conversationThreadStore },
       ctx.envelope.team_id,
       logger,
     )
@@ -334,6 +364,35 @@ const runOnEvent = async (
     return err(recordResult.error)
   }
   const outcome: EventLogOutcome = recordResult.value
+
+  // Unlike event_log, this row is never rolled back on a downstream failure
+  // (see the onAccepted error handling below), so it survives a crash
+  // between acceptance and dispatch and lets a later mention-less reply in
+  // the same thread still be gated in. Best-effort: a failure here only
+  // means that fallback path is unavailable for this thread, not that the
+  // current turn should be dropped.
+  if (
+    ctx.envelope.team_id !== undefined &&
+    fields.channel !== undefined &&
+    threadRootTs !== undefined
+  ) {
+    const activityResult = await conversationThreadStore.recordActivity({
+      slackTeamId: ctx.envelope.team_id,
+      slackChannelId: fields.channel,
+      threadRootTs,
+    })
+    if (activityResult.isErr()) {
+      logger.warn(
+        {
+          event: 'llm_agent_conversation_thread_record_failed',
+          event_type: event.type,
+          event_id: eventId,
+          err: activityResult.error,
+        },
+        'failed to record conversation thread activity',
+      )
+    }
+  }
 
   logger.info(
     {
