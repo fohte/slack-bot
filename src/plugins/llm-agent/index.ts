@@ -38,6 +38,7 @@ export type {
   Delegation,
   GenAiTracingMiddlewareOptions,
   ImageBlock,
+  ThreadContextForTurn,
 } from '#plugins/llm-agent/conversation-agent/index'
 export {
   CONVERSATION_CHECKPOINT_SCHEMA,
@@ -88,6 +89,11 @@ export type {
   EventLogStore,
 } from '#plugins/llm-agent/event-log-store'
 export { createEventLogStore } from '#plugins/llm-agent/event-log-store'
+export type {
+  InFlightTurnKey,
+  InFlightTurnRegistry,
+} from '#plugins/llm-agent/in-flight-turns'
+export { createInFlightTurnRegistry } from '#plugins/llm-agent/in-flight-turns'
 export type {
   CreateMcpToolsOptions,
   McpServerResolver,
@@ -142,12 +148,20 @@ export {
 export type { PostFinalResponseResult } from '#plugins/llm-agent/steps/post-final-response'
 export { postFinalResponse } from '#plugins/llm-agent/steps/post-final-response'
 export { DISPATCH_FAILURE_TEXT } from '#plugins/llm-agent/steps/report-dispatch-failure'
-export { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
+export {
+  resolveImageBlocks,
+  resolveThumbnail,
+  SINGLE_IMAGE_BYTE_CAP,
+} from '#plugins/llm-agent/steps/resolve-image-blocks'
 export type { ResumeResult } from '#plugins/llm-agent/steps/resume-active-task'
 export {
   RESUME_SEND_FAILURE_TEXT,
   resumeActiveTask,
 } from '#plugins/llm-agent/steps/resume-active-task'
+export {
+  EMPTY_THREAD_CONTEXT,
+  syncThreadContext,
+} from '#plugins/llm-agent/steps/sync-thread-context'
 export type {
   TaskReconcilerHandle,
   TaskReconcilerOptions,
@@ -161,3 +175,5 @@ export {
   TASK_RECONCILER_DEFAULT_INTERVAL_MS,
   TASK_RECONCILER_DEFAULT_RETENTION_MS,
 } from '#plugins/llm-agent/task-reconciler'
+export type { ThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
+export { createThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'

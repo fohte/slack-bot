@@ -5,6 +5,7 @@ export type {
   ConversationOutcome,
   CreateOpenCodeGoChatModelOptions,
   Delegation,
+  ThreadContextForTurn,
 } from '#plugins/llm-agent/conversation-agent/conversation-agent'
 export {
   createConversationAgent,

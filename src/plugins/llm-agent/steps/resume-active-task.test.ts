@@ -43,6 +43,7 @@ const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
     a2aTaskTracker: createFakeA2aTaskTracker(),
     eventLogStore: createScriptedEventLogStore(),
     slackClient: createStubSlackClient(),
+    botUserId: 'U_BOT',
     now: () => new Date('2026-01-01T00:05:00Z'),
     randomUUID: () => 'generated-id',
     ...overrides,

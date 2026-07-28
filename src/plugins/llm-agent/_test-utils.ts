@@ -112,6 +112,9 @@ export const createStubSlackClient = (): StubSlackClient => {
     async getFileInfo() {
       return notImplemented()
     },
+    async getConversationReplies() {
+      return notImplemented()
+    },
   } as StubSlackClient
 }
 
@@ -172,6 +175,7 @@ export const TEST_ENV: SlackEnvelope = {
   teamId: 'T1',
   channelId: 'C1',
   threadRootTs: '111.222',
+  triggerTs: '111.222',
   text: 'hello bot',
   images: [],
 }
@@ -217,11 +221,13 @@ export interface RecordingConversationAgent extends ConversationAgent {
 
 // Records every respond() call and replies with `reply(input)`, so tests
 // can assert on exactly what the dispatcher sent the conversation agent
-// without a real LangGraph/LLM call.
+// without a real LangGraph/LLM call. getThreadCursor defaults to cold start
+// (undefined); pass threadCursor to simulate an existing checkpoint.
 export const createFakeConversationAgent = (
   reply: (
     input: ConversationAgentInput,
   ) => ConversationOutcome | Promise<ConversationOutcome>,
+  options: { readonly threadCursor?: string | undefined } = {},
 ): RecordingConversationAgent => {
   const calls: ConversationAgentInput[] = []
   return {
@@ -234,6 +240,9 @@ export const createFakeConversationAgent = (
           error as
             ConversationThreadIdParseError | ConversationAgentInvokeError,
       )
+    },
+    getThreadCursor() {
+      return okAsync(options.threadCursor)
     },
   }
 }

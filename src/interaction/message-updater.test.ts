@@ -20,6 +20,7 @@ const buildMockClient = () => ({
   setAssistantThreadStatus: vi.fn(),
   downloadFile: vi.fn(),
   getFileInfo: vi.fn(),
+  getConversationReplies: vi.fn(),
 })
 
 describe('MessageUpdater (originalUpdater)', () => {

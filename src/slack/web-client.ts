@@ -8,6 +8,7 @@ import {
   type ChatPostMessageResponse,
   type ChatUpdateArguments,
   type ChatUpdateResponse,
+  type ConversationsRepliesResponse,
   type FilesInfoResponse,
   type ViewsOpenArguments,
   type ViewsOpenResponse,
@@ -21,6 +22,14 @@ import {
 
 import { SlackApiError } from '#types/errors'
 import type { SlackFile } from '#types/slack-payloads'
+
+// Neither type is re-exported from @slack/web-api's public entry point, only
+// nested inside ConversationsRepliesResponse, so they're derived here via
+// indexed access instead of a deep import into the package's dist layout.
+type MessageElement = NonNullable<
+  ConversationsRepliesResponse['messages']
+>[number]
+type FileElement = NonNullable<MessageElement['files']>[number]
 
 export interface ResponseUrlPayload {
   text?: string
@@ -44,6 +53,30 @@ export interface SlackFileDownload {
   readonly contentType: string | undefined
 }
 
+export interface SlackThreadReplyMessage {
+  readonly ts: string | undefined
+  readonly userId: string | undefined
+  readonly botId: string | undefined
+  readonly text: string | undefined
+  readonly files: readonly SlackFile[]
+}
+
+export interface GetConversationRepliesArgs {
+  readonly channel: string
+  readonly ts: string
+  // Both bounds are exclusive (Slack's `inclusive` param defaults to false).
+  readonly oldest?: string | undefined
+  readonly latest?: string | undefined
+  readonly cursor?: string | undefined
+  readonly limit?: number | undefined
+}
+
+export interface ConversationRepliesPage {
+  readonly messages: readonly SlackThreadReplyMessage[]
+  readonly hasMore: boolean
+  readonly nextCursor: string | undefined
+}
+
 export interface SlackWebClient {
   postMessage(arg: ChatPostMessageArguments): Promise<ChatPostMessageResponse>
   updateMessage(arg: ChatUpdateArguments): Promise<ChatUpdateResponse>
@@ -64,6 +97,11 @@ export interface SlackWebClient {
   // Throws SlackApiError (e.g. file_not_found) like every other method here;
   // callers resolving loosely-parsed ID references decide whether to swallow it.
   getFileInfo(fileId: string): Promise<SlackFile | undefined>
+  // Requires channels:history (or groups:history/im:history/mpim:history for
+  // private channels/DMs/MPDMs).
+  getConversationReplies(
+    args: GetConversationRepliesArgs,
+  ): Promise<ConversationRepliesPage>
 }
 
 export interface SlackWebClientOptions {
@@ -102,39 +140,67 @@ export const createSlackWebClient = (
       ),
     downloadFile: (url) => downloadSlackFile(fetchImpl, options.botToken, url),
     getFileInfo: (fileId) => getSlackFileInfo(client, fileId),
+    getConversationReplies: (args) => getConversationReplies(client, args),
   }
 }
+
+// Structural shape shared by FilesInfoResponse['file'] and FileElement (two
+// independently SDK-generated types for the same underlying Slack file
+// object), so both toSlackFile and toThreadReplyFile can map through one
+// field list instead of keeping two copies in sync.
+interface SlackFileFields {
+  readonly id?: string
+  readonly name?: string
+  readonly title?: string
+  readonly mimetype?: string
+  readonly filetype?: string
+  readonly size?: number
+  readonly url_private?: string
+  readonly url_private_download?: string
+  readonly permalink?: string
+  readonly thumb_64?: string
+  readonly thumb_80?: string
+  readonly thumb_160?: string
+  readonly thumb_360?: string
+  readonly thumb_480?: string
+  readonly thumb_720?: string
+  readonly thumb_800?: string
+  readonly thumb_960?: string
+  readonly thumb_1024?: string
+  readonly channels?: readonly string[]
+  readonly groups?: readonly string[]
+  readonly ims?: readonly string[]
+}
+
+const toSlackFileFields = (file: SlackFileFields): SlackFile => ({
+  id: file.id,
+  name: file.name,
+  title: file.title,
+  mimetype: file.mimetype,
+  filetype: file.filetype,
+  size: file.size,
+  url_private: file.url_private,
+  url_private_download: file.url_private_download,
+  permalink: file.permalink,
+  thumb_64: file.thumb_64,
+  thumb_80: file.thumb_80,
+  thumb_160: file.thumb_160,
+  thumb_360: file.thumb_360,
+  thumb_480: file.thumb_480,
+  thumb_720: file.thumb_720,
+  thumb_800: file.thumb_800,
+  thumb_960: file.thumb_960,
+  thumb_1024: file.thumb_1024,
+  channels: file.channels,
+  groups: file.groups,
+  ims: file.ims,
+})
 
 const toSlackFile = (
   // The SDK types this as `File | undefined`, but the raw Slack API can
   // return `file: null` in some error conditions, so `null` is handled too.
   file: FilesInfoResponse['file'] | null,
-): SlackFile | undefined => {
-  if (file == null) return undefined
-  return {
-    id: file.id,
-    name: file.name,
-    title: file.title,
-    mimetype: file.mimetype,
-    filetype: file.filetype,
-    size: file.size,
-    url_private: file.url_private,
-    url_private_download: file.url_private_download,
-    permalink: file.permalink,
-    thumb_64: file.thumb_64,
-    thumb_80: file.thumb_80,
-    thumb_160: file.thumb_160,
-    thumb_360: file.thumb_360,
-    thumb_480: file.thumb_480,
-    thumb_720: file.thumb_720,
-    thumb_800: file.thumb_800,
-    thumb_960: file.thumb_960,
-    thumb_1024: file.thumb_1024,
-    channels: file.channels,
-    groups: file.groups,
-    ims: file.ims,
-  }
-}
+): SlackFile | undefined => (file == null ? undefined : toSlackFileFields(file))
 
 const getSlackFileInfo = async (
   client: WebClient,
@@ -144,6 +210,40 @@ const getSlackFileInfo = async (
     client.files.info({ file: fileId }),
   )
   return toSlackFile(result.file)
+}
+
+const toThreadReplyFile = (file: FileElement): SlackFile =>
+  toSlackFileFields(file)
+
+const toThreadReplyMessage = (
+  message: MessageElement,
+): SlackThreadReplyMessage => ({
+  ts: message.ts,
+  userId: message.user,
+  botId: message.bot_id,
+  text: message.text,
+  files: (message.files ?? []).map(toThreadReplyFile),
+})
+
+const getConversationReplies = async (
+  client: WebClient,
+  args: GetConversationRepliesArgs,
+): Promise<ConversationRepliesPage> => {
+  const result = await callMethod('conversations.replies', () =>
+    client.conversations.replies({
+      channel: args.channel,
+      ts: args.ts,
+      ...(args.oldest !== undefined ? { oldest: args.oldest } : {}),
+      ...(args.latest !== undefined ? { latest: args.latest } : {}),
+      ...(args.cursor !== undefined ? { cursor: args.cursor } : {}),
+      ...(args.limit !== undefined ? { limit: args.limit } : {}),
+    }),
+  )
+  return {
+    messages: (result.messages ?? []).map(toThreadReplyMessage),
+    hasMore: result.has_more ?? false,
+    nextCursor: result.response_metadata?.next_cursor,
+  }
 }
 
 // Groups every Slack Web API / response_url failure under one Sentry issue

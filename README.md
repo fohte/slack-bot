@@ -55,6 +55,7 @@ Perform these steps once per Slack workspace.
 5. Open **Interactivity & Shortcuts**, enable interactivity, and set the Request URL to `https://<your-host>/api/slack/interactivity`.
 6. Open **Event Subscriptions** (only required when a plugin uses it), enable events, and set the Request URL to `https://<your-host>/api/slack/events`. Slack sends a `url_verification` challenge on save; the bot answers it automatically.
 7. To enable the "is thinking…" loading indicator that the `llm-agent` plugin shows on accepted events, open **Agents & AI Apps**, enable the feature, and add the `assistant:write` bot scope under **OAuth & Permissions**. The indicator is set with [`assistant.threads.setStatus`](https://api.slack.com/methods/assistant.threads.setStatus), which only works inside an assistant thread (the split-view container) — calls from regular channels fail with `channel_not_supported` and are swallowed with a warn log, so leaving this step out only disables the indicator.
+8. The `llm-agent` plugin also needs `files:read` (to resolve and download image attachments via `files.info`) and `channels:history` (to read prior thread messages via `conversations.replies` for context sync). Add `groups:history`, `im:history`, and/or `mpim:history` as well if the bot should be mentioned in private channels, DMs, or group DMs.
 
 ## Local development
 

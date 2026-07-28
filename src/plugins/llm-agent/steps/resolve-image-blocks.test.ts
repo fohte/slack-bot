@@ -24,6 +24,7 @@ const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
     a2aTaskTracker: createFakeA2aTaskTracker(),
     eventLogStore: createScriptedEventLogStore(),
     slackClient: createStubSlackClient(),
+    botUserId: 'U_BOT',
     ...overrides,
   })
 

@@ -7,7 +7,7 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base'
 import { errAsync } from 'neverthrow'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   cardFor,
@@ -30,10 +30,14 @@ import {
 } from '#plugins/llm-agent/dispatcher'
 import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
 import { DISPATCH_FAILURE_TEXT } from '#plugins/llm-agent/steps/report-dispatch-failure'
+import { EMPTY_THREAD_CONTEXT } from '#plugins/llm-agent/steps/sync-thread-context'
 import { createDeferred } from '#server/_test-utils'
 import { createInFlightTasks } from '#server/in-flight-tasks'
 import type { SlackWebClient } from '#slack/web-client'
-import { A2aTaskTrackerError } from '#types/errors'
+import {
+  A2aTaskTrackerError,
+  ConversationAgentGetThreadCursorError,
+} from '#types/errors'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
@@ -91,6 +95,7 @@ const baseOptions = (
   a2aTaskTracker: createFakeA2aTaskTracker(),
   eventLogStore: createScriptedEventLogStore(),
   slackClient: createStubSlackClient(),
+  botUserId: 'U_BOT',
   logger: noopLogger,
   ...overrides,
 })
@@ -115,6 +120,7 @@ describe('envelopeFromAccepted', () => {
       teamId: 'T1',
       channelId: 'C1',
       threadRootTs: '111.222',
+      triggerTs: '111.222',
       text: 'hello bot',
       images: [],
     })
@@ -131,12 +137,13 @@ describe('envelopeFromAccepted', () => {
       teamId: 'T1',
       channelId: 'C1',
       threadRootTs: '111.222',
+      triggerTs: '111.222',
       text: 'please help',
       images: [],
     })
   })
 
-  it('uses thread_ts when present so replies stay anchored to the original thread root', () => {
+  it('uses thread_ts when present so replies stay anchored to the original thread root, keeping the reply its own triggerTs', () => {
     expect(
       envelopeFromAccepted(
         acceptedMention({ ts: '333.444', thread_ts: '111.222' }),
@@ -147,6 +154,7 @@ describe('envelopeFromAccepted', () => {
       teamId: 'T1',
       channelId: 'C1',
       threadRootTs: '111.222',
+      triggerTs: '333.444',
       text: 'hello bot',
       images: [],
     })
@@ -197,6 +205,7 @@ describe('envelopeFromAccepted', () => {
       teamId: 'T1',
       channelId: 'C1',
       threadRootTs: '111.222',
+      triggerTs: '111.222',
       text: 'this is what I had for lunch',
       images: [{ id: 'F1', mimetype: 'image/png' }],
     })
@@ -366,6 +375,8 @@ describe('createTaskDispatcher', () => {
         userText: 'hello bot',
         images: [],
         slackEventId: 'Ev1',
+        triggerTs: '111.222',
+        threadContext: EMPTY_THREAD_CONTEXT,
       },
     ])
     expect(slackClient.calls).toEqual([
@@ -392,6 +403,34 @@ describe('createTaskDispatcher', () => {
         text: '',
         blocks: undefined,
         loadingMessages: undefined,
+      },
+    ])
+  })
+
+  it('falls back to an empty thread context and still responds when getThreadCursor fails', async () => {
+    const slackClient = createStubSlackClient()
+    const conversationAgent = createFakeConversationAgent(() => ({
+      text: 'sure, here is the answer',
+      delegations: [],
+    }))
+    conversationAgent.getThreadCursor = () =>
+      errAsync(new ConversationAgentGetThreadCursorError('boom'))
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({ slackClient, conversationAgent, inFlightTasks }),
+    )
+
+    await dispatch(acceptedMention())
+    await inFlightTasks.waitForIdle()
+
+    expect(conversationAgent.calls).toEqual([
+      {
+        threadId: 'T1:C1:111.222',
+        userText: 'hello bot',
+        images: [],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+        threadContext: EMPTY_THREAD_CONTEXT,
       },
     ])
   })
@@ -555,9 +594,11 @@ describe('createTaskDispatcher', () => {
     const dispatch = createTaskDispatcher(baseOptions({ conversationAgent }))
 
     // conversationAgent never resolves; if the dispatcher were not
-    // backgrounding it, this await would hang the test.
+    // backgrounding it, this await would hang the test. The background work
+    // now runs a thread-context sync ahead of respond(), so reaching that
+    // call takes a few more microtask ticks than dispatch() itself awaits.
     await dispatch(acceptedMention())
-    expect(conversationAgent.calls).toHaveLength(1)
+    await vi.waitFor(() => expect(conversationAgent.calls).toHaveLength(1))
   })
 })
 

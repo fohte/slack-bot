@@ -7,7 +7,10 @@ import {
   INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
 } from '#plugins/llm-agent/assistant-status'
-import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/index'
+import type {
+  ImageBlock,
+  ThreadContextForTurn,
+} from '#plugins/llm-agent/conversation-agent/index'
 import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   DispatcherDeps,
@@ -22,11 +25,19 @@ import {
   isImageFile,
   stripInlineFileIds,
 } from '#plugins/llm-agent/files'
+import type { InFlightTurnRegistry } from '#plugins/llm-agent/in-flight-turns'
+import { createInFlightTurnRegistry } from '#plugins/llm-agent/in-flight-turns'
 import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
 import { postFinalResponse } from '#plugins/llm-agent/steps/post-final-response'
 import { reportDispatchFailure } from '#plugins/llm-agent/steps/report-dispatch-failure'
 import { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
 import { resumeActiveTask } from '#plugins/llm-agent/steps/resume-active-task'
+import {
+  EMPTY_THREAD_CONTEXT,
+  syncThreadContext,
+} from '#plugins/llm-agent/steps/sync-thread-context'
+import type { ThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
+import { createThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
 import type { InFlightTasks } from '#server/in-flight-tasks'
 import type { SlackWebClient } from '#slack/web-client'
 import type { SlackFile } from '#types/slack-payloads'
@@ -122,6 +133,9 @@ export const envelopeFromAccepted = (
     teamId,
     channelId: channel,
     threadRootTs,
+    // ts of the reply message that triggered this turn; falls back to
+    // threadRootTs when fields.ts is absent.
+    triggerTs: fields.ts ?? threadRootTs,
     text: stripMentionPrefix(fields.text ?? ''),
     images: fields.images,
   }
@@ -227,21 +241,58 @@ const threadKeyFor = (env: SlackEnvelope): ThreadKey => ({
   threadRootTs: env.threadRootTs,
 })
 
+// A getThreadCursor failure means the checkpoint state (and therefore the
+// safe fetch range) is unknown, so the sync is skipped entirely rather than
+// guessed at — same "context degradation over reply failure" tradeoff as a
+// conversations.replies failure inside syncThreadContext itself.
+const resolveThreadContextForTurn = async (
+  env: SlackEnvelope,
+  resolved: ResolvedDispatcherDeps,
+  threadId: string,
+  inFlightTurns: InFlightTurnRegistry,
+): Promise<ThreadContextForTurn> => {
+  const cursorResult =
+    await resolved.conversationAgent.getThreadCursor(threadId)
+  if (cursorResult.isErr()) {
+    resolved.logger.warn(
+      {
+        event: 'llm_agent_thread_context_cursor_failed',
+        event_id: env.eventId,
+        err: cursorResult.error,
+      },
+      'failed to resolve thread context cursor; continuing without injection',
+    )
+    return EMPTY_THREAD_CONTEXT
+  }
+  return syncThreadContext(resolved, env, cursorResult.value, (key) =>
+    inFlightTurns.has(key),
+  )
+}
+
 const respondWithConversationAgent = async (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,
   images: readonly ImageBlock[],
+  inFlightTurns: InFlightTurnRegistry,
 ): Promise<string> => {
   const threadId = deriveConversationThreadId({
     teamId: env.teamId,
     channelId: env.channelId,
     threadRootTs: env.threadRootTs,
   })
+  const threadContext = await resolveThreadContextForTurn(
+    env,
+    resolved,
+    threadId,
+    inFlightTurns,
+  )
   const outcomeResult = await resolved.conversationAgent.respond({
     threadId,
     userText: env.text,
     images,
     slackEventId: env.eventId,
+    triggerTs: env.triggerTs,
+    threadContext,
   })
   // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for runMentionInBackground's catch below to handle uniformly
   if (outcomeResult.isErr()) throw outcomeResult.error
@@ -263,7 +314,18 @@ export const runMentionInBackground = async (
   activeTask: A2aTaskRow | undefined,
   resolved: ResolvedDispatcherDeps,
   logger: Logger,
+  inFlightTurns: InFlightTurnRegistry,
+  threadTurnQueue: ThreadTurnQueue,
 ): Promise<void> => {
+  // Marked in flight only from here, not from dispatch entry: a concurrent
+  // turn's sync-thread-context call issued while this one is still resolving
+  // inline images / setting the status indicator / checking for an active
+  // task won't see this key as in flight yet, and may inject this message's
+  // content. threadTurnQueue below still guarantees this turn's own
+  // checkpoint write survives, so the worst case is that duplicate
+  // injection, which the design already accepts as non-fatal.
+  const turnKey = { channelId: env.channelId, ts: env.triggerTs }
+  inFlightTurns.start(turnKey)
   // eslint-disable-next-line no-restricted-syntax -- boundary: fire-and-forget background execution; catches both Result errors (converted to throws below) and genuinely unexpected throws from any step, per the doc comment above
   try {
     const imagesResult = await resolveImageBlocks(resolved, env)
@@ -273,7 +335,20 @@ export const runMentionInBackground = async (
     const text =
       activeTask !== undefined
         ? (await resumeActiveTask(env, activeTask, resolved, images)).text
-        : await respondWithConversationAgent(env, resolved, images)
+        : await threadTurnQueue.run(
+            deriveConversationThreadId({
+              teamId: env.teamId,
+              channelId: env.channelId,
+              threadRootTs: env.threadRootTs,
+            }),
+            () =>
+              respondWithConversationAgent(
+                env,
+                resolved,
+                images,
+                inFlightTurns,
+              ),
+          )
     const postResult = await postFinalResponse(env, text, resolved)
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (postResult.isErr()) throw postResult.error
@@ -287,6 +362,8 @@ export const runMentionInBackground = async (
       'llm-agent mention processing failed',
     )
     await reportDispatchFailure(env, resolved)
+  } finally {
+    inFlightTurns.finish(turnKey)
   }
 }
 
@@ -296,6 +373,8 @@ export const createTaskDispatcher = (
   const logger = options.logger ?? noopLogger
   const tracer = trace.getTracer(TRACER_NAME)
   const resolved = resolveDeps(options)
+  const inFlightTurns = createInFlightTurnRegistry()
+  const threadTurnQueue = createThreadTurnQueue()
   return async (accepted) => {
     const baseEnv = envelopeFromAccepted(accepted, logger)
     if (baseEnv === undefined) return
@@ -343,6 +422,8 @@ export const createTaskDispatcher = (
             activeTask,
             resolved,
             logger,
+            inFlightTurns,
+            threadTurnQueue,
           )
           void options.inFlightTasks?.track(mentionCompletion)
         } catch (err) {
