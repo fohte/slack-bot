@@ -144,48 +144,35 @@ export const createSlackWebClient = (
   }
 }
 
-const toSlackFile = (
-  // The SDK types this as `File | undefined`, but the raw Slack API can
-  // return `file: null` in some error conditions, so `null` is handled too.
-  file: FilesInfoResponse['file'] | null,
-): SlackFile | undefined => {
-  if (file == null) return undefined
-  return {
-    id: file.id,
-    name: file.name,
-    title: file.title,
-    mimetype: file.mimetype,
-    filetype: file.filetype,
-    size: file.size,
-    url_private: file.url_private,
-    url_private_download: file.url_private_download,
-    permalink: file.permalink,
-    thumb_64: file.thumb_64,
-    thumb_80: file.thumb_80,
-    thumb_160: file.thumb_160,
-    thumb_360: file.thumb_360,
-    thumb_480: file.thumb_480,
-    thumb_720: file.thumb_720,
-    thumb_800: file.thumb_800,
-    thumb_960: file.thumb_960,
-    thumb_1024: file.thumb_1024,
-    channels: file.channels,
-    groups: file.groups,
-    ims: file.ims,
-  }
+// Structural shape shared by FilesInfoResponse['file'] and FileElement (two
+// independently SDK-generated types for the same underlying Slack file
+// object), so both toSlackFile and toThreadReplyFile can map through one
+// field list instead of keeping two copies in sync.
+interface SlackFileFields {
+  readonly id?: string
+  readonly name?: string
+  readonly title?: string
+  readonly mimetype?: string
+  readonly filetype?: string
+  readonly size?: number
+  readonly url_private?: string
+  readonly url_private_download?: string
+  readonly permalink?: string
+  readonly thumb_64?: string
+  readonly thumb_80?: string
+  readonly thumb_160?: string
+  readonly thumb_360?: string
+  readonly thumb_480?: string
+  readonly thumb_720?: string
+  readonly thumb_800?: string
+  readonly thumb_960?: string
+  readonly thumb_1024?: string
+  readonly channels?: readonly string[]
+  readonly groups?: readonly string[]
+  readonly ims?: readonly string[]
 }
 
-const getSlackFileInfo = async (
-  client: WebClient,
-  fileId: string,
-): Promise<SlackFile | undefined> => {
-  const result = await callMethod('files.info', () =>
-    client.files.info({ file: fileId }),
-  )
-  return toSlackFile(result.file)
-}
-
-const toThreadReplyFile = (file: FileElement): SlackFile => ({
+const toSlackFileFields = (file: SlackFileFields): SlackFile => ({
   id: file.id,
   name: file.name,
   title: file.title,
@@ -208,6 +195,25 @@ const toThreadReplyFile = (file: FileElement): SlackFile => ({
   groups: file.groups,
   ims: file.ims,
 })
+
+const toSlackFile = (
+  // The SDK types this as `File | undefined`, but the raw Slack API can
+  // return `file: null` in some error conditions, so `null` is handled too.
+  file: FilesInfoResponse['file'] | null,
+): SlackFile | undefined => (file == null ? undefined : toSlackFileFields(file))
+
+const getSlackFileInfo = async (
+  client: WebClient,
+  fileId: string,
+): Promise<SlackFile | undefined> => {
+  const result = await callMethod('files.info', () =>
+    client.files.info({ file: fileId }),
+  )
+  return toSlackFile(result.file)
+}
+
+const toThreadReplyFile = (file: FileElement): SlackFile =>
+  toSlackFileFields(file)
 
 const toThreadReplyMessage = (
   message: MessageElement,

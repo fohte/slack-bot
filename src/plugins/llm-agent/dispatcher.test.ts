@@ -34,7 +34,10 @@ import { EMPTY_THREAD_CONTEXT } from '#plugins/llm-agent/steps/sync-thread-conte
 import { createDeferred } from '#server/_test-utils'
 import { createInFlightTasks } from '#server/in-flight-tasks'
 import type { SlackWebClient } from '#slack/web-client'
-import { A2aTaskTrackerError } from '#types/errors'
+import {
+  A2aTaskTrackerError,
+  ConversationAgentGetThreadCursorError,
+} from '#types/errors'
 import type {
   SlackAppMentionEvent,
   SlackEventCallback,
@@ -400,6 +403,34 @@ describe('createTaskDispatcher', () => {
         text: '',
         blocks: undefined,
         loadingMessages: undefined,
+      },
+    ])
+  })
+
+  it('falls back to an empty thread context and still responds when getThreadCursor fails', async () => {
+    const slackClient = createStubSlackClient()
+    const conversationAgent = createFakeConversationAgent(() => ({
+      text: 'sure, here is the answer',
+      delegations: [],
+    }))
+    conversationAgent.getThreadCursor = () =>
+      errAsync(new ConversationAgentGetThreadCursorError('boom'))
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({ slackClient, conversationAgent, inFlightTasks }),
+    )
+
+    await dispatch(acceptedMention())
+    await inFlightTasks.waitForIdle()
+
+    expect(conversationAgent.calls).toEqual([
+      {
+        threadId: 'T1:C1:111.222',
+        userText: 'hello bot',
+        images: [],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+        threadContext: EMPTY_THREAD_CONTEXT,
       },
     ])
   })

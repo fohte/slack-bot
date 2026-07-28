@@ -180,10 +180,13 @@ const isThreadCursorTag = (value: unknown): value is ThreadCursorTag =>
 
 // Scans every HumanMessage the checkpointer has accumulated for a thread and
 // returns the max ts across their turnTs/contextMaxTs tags (see respond()'s
-// additional_kwargs above), or undefined when none are tagged yet (cold
-// start). Takes the raw (unknown-typed) messages state value rather than
-// BaseMessage[] so the LangGraph StateSnapshot's `any`-typed `values` field
-// never needs an unsafe cast at the call site.
+// additional_kwargs above), or undefined when none are tagged yet. A thread
+// with real HumanMessage history predating this tagging (i.e. checkpointed
+// before this feature shipped) also reads as untagged, so its next turn
+// treats the whole thread as cold-start: everything gets refetched and
+// re-injected as thread_context once, duplicating content the checkpoint
+// already has. Self-limiting to that one turn per pre-existing thread, so no
+// backfill migration is done for it.
 const computeThreadCursor = (messagesValue: unknown): string | undefined => {
   if (!Array.isArray(messagesValue)) return undefined
   let cursor: string | undefined

@@ -21,6 +21,7 @@ import type {
   SlackThreadReplyMessage,
   SlackWebClient,
 } from '#slack/web-client'
+import { SlackImageThumbnailUnavailableError } from '#types/errors'
 
 interface LogEntry {
   readonly level: 'info' | 'warn'
@@ -429,11 +430,29 @@ describe('syncThreadContext', () => {
       images: [],
       contextMaxTs: '300.000',
     })
-    expect(
-      logger.entries
-        .filter((e) => e.level === 'warn')
-        .map((e) => e.payload['event']),
-    ).toEqual(['llm_agent_thread_context_image_unavailable'])
+    expect(logger.entries).toEqual([
+      {
+        level: 'warn',
+        payload: {
+          event: 'llm_agent_thread_context_image_unavailable',
+          event_id: ENV.eventId,
+          slack_file_id: 'F1',
+          err: new SlackImageThumbnailUnavailableError(
+            'slack file F1 has no thumb_* variant that fits the 512000-byte cap (checked 0 candidate size(s))',
+          ),
+        },
+      },
+      {
+        level: 'info',
+        payload: {
+          event: 'llm_agent_thread_context_synced',
+          event_id: ENV.eventId,
+          injected_message_count: 1,
+          injected_image_count: 0,
+          truncated: false,
+        },
+      },
+    ])
   })
 
   it('paginates until has_more is false, combining every page', async () => {

@@ -95,8 +95,8 @@ interface DedupContext {
 // (isBotMessage gates them out in plugin.ts), so this injection is the only
 // way they ever reach the LLM. A human message currently being processed by
 // a concurrent turn is excluded to avoid injecting content its own turn is
-// about to write to the checkpoint itself; an undetermined ts is included
-// rather than risk dropping real context.
+// about to write to the checkpoint itself. A message with no ts is excluded
+// outright: neither ordering nor in-flight dedup can be determined for it.
 const shouldInject = (
   message: SlackThreadReplyMessage,
   ctx: DedupContext,

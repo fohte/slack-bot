@@ -632,6 +632,31 @@ describe('createConversationAgent', () => {
       expect(await agent.getThreadCursor(threadId)).toEqual(ok('111.222'))
     })
 
+    // contextMaxTs never legitimately exceeds its own turn's triggerTs (the
+    // fetch range that produces it is always upper-bounded by the trigger),
+    // so a realistic call can't distinguish "cursor reads turnTs" from
+    // "cursor reads max(turnTs, contextMaxTs)". This deliberately passes an
+    // out-of-range contextMaxTs to prove computeThreadCursor actually folds
+    // it in, not just turnTs.
+    it("folds a turn's contextMaxTs into the cursor alongside turnTs", async () => {
+      const agent = createConversationAgent({
+        model: createRecordingChatModel(() => 'ok'),
+        checkpointer: new MemorySaver(),
+      })
+      const threadId = 'T1:C1:111.222'
+
+      await agent.respond({
+        threadId,
+        userText: 'hi',
+        images: [],
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+        threadContext: { text: undefined, images: [], contextMaxTs: '999.999' },
+      })
+
+      expect(await agent.getThreadCursor(threadId)).toEqual(ok('999.999'))
+    })
+
     it('advances across multiple turns to the newest turnTs', async () => {
       const agent = createConversationAgent({
         model: createRecordingChatModel(() => 'ok'),
