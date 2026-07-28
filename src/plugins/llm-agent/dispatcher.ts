@@ -36,6 +36,8 @@ import {
   EMPTY_THREAD_CONTEXT,
   syncThreadContext,
 } from '#plugins/llm-agent/steps/sync-thread-context'
+import type { ThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
+import { createThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
 import type { InFlightTasks } from '#server/in-flight-tasks'
 import type { SlackWebClient } from '#slack/web-client'
 import type { SlackFile } from '#types/slack-payloads'
@@ -131,9 +133,8 @@ export const envelopeFromAccepted = (
     teamId,
     channelId: channel,
     threadRootTs,
-    // Falls back to threadRootTs when fields.ts is itself undefined (never
-    // observed in practice, since threadRootTs already derives from it when
-    // thread_ts is absent), keeping this a plain string like every other id.
+    // ts of the reply message that triggered this turn; falls back to
+    // threadRootTs when fields.ts is absent.
     triggerTs: fields.ts ?? threadRootTs,
     text: stripMentionPrefix(fields.text ?? ''),
     images: fields.images,
@@ -314,7 +315,15 @@ export const runMentionInBackground = async (
   resolved: ResolvedDispatcherDeps,
   logger: Logger,
   inFlightTurns: InFlightTurnRegistry,
+  threadTurnQueue: ThreadTurnQueue,
 ): Promise<void> => {
+  // Marked in flight only from here, not from dispatch entry: a concurrent
+  // turn's sync-thread-context call issued while this one is still resolving
+  // inline images / setting the status indicator / checking for an active
+  // task won't see this key as in flight yet, and may inject this message's
+  // content. threadTurnQueue below still guarantees this turn's own
+  // checkpoint write survives, so the worst case is that duplicate
+  // injection, which the design already accepts as non-fatal.
   const turnKey = { channelId: env.channelId, ts: env.triggerTs }
   inFlightTurns.start(turnKey)
   // eslint-disable-next-line no-restricted-syntax -- boundary: fire-and-forget background execution; catches both Result errors (converted to throws below) and genuinely unexpected throws from any step, per the doc comment above
@@ -326,11 +335,19 @@ export const runMentionInBackground = async (
     const text =
       activeTask !== undefined
         ? (await resumeActiveTask(env, activeTask, resolved, images)).text
-        : await respondWithConversationAgent(
-            env,
-            resolved,
-            images,
-            inFlightTurns,
+        : await threadTurnQueue.run(
+            deriveConversationThreadId({
+              teamId: env.teamId,
+              channelId: env.channelId,
+              threadRootTs: env.threadRootTs,
+            }),
+            () =>
+              respondWithConversationAgent(
+                env,
+                resolved,
+                images,
+                inFlightTurns,
+              ),
           )
     const postResult = await postFinalResponse(env, text, resolved)
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
@@ -357,6 +374,7 @@ export const createTaskDispatcher = (
   const tracer = trace.getTracer(TRACER_NAME)
   const resolved = resolveDeps(options)
   const inFlightTurns = createInFlightTurnRegistry()
+  const threadTurnQueue = createThreadTurnQueue()
   return async (accepted) => {
     const baseEnv = envelopeFromAccepted(accepted, logger)
     if (baseEnv === undefined) return
@@ -405,6 +423,7 @@ export const createTaskDispatcher = (
             resolved,
             logger,
             inFlightTurns,
+            threadTurnQueue,
           )
           void options.inFlightTasks?.track(mentionCompletion)
         } catch (err) {

@@ -170,3 +170,5 @@ export {
   TASK_RECONCILER_DEFAULT_INTERVAL_MS,
   TASK_RECONCILER_DEFAULT_RETENTION_MS,
 } from '#plugins/llm-agent/task-reconciler'
+export type { ThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
+export { createThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
