@@ -61,8 +61,16 @@ interface GenAiToolCallResponsePart {
   readonly response: string
 }
 
+interface GenAiReasoningPart {
+  readonly type: 'reasoning'
+  readonly content: string
+}
+
 type GenAiMessagePart =
-  GenAiTextPart | GenAiToolCallPart | GenAiToolCallResponsePart
+  | GenAiTextPart
+  | GenAiToolCallPart
+  | GenAiToolCallResponsePart
+  | GenAiReasoningPart
 
 interface GenAiMessage {
   readonly role: string
@@ -175,13 +183,28 @@ const usageTokensOf = (message: BaseMessage): UsageTokens | undefined => {
   return { inputTokens, outputTokens }
 }
 
+// @langchain/openai reads the upstream provider's `reasoning_content`
+// response field (set when the model call requests
+// `modelKwargs: { reasoning_split: true }`) into this field rather than
+// `message.content`, so contentToGenAiParts alone never sees it.
+const reasoningPartsOf = (message: AIMessage): GenAiReasoningPart[] => {
+  const reasoningContent = message.additional_kwargs['reasoning_content']
+  return typeof reasoningContent === 'string' && reasoningContent.length > 0
+    ? [{ type: 'reasoning', content: reasoningContent }]
+    : []
+}
+
 const outputMessagesOf = (message: AIMessage): GenAiOutputMessage[] => {
   const base = messageToGenAiMessage(message)
+  const withReasoning = {
+    ...base,
+    parts: [...reasoningPartsOf(message), ...base.parts],
+  }
   const finishReason = responseMetadataString(message, 'finish_reason')
   return [
     finishReason === undefined
-      ? base
-      : { ...base, finish_reason: finishReason },
+      ? withReasoning
+      : { ...withReasoning, finish_reason: finishReason },
   ]
 }
 
@@ -238,7 +261,17 @@ export const createGenAiTracingMiddleware = (
       if (captureMessageContent) {
         // eslint-disable-next-line no-restricted-syntax -- boundary: input-message capture must not fail the model call itself; a serialization error is recorded on the span and swallowed
         try {
-          const inputMessages = request.messages.map(messageToGenAiMessage)
+          // request.systemMessage is a separate field from request.messages
+          // (createAgent's systemPrompt/systemMessage option), but it's
+          // still the first message actually sent to the model.
+          const systemMessage =
+            request.systemMessage.text.length > 0
+              ? [messageToGenAiMessage(request.systemMessage)]
+              : []
+          const inputMessages = [
+            ...systemMessage,
+            ...request.messages.map(messageToGenAiMessage),
+          ]
           span.setAttribute(
             ATTR_GEN_AI_INPUT_MESSAGES,
             JSON.stringify(inputMessages),
