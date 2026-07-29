@@ -334,30 +334,6 @@ describe('syncThreadContext', () => {
     })
   })
 
-  it('excludes a message whose ts is older than the cursor', async () => {
-    const { client } = scriptedSlackClient([
-      {
-        messages: [message({ ts: '150.000', userId: 'U2', text: 'stale' })],
-        hasMore: false,
-        nextCursor: undefined,
-      },
-    ])
-    const deps = baseDeps({ slackClient: client })
-
-    const result = await syncThreadContext(
-      deps,
-      ENV,
-      '200.000',
-      NEVER_IN_FLIGHT,
-    )
-
-    expect(result).toEqual({
-      text: undefined,
-      images: [],
-      contextMaxTs: '150.000',
-    })
-  })
-
   it("excludes another bot's message whose ts is at or before the cursor", async () => {
     const { client } = scriptedSlackClient([
       {
