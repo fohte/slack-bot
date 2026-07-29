@@ -10,7 +10,10 @@ import {
   TEST_ENV,
 } from '#plugins/llm-agent/_test-utils'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
-import { postFinalResponse } from '#plugins/llm-agent/steps/post-final-response'
+import {
+  postFinalResponse,
+  suppressFinalResponse,
+} from '#plugins/llm-agent/steps/post-final-response'
 import type { SlackWebClient } from '#slack/web-client'
 
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
@@ -164,5 +167,32 @@ describe('postFinalResponse', () => {
     })
     expect(retry).toEqual(ok({ posted: true }))
     expect(stub.calls.filter((c) => c.kind === 'post')).toHaveLength(1)
+  })
+})
+
+describe('suppressFinalResponse', () => {
+  it('marks the event responded without posting to Slack or touching the assistant status', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore()
+    const deps = baseDeps({ slackClient, eventLogStore })
+
+    const result = await suppressFinalResponse(TEST_ENV, deps)
+
+    expect(result).toEqual(ok({ responded: true }))
+    expect(slackClient.calls).toEqual([])
+    expect(eventLogStore.markedResponded).toEqual([TEST_ENV.eventId])
+  })
+
+  it('is a no-op when event_log already marked this event responded (duplicate delivery)', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore({
+      alreadyResponded: true,
+    })
+    const deps = baseDeps({ slackClient, eventLogStore })
+
+    const result = await suppressFinalResponse(TEST_ENV, deps)
+
+    expect(result).toEqual(ok({ responded: false }))
+    expect(slackClient.calls).toEqual([])
   })
 })

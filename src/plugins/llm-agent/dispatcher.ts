@@ -28,7 +28,10 @@ import {
 import type { InFlightTurnRegistry } from '#plugins/llm-agent/in-flight-turns'
 import { createInFlightTurnRegistry } from '#plugins/llm-agent/in-flight-turns'
 import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
-import { postFinalResponse } from '#plugins/llm-agent/steps/post-final-response'
+import {
+  postFinalResponse,
+  suppressFinalResponse,
+} from '#plugins/llm-agent/steps/post-final-response'
 import { reportDispatchFailure } from '#plugins/llm-agent/steps/report-dispatch-failure'
 import { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
 import { resumeActiveTask } from '#plugins/llm-agent/steps/resume-active-task'
@@ -302,9 +305,25 @@ const respondWithConversationAgent = async (
     : resolved.successFallbackText
 }
 
+// A successful resume/redelegate is settled silently (suppressFinalResponse);
+// only a failed one still needs to post RESUME_SEND_FAILURE_TEXT through the
+// normal postFinalResponse path.
+const finalizeResumeTurn = async (
+  env: SlackEnvelope,
+  activeTask: A2aTaskRow,
+  resolved: ResolvedDispatcherDeps,
+  images: readonly ImageBlock[],
+) => {
+  const resumeResult = await resumeActiveTask(env, activeTask, resolved, images)
+  return resumeResult.kind === 'suppressed'
+    ? await suppressFinalResponse(env, resolved)
+    : await postFinalResponse(env, resumeResult.text, resolved)
+}
+
 // Runs the (potentially slow) LLM/A2A work detached from the Slack HTTP
-// handler: whichever branch runs, it always ends by posting this event's
-// single response. Any unexpected failure falls back to a generic,
+// handler: whichever branch runs, it always ends by settling this event's
+// single response, though a successful resume/redelegate settles silently
+// rather than posting one. Any unexpected failure falls back to a generic,
 // ungated dispatch-failure notification. The try/catch here is deliberately
 // broad: it is the last line of defense against a genuine bug (an actual
 // throw, not just a Result error) in any of the steps below, since a task
@@ -332,24 +351,27 @@ export const runMentionInBackground = async (
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (imagesResult.isErr()) throw imagesResult.error
     const images = imagesResult.value
-    const text =
+    const postResult =
       activeTask !== undefined
-        ? (await resumeActiveTask(env, activeTask, resolved, images)).text
-        : await threadTurnQueue.run(
-            deriveConversationThreadId({
-              teamId: env.teamId,
-              channelId: env.channelId,
-              threadRootTs: env.threadRootTs,
-            }),
-            () =>
-              respondWithConversationAgent(
-                env,
-                resolved,
-                images,
-                inFlightTurns,
-              ),
+        ? await finalizeResumeTurn(env, activeTask, resolved, images)
+        : await postFinalResponse(
+            env,
+            await threadTurnQueue.run(
+              deriveConversationThreadId({
+                teamId: env.teamId,
+                channelId: env.channelId,
+                threadRootTs: env.threadRootTs,
+              }),
+              () =>
+                respondWithConversationAgent(
+                  env,
+                  resolved,
+                  images,
+                  inFlightTurns,
+                ),
+            ),
+            resolved,
           )
-    const postResult = await postFinalResponse(env, text, resolved)
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (postResult.isErr()) throw postResult.error
   } catch (error) {

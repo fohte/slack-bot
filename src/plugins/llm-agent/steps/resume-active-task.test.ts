@@ -1,5 +1,6 @@
 import type { MessageSendParams } from '@a2a-js/sdk'
 import { TaskNotFoundError } from '@a2a-js/sdk/client'
+import { errAsync } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -20,6 +21,7 @@ import {
   RESUME_SEND_FAILURE_TEXT,
   resumeActiveTask,
 } from '#plugins/llm-agent/steps/resume-active-task'
+import { A2aTaskTrackerError } from '#types/errors'
 
 const ACTIVE_TASK: A2aTaskRow = {
   ...TEST_THREAD_KEY,
@@ -81,9 +83,7 @@ describe('resumeActiveTask', () => {
         configuration: { blocking: false },
       },
     ])
-    expect(result.text).toBe(
-      "Sent your reply to meshi. I'll follow up here once it's ready.",
-    )
+    expect(result).toEqual({ kind: 'suppressed' })
   })
 
   it('re-arms the deadline and records the observed state when the resume succeeds', async () => {
@@ -145,7 +145,7 @@ describe('resumeActiveTask', () => {
       [],
     )
 
-    expect(result.text).toBe(RESUME_SEND_FAILURE_TEXT)
+    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
     expect(tracker.transitions).toEqual([])
     expect(tracker.recorded).toEqual([])
   })
@@ -215,10 +215,31 @@ describe('resumeActiveTask', () => {
         deadlineAt: new Date('2026-01-01T00:06:00Z'),
       },
     ])
-    expect(result.text).toBe(
-      'Delegated to meshi (taskId=task-2). The task runs asynchronously; ' +
-        "I'll follow up here once it's ready.",
+    expect(result).toEqual({ kind: 'suppressed' })
+  })
+
+  it('reports a failure when redelegation sends successfully but fails to record the new task locally', async () => {
+    const { handle } = recordingHandleFor(async () => {
+      throw new TaskNotFoundError('task not found')
+    })
+    const tracker = createFakeA2aTaskTracker()
+    tracker.recordDelegated = () =>
+      errAsync(new A2aTaskTrackerError('db unavailable'))
+
+    const result = await resumeActiveTask(
+      TEST_ENV,
+      ACTIVE_TASK,
+      baseDeps({
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        a2aTaskTracker: tracker,
+      }),
+      [],
     )
+
+    // No tracked row exists for the new task, so no future push/heartbeat
+    // could ever clear the assistant-status indicator or notify the user;
+    // this must surface as a failure rather than settle silently.
+    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
   })
 
   it('settles the task and redelegates when the remote task is already terminal', async () => {
@@ -261,10 +282,7 @@ describe('resumeActiveTask', () => {
         deadlineAt: new Date('2026-01-01T00:20:00Z'),
       },
     ])
-    expect(result.text).toBe(
-      'Delegated to meshi (taskId=task-2). The task runs asynchronously; ' +
-        "I'll follow up here once it's ready.",
-    )
+    expect(result).toEqual({ kind: 'suppressed' })
   })
 
   it('reports a failure when the redelegation send itself fails', async () => {
@@ -293,7 +311,7 @@ describe('resumeActiveTask', () => {
       },
     ])
     expect(tracker.recorded).toEqual([])
-    expect(result.text).toBe(RESUME_SEND_FAILURE_TEXT)
+    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
   })
 
   it('reports a failure when the previously delegated agent is no longer registered', async () => {
@@ -304,6 +322,6 @@ describe('resumeActiveTask', () => {
       [],
     )
 
-    expect(result.text).toBe(RESUME_SEND_FAILURE_TEXT)
+    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
   })
 })
