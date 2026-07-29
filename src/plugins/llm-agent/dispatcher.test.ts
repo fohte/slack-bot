@@ -30,6 +30,7 @@ import {
 } from '#plugins/llm-agent/dispatcher'
 import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
 import { DISPATCH_FAILURE_TEXT } from '#plugins/llm-agent/steps/report-dispatch-failure'
+import { RESUME_SEND_FAILURE_TEXT } from '#plugins/llm-agent/steps/resume-active-task'
 import { EMPTY_THREAD_CONTEXT } from '#plugins/llm-agent/steps/sync-thread-context'
 import { createDeferred } from '#server/_test-utils'
 import { createInFlightTasks } from '#server/in-flight-tasks'
@@ -475,18 +476,90 @@ describe('createTaskDispatcher', () => {
         configuration: { blocking: false },
       },
     ])
-    const resumeAckText =
-      "Sent your reply to meshi. I'll follow up here once it's ready."
-    expect(slackClient.calls.filter((c) => c.kind === 'post')).toEqual([
+    // A successful resume settles silently: no Slack post, and the initial
+    // thinking-bubble status is left in place (not cleared) so the
+    // delegate's next heartbeat can take over the indicator.
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'is thinking...',
+        blocks: undefined,
+        loadingMessages: ['Preparing your task…'],
+      },
+    ])
+  })
+
+  it('posts the failure text and clears the assistant status when the resume fails', async () => {
+    const slackClient = createStubSlackClient()
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({
+        slackClient,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
+        a2aTaskTracker: createFakeA2aTaskTracker({
+          activeInputRequired: ACTIVE_TASK,
+        }),
+        inFlightTasks,
+      }),
+    )
+
+    await dispatch(acceptedMention({ text: '<@U_BOT> here is more info' }))
+    await inFlightTasks.waitForIdle()
+
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'is thinking...',
+        blocks: undefined,
+        loadingMessages: ['Preparing your task…'],
+      },
       {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: resumeAckText,
-        blocks: [{ type: 'markdown', text: resumeAckText }],
+        text: RESUME_SEND_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: RESUME_SEND_FAILURE_TEXT }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
         loadingMessages: undefined,
       },
     ])
+  })
+
+  it('marks the event responded on a successful resume, even though nothing is posted to Slack', async () => {
+    const slackClient = createStubSlackClient()
+    const eventLogStore = createScriptedEventLogStore()
+    const { handle } = recordingHandleFor(
+      async () => taskResult({ status: { state: 'working' } }),
+      cardFor({ name: 'meshi' }),
+    )
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({
+        slackClient,
+        eventLogStore,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        a2aTaskTracker: createFakeA2aTaskTracker({
+          activeInputRequired: ACTIVE_TASK,
+        }),
+        inFlightTasks,
+      }),
+    )
+
+    await dispatch(acceptedMention())
+    await inFlightTasks.waitForIdle()
+
+    expect(eventLogStore.markedResponded).toEqual([TEST_ENV.eventId])
   })
 
   it('does not post a second reply for a duplicate delivery of the same Slack event', async () => {

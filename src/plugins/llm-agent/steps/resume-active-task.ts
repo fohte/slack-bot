@@ -22,10 +22,14 @@ import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-regi
 export const RESUME_SEND_FAILURE_TEXT =
   "I couldn't resume your previous request. Please try again."
 
-export interface ResumeResult {
-  // Text to post as this Slack event's response.
-  readonly text: string
-}
+// A successful resume/redelegate stays silent: the delegate task's own next
+// heartbeat (task-progress-status.ts) will surface its live progress in the
+// assistant-status indicator, so posting a fixed acknowledgement text here
+// would only duplicate that. Failures still need to tell the user something
+// went wrong, since there is no heartbeat to fall back on.
+export type ResumeResult =
+  | { readonly kind: 'suppressed' }
+  | { readonly kind: 'failed'; readonly text: string }
 
 // A2A servers built on `@a2a-js/sdk` (0.3.x) reject a message addressed to
 // an already-terminal taskId with a plain JSON-RPC invalid-request error
@@ -137,7 +141,7 @@ const redelegate = async (
       },
       'llm-agent failed to redelegate a task whose previous instance was unresumable',
     )
-    return { text: RESUME_SEND_FAILURE_TEXT }
+    return { kind: 'failed', text: RESUME_SEND_FAILURE_TEXT }
   }
 
   const parsed = SEND_MESSAGE_RESULT_SCHEMA.safeParse(sendResult.value)
@@ -154,7 +158,7 @@ const redelegate = async (
       },
       'llm-agent received a malformed message/send result while redelegating',
     )
-    return { text: RESUME_SEND_FAILURE_TEXT }
+    return { kind: 'failed', text: RESUME_SEND_FAILURE_TEXT }
   }
 
   const taskId = parsed.data.id
@@ -171,6 +175,10 @@ const redelegate = async (
     deadlineAt: new Date(resolved.now().getTime() + resolved.taskDeadlineMs),
   })
   if (recordResult.isErr()) {
+    // Unlike transitionBestEffort's failures, there is no tracked row for
+    // taskId at all here, so no future push/heartbeat/reconciler pass can
+    // ever clear the assistant-status indicator or notify the user — this
+    // must surface now rather than be treated as a silent success.
     resolved.logger.warn(
       {
         event: 'llm_agent_resume_redelegate_record_failed',
@@ -180,13 +188,10 @@ const redelegate = async (
       },
       'llm-agent redelegated a task but failed to record it locally',
     )
+    return { kind: 'failed', text: RESUME_SEND_FAILURE_TEXT }
   }
 
-  return {
-    text:
-      `Delegated to ${activeTask.agentName} (taskId=${taskId}). The task ` +
-      "runs asynchronously; I'll follow up here once it's ready.",
-  }
+  return { kind: 'suppressed' }
 }
 
 // The remote task is gone or already terminal: this exact taskId can never
@@ -237,7 +242,7 @@ export const resumeActiveTask = async (
       },
       'llm-agent could not resume a task: its remote agent is no longer registered',
     )
-    return { text: RESUME_SEND_FAILURE_TEXT }
+    return { kind: 'failed', text: RESUME_SEND_FAILURE_TEXT }
   }
 
   const params = buildParams(resolved, env, images, {
@@ -270,7 +275,7 @@ export const resumeActiveTask = async (
       },
       'llm-agent failed to resume a task',
     )
-    return { text: RESUME_SEND_FAILURE_TEXT }
+    return { kind: 'failed', text: RESUME_SEND_FAILURE_TEXT }
   }
 
   const parsed = SEND_MESSAGE_RESULT_SCHEMA.safeParse(sendResult.value)
@@ -287,7 +292,7 @@ export const resumeActiveTask = async (
       },
       'llm-agent received a malformed message/send result while resuming a task',
     )
-    return { text: RESUME_SEND_FAILURE_TEXT }
+    return { kind: 'failed', text: RESUME_SEND_FAILURE_TEXT }
   }
 
   await transitionBestEffort(
@@ -304,7 +309,5 @@ export const resumeActiveTask = async (
     },
   )
 
-  return {
-    text: `Sent your reply to ${activeTask.agentName}. I'll follow up here once it's ready.`,
-  }
+  return { kind: 'suppressed' }
 }

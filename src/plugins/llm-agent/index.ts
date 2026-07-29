@@ -145,8 +145,14 @@ export {
   createResponseFinalizer,
   USAGE_LIMIT_TEXT,
 } from '#plugins/llm-agent/response-finalizer'
-export type { PostFinalResponseResult } from '#plugins/llm-agent/steps/post-final-response'
-export { postFinalResponse } from '#plugins/llm-agent/steps/post-final-response'
+export type {
+  PostFinalResponseResult,
+  SuppressFinalResponseResult,
+} from '#plugins/llm-agent/steps/post-final-response'
+export {
+  postFinalResponse,
+  suppressFinalResponse,
+} from '#plugins/llm-agent/steps/post-final-response'
 export { DISPATCH_FAILURE_TEXT } from '#plugins/llm-agent/steps/report-dispatch-failure'
 export {
   resolveImageBlocks,
