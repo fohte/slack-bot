@@ -16,6 +16,7 @@ import {
   createResponseFinalizer,
   USAGE_LIMIT_TEXT,
 } from '#plugins/llm-agent/response-finalizer'
+import { createTaskProgressStatus } from '#plugins/llm-agent/task-progress-status'
 import type { SlackWebClient } from '#slack/web-client'
 
 interface StubPersonaParaphraser extends PersonaParaphraser {
@@ -830,6 +831,173 @@ describe('createResponseFinalizer', () => {
           updatedAt: NOW,
         }),
       )
+    })
+  })
+
+  describe('finalize - assistant status', () => {
+    it('reports a working task message to the assistant status indicator without posting to the thread', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask({ state: 'submitted' }))
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('working', textMessage('Searching the web for food...')),
+      )
+      const slackClient = createStubSlackClient()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        taskProgressStatus: createTaskProgressStatus({ slackClient }),
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'is thinking...',
+          blocks: undefined,
+          loadingMessages: ['Searching the web for food...'],
+        },
+      ])
+    })
+
+    it('does not report a stale working observation that loses the heartbeat race to a concurrent settle', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask({ state: 'working' }))
+      // Simulates a concurrent push notification settling the row (e.g. via
+      // finalizeRow) between this stale poll fetching its task snapshot and
+      // dispatching it here.
+      await tracker.transition('task-1', { state: 'completed' })
+      const slackClient = createStubSlackClient()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        taskProgressStatus: createTaskProgressStatus({ slackClient }),
+      })
+
+      await finalizer.finalizeTask(
+        (await tracker.findByTaskId('task-1'))._unsafeUnwrap()!,
+        taskWith('working', textMessage('Searching the web for food...')),
+      )
+
+      expect(slackClient.calls).toEqual([])
+    })
+
+    it('clears the assistant status indicator after a terminal settle', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('completed', textMessage('Recorded your meal.')),
+      )
+      const slackClient = createStubSlackClient()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        taskProgressStatus: createTaskProgressStatus({ slackClient }),
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'Recorded your meal.',
+          blocks: [{ type: 'markdown', text: 'Recorded your meal.' }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ])
+    })
+
+    it('clears the assistant status indicator after an input-required question is posted', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask({ state: 'working' }))
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('input-required', textMessage('What did you eat?')),
+      )
+      const slackClient = createStubSlackClient()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        taskProgressStatus: createTaskProgressStatus({ slackClient }),
+      })
+
+      await finalizer.finalize('task-1')
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'What did you eat?',
+          blocks: [{ type: 'markdown', text: 'What did you eat?' }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ])
+    })
+
+    it('does not clear the assistant status indicator when the settle is a duplicate', async () => {
+      const tracker = createInMemoryA2aTaskTracker({ now: () => NOW })
+      await tracker.recordDelegated(baseTask())
+      const { handle } = recordingHandleForGetTask(async () =>
+        taskWith('completed', textMessage('done')),
+      )
+      const slackClient = createStubSlackClient()
+      const finalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
+        eventLogStore: createScriptedEventLogStore(),
+        slackClient,
+        taskProgressStatus: createTaskProgressStatus({ slackClient }),
+      })
+
+      await finalizer.finalize('task-1')
+      await finalizer.finalize('task-1')
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: 'done',
+          blocks: [{ type: 'markdown', text: 'done' }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ])
     })
   })
 })

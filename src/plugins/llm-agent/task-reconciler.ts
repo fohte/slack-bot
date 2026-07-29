@@ -21,6 +21,8 @@ import type {
 } from '#plugins/llm-agent/remote-agent-registry/index'
 import type { ResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
+import type { TaskProgressStatus } from '#plugins/llm-agent/task-progress-status'
+import { NOOP_TASK_PROGRESS_STATUS } from '#plugins/llm-agent/task-progress-status'
 import type { InFlightTasks } from '#server/in-flight-tasks'
 import type { SlackWebClient } from '#slack/web-client'
 
@@ -47,6 +49,12 @@ export interface TaskReconcilerOptions {
   readonly responseFinalizer: ResponseFinalizer
   readonly eventLogStore: EventLogStore
   readonly slackClient: SlackWebClient
+  // Reflects submitted/working progress text into the Slack assistant
+  // status indicator and clears it once a row settles. Shared with
+  // ResponseFinalizer so both settle paths clear the same indicator and
+  // dedup cache. Defaults to a no-op so callers that don't care about this
+  // display-only feature aren't forced to construct one.
+  readonly taskProgressStatus?: TaskProgressStatus | undefined
   readonly graceMs?: number | undefined
   readonly intervalMs?: number | undefined
   readonly retentionMs?: number | undefined
@@ -76,6 +84,8 @@ export const startTaskReconciler = (
   options: TaskReconcilerOptions,
 ): TaskReconcilerHandle => {
   const logger = options.logger ?? noopLogger
+  const taskProgressStatus =
+    options.taskProgressStatus ?? NOOP_TASK_PROGRESS_STATUS
   const graceMs = options.graceMs ?? TASK_RECONCILER_DEFAULT_GRACE_MS
   const intervalMs = options.intervalMs ?? TASK_RECONCILER_DEFAULT_INTERVAL_MS
   const retentionMs =
@@ -140,6 +150,7 @@ export const startTaskReconciler = (
       }
       return false
     }
+    await taskProgressStatus.clear(row)
     const markRespondedResult = await options.eventLogStore.markResponded(
       row.slackEventId,
     )

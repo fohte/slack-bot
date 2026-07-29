@@ -71,12 +71,13 @@ const createSlackStub = (
 describe('trySetAssistantStatus', () => {
   it('forwards status and loading messages to the Slack client', async () => {
     const slackClient = createSlackStub()
-    await trySetAssistantStatus({
+    const succeeded = await trySetAssistantStatus({
       slackClient,
       target: { channelId: 'C1', threadTs: '111.222' },
       status: 'is thinking...',
       loadingMessages: ['Preparing your task…'],
     })
+    expect(succeeded).toBe(true)
     expect(slackClient.calls).toEqual([
       {
         channel_id: 'C1',
@@ -89,11 +90,12 @@ describe('trySetAssistantStatus', () => {
 
   it('omits loading_messages from the Slack payload when none are supplied', async () => {
     const slackClient = createSlackStub()
-    await trySetAssistantStatus({
+    const succeeded = await trySetAssistantStatus({
       slackClient,
       target: { channelId: 'C1', threadTs: '111.222' },
       status: CLEAR_STATUS,
     })
+    expect(succeeded).toBe(true)
     expect(slackClient.calls).toEqual([
       {
         channel_id: 'C1',
@@ -107,12 +109,13 @@ describe('trySetAssistantStatus', () => {
   it('swallows a set failure at warn level so the calling flow is not interrupted', async () => {
     const logger = createRecordingLogger()
     const failure = new Error('channel_not_supported')
-    await trySetAssistantStatus({
+    const succeeded = await trySetAssistantStatus({
       slackClient: createSlackStub({ throwError: failure }),
       target: { channelId: 'C1', threadTs: '111.222' },
       status: 'is thinking...',
       logger,
     })
+    expect(succeeded).toBe(false)
     expect(logger.entries).toEqual([
       {
         level: 'warn',
@@ -132,12 +135,13 @@ describe('trySetAssistantStatus', () => {
   it('logs a clear failure at error level so a stale indicator is surfaced to operators', async () => {
     const logger = createRecordingLogger()
     const failure = new Error('upstream timeout')
-    await trySetAssistantStatus({
+    const succeeded = await trySetAssistantStatus({
       slackClient: createSlackStub({ throwError: failure }),
       target: { channelId: 'C1', threadTs: '111.222' },
       status: CLEAR_STATUS,
       logger,
     })
+    expect(succeeded).toBe(false)
     expect(logger.entries).toEqual([
       {
         level: 'error',

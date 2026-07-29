@@ -13,6 +13,7 @@ import {
 } from '#plugins/llm-agent/_test-utils'
 import type { NewA2aTask } from '#plugins/llm-agent/a2a-task-tracker'
 import { createResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
+import { createTaskProgressStatus } from '#plugins/llm-agent/task-progress-status'
 import {
   DEADLINE_EXCEEDED_TEXT,
   startTaskReconciler,
@@ -610,5 +611,111 @@ describe('startTaskReconciler', () => {
     expect(TASK_RECONCILER_DEFAULT_GRACE_MS).toBe(2 * 60 * 1000)
     expect(TASK_RECONCILER_DEFAULT_INTERVAL_MS).toBe(60 * 1000)
     expect(TASK_RECONCILER_DEFAULT_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000)
+  })
+
+  describe('assistant status', () => {
+    it('clears the assistant status indicator after a deadline-exceeded failure', async () => {
+      let clock = CREATED_AT
+      const tracker = createInMemoryA2aTaskTracker({ now: () => clock })
+      await tracker.recordDelegated(
+        baseTask({
+          state: 'working',
+          deadlineAt: new Date('2026-01-09T00:00:00Z'),
+        }),
+      )
+      clock = NOW
+      const remoteAgentRegistry = createFakeRemoteAgentRegistry([])
+      const eventLogStore = createScriptedEventLogStore()
+      const slackClient = createStubSlackClient()
+      const responseFinalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry,
+        eventLogStore,
+        slackClient,
+      })
+      const reconciler = startTaskReconciler({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry,
+        responseFinalizer,
+        eventLogStore,
+        slackClient,
+        taskProgressStatus: createTaskProgressStatus({ slackClient }),
+        now: () => clock,
+        setIntervalImpl: () => ({}) as unknown as NodeJS.Timeout,
+        clearIntervalImpl: () => {},
+      })
+
+      await reconciler.runOnce()
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: DEADLINE_EXCEEDED_TEXT,
+          blocks: [{ type: 'markdown', text: DEADLINE_EXCEEDED_TEXT }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ])
+    })
+
+    it('clears the assistant status indicator after a TaskNotFound failure', async () => {
+      let clock = CREATED_AT
+      const tracker = createInMemoryA2aTaskTracker({ now: () => clock })
+      await tracker.recordDelegated(baseTask())
+      clock = NOW
+      const { handle } = recordingHandleForGetTask(async () => {
+        throw new TaskNotFoundError('task-1')
+      })
+      const remoteAgentRegistry = createFakeRemoteAgentRegistry([handle])
+      const eventLogStore = createScriptedEventLogStore()
+      const slackClient = createStubSlackClient()
+      const responseFinalizer = createResponseFinalizer({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry,
+        eventLogStore,
+        slackClient,
+      })
+      const reconciler = startTaskReconciler({
+        a2aTaskTracker: tracker,
+        remoteAgentRegistry,
+        responseFinalizer,
+        eventLogStore,
+        slackClient,
+        taskProgressStatus: createTaskProgressStatus({ slackClient }),
+        now: () => clock,
+        setIntervalImpl: () => ({}) as unknown as NodeJS.Timeout,
+        clearIntervalImpl: () => {},
+      })
+
+      await reconciler.runOnce()
+
+      expect(slackClient.calls).toEqual([
+        {
+          kind: 'post',
+          channel: 'C1',
+          thread: '111.222',
+          text: TASK_NOT_FOUND_TEXT,
+          blocks: [{ type: 'markdown', text: TASK_NOT_FOUND_TEXT }],
+          loadingMessages: undefined,
+        },
+        {
+          kind: 'status',
+          channel: 'C1',
+          thread: '111.222',
+          text: '',
+          blocks: undefined,
+          loadingMessages: undefined,
+        },
+      ])
+    })
   })
 })

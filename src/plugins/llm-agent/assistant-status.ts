@@ -41,9 +41,11 @@ export interface SetAssistantStatusOptions {
   readonly logger?: Logger | undefined
 }
 
-// assistant.threads.setStatus only works inside an assistant thread
-// (Agents & AI Apps split-view); calls from a plain channel fail with
-// channel_not_supported. Swallow failures so the caller's main flow is
+// assistant.threads.setStatus works from both assistant threads and regular
+// channels: Slack's 2026-03-05 scope update made chat:write sufficient for
+// this method (assistant:write is no longer required) —
+// https://docs.slack.dev/changelog/2026/03/05/set-status-scope-update/.
+// Failures are swallowed regardless, so the caller's main flow is
 // unaffected by this display-only indicator.
 //
 // set/clear failures are not symmetric in severity:
@@ -53,9 +55,13 @@ export interface SetAssistantStatusOptions {
 // clear failures are logged at error level so they surface in monitoring;
 // set failures stay at warn since they are the expected outcome whenever
 // the indicator is not configured.
+//
+// Returns whether the call succeeded so a caller that tracks its own
+// display state (e.g. TaskProgressStatus's dedup cache) can avoid recording
+// a state Slack never actually received.
 export const trySetAssistantStatus = async (
   options: SetAssistantStatusOptions,
-): Promise<void> => {
+): Promise<boolean> => {
   const logger = options.logger ?? noopLogger
   const result = await ResultAsync.fromPromise(
     (async () =>
@@ -97,4 +103,6 @@ export const trySetAssistantStatus = async (
       )
     }
   }
+
+  return result.isOk()
 }

@@ -12,6 +12,7 @@ import { resolvePlugin } from '#plugin/deps'
 import { createPluginRegistry } from '#plugin/registry'
 import { createBlogPlugin, loadBlogPluginConfig } from '#plugins/blog/index'
 import type {
+  DelegationPushNotificationConfig,
   PersonaParaphraser,
   RemoteAgentRegistry,
 } from '#plugins/llm-agent/index'
@@ -30,6 +31,7 @@ import {
   createRemoteAgentRegistry,
   createResponseFinalizer,
   createTaskDispatcher,
+  createTaskProgressStatus,
   startEventLogRetention,
   startTaskReconciler,
 } from '#plugins/llm-agent/index'
@@ -113,12 +115,14 @@ export const bootstrap = (options: BootstrapOptions): void => {
     slackClient,
     logger,
   })
+  const taskProgressStatus = createTaskProgressStatus({ slackClient, logger })
   const responseFinalizer = createResponseFinalizer({
     a2aTaskTracker,
     remoteAgentRegistry: options.remoteAgentRegistry,
     eventLogStore,
     slackClient,
     personaParaphraser: options.personaParaphraser,
+    taskProgressStatus,
     logger,
   })
   const a2aNotificationHandler = createA2aNotificationHandler({
@@ -132,6 +136,7 @@ export const bootstrap = (options: BootstrapOptions): void => {
     responseFinalizer,
     eventLogStore,
     slackClient,
+    taskProgressStatus,
     inFlightTasks,
     logger,
   })
@@ -212,6 +217,10 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
     logger,
   })
   const checkpointer = createConversationCheckpointer(config.databaseUrl)
+  const pushNotificationConfig: DelegationPushNotificationConfig | undefined =
+    config.a2aNotificationUrl !== undefined
+      ? { url: config.a2aNotificationUrl, token: config.a2aNotificationToken }
+      : undefined
 
   bootstrap({
     remoteAgentRegistry,
@@ -235,7 +244,7 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
       }) => {
         const delegationToolsResult = createDelegationTools(
           remoteAgentHandles,
-          { a2aTaskTracker, logger },
+          { a2aTaskTracker, pushNotificationConfig, logger },
         )
         // eslint-disable-next-line no-restricted-syntax -- boundary: process startup fail-fast, the plugin factory runs once during bootstrap() with no caller to propagate a Result to
         if (delegationToolsResult.isErr()) throw delegationToolsResult.error
@@ -254,6 +263,7 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
           eventLogStore,
           slackClient,
           botUserId: config.slackBotUserId,
+          pushNotificationConfig,
           logger,
           inFlightTasks,
         })

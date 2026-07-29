@@ -1,4 +1,4 @@
-import type { Part, Task, TextPart } from '@a2a-js/sdk'
+import type { Task } from '@a2a-js/sdk'
 import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 
@@ -20,11 +20,14 @@ import {
 } from '#plugins/llm-agent/a2a-task-tracker'
 import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
 import type { PersonaParaphraser } from '#plugins/llm-agent/persona-paraphraser'
+import { collectPartsText } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
 import type {
   RemoteAgentHandle,
   RemoteAgentRegistry,
 } from '#plugins/llm-agent/remote-agent-registry/index'
 import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
+import type { TaskProgressStatus } from '#plugins/llm-agent/task-progress-status'
+import { NOOP_TASK_PROGRESS_STATUS } from '#plugins/llm-agent/task-progress-status'
 import type { SlackWebClient } from '#slack/web-client'
 
 // Posted instead of the task's own message when the remote agent's failure
@@ -69,19 +72,15 @@ export interface ResponseFinalizerOptions {
   // the same thread. Omitted means the task text is posted as-is (and
   // USAGE_LIMIT_TEXT is never run through it either way, see settleTerminal).
   readonly personaParaphraser?: PersonaParaphraser | undefined
+  // Reflects submitted/working progress text into the Slack assistant
+  // status indicator and clears it once a row settles. Defaults to a no-op
+  // so callers that don't care about this display-only feature aren't
+  // forced to construct one.
+  readonly taskProgressStatus?: TaskProgressStatus | undefined
   readonly unknownTaskRetryDelayMs?: number | undefined
   readonly sleep?: ((ms: number) => Promise<void>) | undefined
   readonly logger?: Logger | undefined
 }
-
-const isTextPart = (part: Part): part is TextPart => part.kind === 'text'
-
-const collectPartsText = (parts: readonly Part[] | undefined): string =>
-  (parts ?? [])
-    .filter(isTextPart)
-    .map((part) => part.text)
-    .join('\n')
-    .trim()
 
 // Design contract: the settle/question text is built from the task's own
 // Message, falling back to its Artifacts. Neither is ever expected to be
@@ -116,6 +115,8 @@ export const createResponseFinalizer = (
   options: ResponseFinalizerOptions,
 ): ResponseFinalizer => {
   const logger = options.logger ?? noopLogger
+  const taskProgressStatus =
+    options.taskProgressStatus ?? NOOP_TASK_PROGRESS_STATUS
   const sleep =
     options.sleep ??
     ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -236,6 +237,7 @@ export const createResponseFinalizer = (
       }
       return 'error'
     }
+    await taskProgressStatus.clear(row)
 
     // Best-effort bookkeeping only: this flag records that *an* answer for
     // the originating Slack event has gone out, not whether *this* task's
@@ -313,6 +315,7 @@ export const createResponseFinalizer = (
       }
       return 'error'
     }
+    await taskProgressStatus.clear(row)
     return 'input_required'
   }
 
@@ -375,6 +378,12 @@ export const createResponseFinalizer = (
         },
         'llm-agent failed to refresh a task heartbeat while finalizing it',
       )
+    } else if (heartbeatResult.value.updated) {
+      // Gated on `updated`: this transition losing the race (e.g. a
+      // concurrent push already settled the row) means `task` is a stale
+      // snapshot, and reporting it would resurrect "is thinking..." in a
+      // thread whose real answer was already posted and cleared.
+      await taskProgressStatus.report(row, task)
     }
     return 'heartbeat'
   }
