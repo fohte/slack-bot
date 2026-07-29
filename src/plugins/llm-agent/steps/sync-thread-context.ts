@@ -86,6 +86,7 @@ interface DedupContext {
   readonly botUserId: string
   readonly hasCheckpoint: boolean
   readonly channelId: string
+  readonly cursor: string | undefined
   readonly isTurnInFlight: (key: InFlightTurnKey) => boolean
 }
 
@@ -97,11 +98,18 @@ interface DedupContext {
 // a concurrent turn is excluded to avoid injecting content its own turn is
 // about to write to the checkpoint itself. A message with no ts is excluded
 // outright: neither ordering nor in-flight dedup can be determined for it.
+// A message at or before the cursor is excluded regardless of sender: Slack's
+// `conversations.replies` treats `oldest` as inclusive rather than the
+// documented exclusive-after boundary, so the message that produced the
+// current cursor value gets re-fetched every subsequent turn.
 const shouldInject = (
   message: SlackThreadReplyMessage,
   ctx: DedupContext,
 ): boolean => {
   if (message.ts === undefined) return false
+  if (ctx.cursor !== undefined && Number(message.ts) <= Number(ctx.cursor)) {
+    return false
+  }
   const isOwnBot = message.userId === ctx.botUserId
   if (isOwnBot) return !ctx.hasCheckpoint
   const isOtherBot = message.botId !== undefined
@@ -308,6 +316,7 @@ export const syncThreadContext = async (
     botUserId: resolved.botUserId,
     hasCheckpoint: cursor !== undefined,
     channelId: env.channelId,
+    cursor,
     isTurnInFlight,
   })
   const truncatedByMessageCount = selected.length > THREAD_CONTEXT_MESSAGE_LIMIT

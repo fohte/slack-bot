@@ -308,6 +308,86 @@ describe('syncThreadContext', () => {
     })
   })
 
+  it("excludes a message whose ts exactly matches the cursor (Slack's `oldest` is inclusive)", async () => {
+    const { client } = scriptedSlackClient([
+      {
+        messages: [
+          message({ ts: '200.000', userId: 'U2', text: 'already seen' }),
+        ],
+        hasMore: false,
+        nextCursor: undefined,
+      },
+    ])
+    const deps = baseDeps({ slackClient: client })
+
+    const result = await syncThreadContext(
+      deps,
+      ENV,
+      '200.000',
+      NEVER_IN_FLIGHT,
+    )
+
+    expect(result).toEqual({
+      text: undefined,
+      images: [],
+      contextMaxTs: '200.000',
+    })
+  })
+
+  it('excludes a message whose ts is older than the cursor', async () => {
+    const { client } = scriptedSlackClient([
+      {
+        messages: [message({ ts: '150.000', userId: 'U2', text: 'stale' })],
+        hasMore: false,
+        nextCursor: undefined,
+      },
+    ])
+    const deps = baseDeps({ slackClient: client })
+
+    const result = await syncThreadContext(
+      deps,
+      ENV,
+      '200.000',
+      NEVER_IN_FLIGHT,
+    )
+
+    expect(result).toEqual({
+      text: undefined,
+      images: [],
+      contextMaxTs: '150.000',
+    })
+  })
+
+  it("excludes another bot's message whose ts is at or before the cursor", async () => {
+    const { client } = scriptedSlackClient([
+      {
+        messages: [
+          message({
+            ts: '200.000',
+            botId: 'B_OTHER',
+            text: 'crawler finished',
+          }),
+        ],
+        hasMore: false,
+        nextCursor: undefined,
+      },
+    ])
+    const deps = baseDeps({ slackClient: client })
+
+    const result = await syncThreadContext(
+      deps,
+      ENV,
+      '200.000',
+      NEVER_IN_FLIGHT,
+    )
+
+    expect(result).toEqual({
+      text: undefined,
+      images: [],
+      contextMaxTs: '200.000',
+    })
+  })
+
   it('formats a non-image attachment as a placeholder', async () => {
     const { client } = scriptedSlackClient([
       {
