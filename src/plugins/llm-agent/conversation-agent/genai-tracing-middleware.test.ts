@@ -64,13 +64,16 @@ const wrapModelCallOf = (middleware: Middleware): WrapModelCall =>
   middleware.wrapModelCall!
 
 // wrapModelCall's request carries the full agent runtime (state, tools,
-// runtime context, ...), none of which this middleware reads; only `model`
-// and `messages` matter to it, so the rest is asserted away rather than
-// fully constructed.
+// runtime context, ...), none of which this middleware reads; only `model`,
+// `messages`, and `systemMessage` matter to it, so the rest is asserted away
+// rather than fully constructed. `systemMessage` defaults to an empty
+// SystemMessage, mirroring ModelRequest's own default when createAgent was
+// never given a systemPrompt.
 const fakeRequest = (
   model: unknown,
   messages: FakeRequest['messages'],
-): FakeRequest => ({ model, messages }) as unknown as FakeRequest
+  systemMessage: FakeRequest['systemMessage'] = new SystemMessage(''),
+): FakeRequest => ({ model, messages, systemMessage }) as unknown as FakeRequest
 
 describe('createGenAiTracingMiddleware', () => {
   it('records a CLIENT span with GenAI attributes on success', async () => {
@@ -293,6 +296,121 @@ describe('createGenAiTracingMiddleware', () => {
               role: 'assistant',
               parts: [{ type: 'text', content: 'described the photo' }],
               finish_reason: 'stop',
+            },
+          ]),
+        },
+        statusCode: SpanStatusCode.UNSET,
+      },
+    ])
+  })
+
+  it('includes request.systemMessage as the first gen_ai.input.messages entry when captured', async () => {
+    const wrapModelCall = wrapModelCallOf(
+      createGenAiTracingMiddleware({
+        providerName: 'opencode',
+        captureMessageContent: true,
+      }),
+    )
+
+    await wrapModelCall(
+      fakeRequest(
+        { model: 'opencode-go/gpt-5' },
+        [new HumanMessage('hi')],
+        new SystemMessage('persona'),
+      ),
+      async () => new AIMessage('ok'),
+    )
+
+    expect(await collectSpans()).toEqual([
+      {
+        name: 'chat opencode-go/gpt-5',
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.provider.name': 'opencode',
+          'gen_ai.request.model': 'opencode-go/gpt-5',
+          'gen_ai.input.messages': JSON.stringify([
+            { role: 'system', parts: [{ type: 'text', content: 'persona' }] },
+            { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+          ]),
+          'gen_ai.output.messages': JSON.stringify([
+            { role: 'assistant', parts: [{ type: 'text', content: 'ok' }] },
+          ]),
+        },
+        statusCode: SpanStatusCode.UNSET,
+      },
+    ])
+  })
+
+  it('omits request.systemMessage from gen_ai.input.messages when it is empty', async () => {
+    const wrapModelCall = wrapModelCallOf(
+      createGenAiTracingMiddleware({
+        providerName: 'opencode',
+        captureMessageContent: true,
+      }),
+    )
+
+    await wrapModelCall(
+      fakeRequest(
+        { model: 'opencode-go/gpt-5' },
+        [new HumanMessage('hi')],
+        new SystemMessage(''),
+      ),
+      async () => new AIMessage('ok'),
+    )
+
+    expect(await collectSpans()).toEqual([
+      {
+        name: 'chat opencode-go/gpt-5',
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.provider.name': 'opencode',
+          'gen_ai.request.model': 'opencode-go/gpt-5',
+          'gen_ai.input.messages': JSON.stringify([
+            { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+          ]),
+          'gen_ai.output.messages': JSON.stringify([
+            { role: 'assistant', parts: [{ type: 'text', content: 'ok' }] },
+          ]),
+        },
+        statusCode: SpanStatusCode.UNSET,
+      },
+    ])
+  })
+
+  it('includes additional_kwargs.reasoning_content as a leading reasoning part in gen_ai.output.messages', async () => {
+    const wrapModelCall = wrapModelCallOf(
+      createGenAiTracingMiddleware({
+        providerName: 'opencode',
+        captureMessageContent: true,
+      }),
+    )
+    const aiMessage = new AIMessage({
+      content: 'final answer',
+      additional_kwargs: { reasoning_content: 'thinking it through' },
+    })
+
+    await wrapModelCall(
+      fakeRequest({ model: 'opencode-go/gpt-5' }, [new HumanMessage('hi')]),
+      async () => aiMessage,
+    )
+
+    expect(await collectSpans()).toEqual([
+      {
+        name: 'chat opencode-go/gpt-5',
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.provider.name': 'opencode',
+          'gen_ai.request.model': 'opencode-go/gpt-5',
+          'gen_ai.input.messages': JSON.stringify([
+            { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+          ]),
+          'gen_ai.output.messages': JSON.stringify([
+            {
+              role: 'assistant',
+              parts: [
+                { type: 'reasoning', content: 'thinking it through' },
+                { type: 'text', content: 'final answer' },
+              ],
             },
           ]),
         },
