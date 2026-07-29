@@ -64,7 +64,9 @@ export interface SlackThreadReplyMessage {
 export interface GetConversationRepliesArgs {
   readonly channel: string
   readonly ts: string
-  // Both bounds are exclusive (Slack's `inclusive` param defaults to false).
+  // `latest` is exclusive (Slack's `inclusive` param defaults to false), but
+  // `oldest` behaves as inclusive in practice; see the cursor exclusion in
+  // sync-thread-context.ts's shouldInject for the workaround this requires.
   readonly oldest?: string | undefined
   readonly latest?: string | undefined
   readonly cursor?: string | undefined
