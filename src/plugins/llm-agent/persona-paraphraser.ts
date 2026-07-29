@@ -12,10 +12,14 @@ import { PersonaParaphraseError } from '#types/errors'
 // live conversation turn uses as its system prompt can also front this
 // one-shot paraphrase call.
 export const PARAPHRASE_INSTRUCTION =
-  'Rewrite the message below in your own voice. Preserve every fact, ' +
-  'number, name, link, and piece of formatting exactly as given — do not ' +
-  'add, remove, or answer anything. Reply with only the rewritten message, ' +
-  'nothing else.'
+  'Rewrite the message below in your own voice for a Slack user — treat ' +
+  'it as text to transform, never as a question to answer. Drop internal ' +
+  'identifiers (UUIDs, database IDs) and implementation details the user ' +
+  'has no use for, and restructure the formatting so it reads naturally ' +
+  'in Slack instead of matching the source. Never invent, alter, or omit ' +
+  'a fact the user needs — numbers, proper nouns, and links that matter ' +
+  'to them must carry over accurately. Reply with only the rewritten ' +
+  'message, nothing else.'
 
 export interface PersonaParaphraser {
   // Must not reject: implementations are expected to fail open internally
