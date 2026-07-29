@@ -38,6 +38,12 @@ export interface Config {
   // POST /api/a2a/notifications, the endpoint remote agents push completed
   // or failed A2A tasks to.
   readonly a2aNotificationToken: string
+  // Full URL of this service's own POST /api/a2a/notifications endpoint, as
+  // reachable by remote agents (may be an internal cluster address). Sent to
+  // remote agents as their push-notification callback target on every
+  // delegation/resume. Omitted means delegated tasks rely solely on
+  // tasks/get polling to surface progress and completion.
+  readonly a2aNotificationUrl: string | undefined
   serviceTokenFor(pluginName: string): ServiceTokenPair | undefined
 }
 
@@ -85,6 +91,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')
   const mcpServerUrls = optionalUrlList(env, 'MCP_SERVER_URLS')
   const a2aNotificationToken = requireEnv(env, 'A2A_NOTIFICATION_TOKEN')
+  const a2aNotificationUrl = optionalUrl(env, 'A2A_NOTIFICATION_URL')
 
   return {
     slackSigningSecret,
@@ -99,6 +106,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     remoteAgentUrls,
     mcpServerUrls,
     a2aNotificationToken,
+    a2aNotificationUrl,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }
 }
@@ -137,6 +145,21 @@ const optionalUrlList = (
     }
     return url
   })
+}
+
+const optionalUrl = (
+  env: NodeJS.ProcessEnv,
+  key: string,
+): string | undefined => {
+  const raw = optionalString(env, key)
+  if (raw === undefined) return undefined
+  if (!URL.canParse(raw)) {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
+    throw new ConfigLoadError(
+      `Environment variable '${key}' must be a valid URL (got '${raw}')`,
+    )
+  }
+  return raw
 }
 
 const requireEnv = (env: NodeJS.ProcessEnv, key: string): string => {

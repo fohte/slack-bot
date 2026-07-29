@@ -163,6 +163,14 @@ export {
   syncThreadContext,
 } from '#plugins/llm-agent/steps/sync-thread-context'
 export type {
+  TaskProgressStatus,
+  TaskProgressStatusOptions,
+} from '#plugins/llm-agent/task-progress-status'
+export {
+  createTaskProgressStatus,
+  NOOP_TASK_PROGRESS_STATUS,
+} from '#plugins/llm-agent/task-progress-status'
+export type {
   TaskReconcilerHandle,
   TaskReconcilerOptions,
   TaskReconcilerResult,

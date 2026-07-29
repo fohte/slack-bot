@@ -32,6 +32,7 @@ describe('loadConfig', () => {
     expect(config.remoteAgentUrls).toEqual([])
     expect(config.mcpServerUrls).toEqual([])
     expect(config.a2aNotificationToken).toBe('notif-token')
+    expect(config.a2aNotificationUrl).toBeUndefined()
   })
 
   it('reads optional conversation-agent env overrides', () => {
@@ -109,6 +110,25 @@ describe('loadConfig', () => {
           MCP_SERVER_URLS: 'https://mgmt-mcp.example.com/mcp,,',
         },
       }),
+    ).toThrow(ConfigLoadError)
+  })
+
+  it('reads A2A_NOTIFICATION_URL when set', () => {
+    const config = loadConfig({
+      env: {
+        ...baseEnv,
+        A2A_NOTIFICATION_URL:
+          'https://slack-bot.example.com/api/a2a/notifications',
+      },
+    })
+    expect(config.a2aNotificationUrl).toBe(
+      'https://slack-bot.example.com/api/a2a/notifications',
+    )
+  })
+
+  it('rejects an invalid A2A_NOTIFICATION_URL', () => {
+    expect(() =>
+      loadConfig({ env: { ...baseEnv, A2A_NOTIFICATION_URL: 'not-a-url' } }),
     ).toThrow(ConfigLoadError)
   })
 
