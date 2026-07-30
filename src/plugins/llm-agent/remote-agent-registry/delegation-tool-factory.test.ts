@@ -25,7 +25,7 @@ const THREAD_KEY: ThreadKey = {
 const RUNTIME_CONTEXT = {
   slackEventId: 'Ev1',
   threadKey: THREAD_KEY,
-  images: [] as ReadonlyArray<{ base64: string; mimeType: string }>,
+  imageDescription: undefined as string | undefined,
 }
 
 const cardFor = (overrides: Partial<AgentCard> = {}): AgentCard => ({
@@ -194,7 +194,7 @@ describe('createDelegationTool', () => {
     expect(calls[0]?.message.contextId).toBe('ctx-existing')
   })
 
-  it('forwards attached images as A2A FileParts', async () => {
+  it('forwards the vision-model image description as an additional text part', async () => {
     const { handle, calls } = recordingHandleFor(async () => submittedTask())
     const toolInstance = createDelegationTool(handle, {
       a2aTaskTracker: createFakeTracker(),
@@ -205,13 +205,26 @@ describe('createDelegationTool', () => {
       { request: 'what is this?' },
       {
         ...RUNTIME_CONTEXT,
-        images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
+        imageDescription: '[画像 1] a photo of a cat',
       },
     )
 
     expect(calls[0]?.message.parts).toEqual([
       { kind: 'text', text: 'what is this?' },
-      { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/jpeg' } },
+      { kind: 'text', text: '[画像 1] a photo of a cat' },
+    ])
+  })
+
+  it('omits the image-description part when there is no image description', async () => {
+    const { handle, calls } = recordingHandleFor(async () => submittedTask())
+    const toolInstance = createDelegationTool(handle, {
+      a2aTaskTracker: createFakeTracker(),
+    })
+
+    await invokeDelegationTool(toolInstance, { request: 'log my lunch' })
+
+    expect(calls[0]?.message.parts).toEqual([
+      { kind: 'text', text: 'log my lunch' },
     ])
   })
 

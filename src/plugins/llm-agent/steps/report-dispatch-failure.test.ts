@@ -10,6 +10,7 @@ import {
   createStubSlackClient,
   TEST_ENV,
 } from '#plugins/llm-agent/_test-utils'
+import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import type { ResolvedDispatcherDeps } from '#plugins/llm-agent/dispatcher-deps'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import {
@@ -24,6 +25,9 @@ const baseDeps = (
 ): ResolvedDispatcherDeps =>
   resolveDeps({
     conversationAgent: createFakeConversationAgent(() => {
+      throw new Error('not implemented')
+    }),
+    imageAnalysisModel: createRecordingChatModel(() => {
       throw new Error('not implemented')
     }),
     remoteAgentRegistry: createFakeRemoteAgentRegistry([]),

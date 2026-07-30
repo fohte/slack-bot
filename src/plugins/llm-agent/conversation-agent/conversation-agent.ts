@@ -12,7 +12,6 @@ import { errAsync, ResultAsync } from 'neverthrow'
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
 import { createGenAiTracingMiddleware } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
-import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
 import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
 import { parseConversationThreadId } from '#plugins/llm-agent/conversation-agent/thread-id'
 // Delegation is defined in remote-agent-registry (the tool call that
@@ -82,12 +81,16 @@ export interface ThreadContextForTurn {
   // <thread_context> block text; undefined when there was nothing new to
   // inject (e.g. every unseen message was filtered out by dedup rules).
   readonly text: string | undefined
-  // Images extracted from injected messages, ordered to match the `[画像 N]`
-  // markers embedded in `text`.
-  readonly images: readonly ImageBlock[]
+  // Vision-model description of images extracted from injected messages,
+  // pre-formatted with `[画像 N]` labels matching the markers embedded in
+  // `text`. Undefined when there was nothing to describe. Never raw image
+  // bytes: steps/sync-thread-context.ts converts them to text via
+  // describeImages before this reaches the conversation agent's prompt.
+  readonly imageDescription: string | undefined
   // Max ts among the messages folded into this sync, independent of whether
-  // any of them ended up in `text`/`images`; advances getThreadCursor's
-  // result even for a turn whose sync produced no visible injection.
+  // any of them ended up in `text`/`imageDescription`; advances
+  // getThreadCursor's result even for a turn whose sync produced no visible
+  // injection.
   readonly contextMaxTs: string | undefined
 }
 
@@ -95,7 +98,11 @@ export interface ConversationAgentInput {
   // team:channel:thread_root_ts, see thread-id.ts
   readonly threadId: string
   readonly userText: string
-  readonly images: readonly ImageBlock[]
+  // Vision-model description of this turn's new image attachments, never
+  // raw image bytes: steps/dispatcher.ts converts them to text via
+  // describeImages before this reaches the conversation agent's prompt or
+  // any delegation tool's request.
+  readonly imageDescription: string | undefined
   // Slack event driving this turn; recorded on any a2a_task row a
   // delegation tool call creates during it.
   readonly slackEventId: string
@@ -139,12 +146,9 @@ export interface ConversationAgentOptions {
   readonly logger?: Logger | undefined
 }
 
-const toImageContentBlock = (
-  image: ImageBlock,
-): ContentBlock.Multimodal.Image => ({
-  type: 'image',
-  mimeType: image.mimeType,
-  data: image.base64,
+const toImageDescriptionBlock = (description: string): ContentBlock.Text => ({
+  type: 'text',
+  text: `<attached_images>\n${description}\n</attached_images>`,
 })
 
 // The thread-context text block, when present, is prepended ahead of the
@@ -153,15 +157,19 @@ const toImageContentBlock = (
 // and the other begins.
 const buildHumanMessageContent = (
   userText: string,
-  images: readonly ImageBlock[],
+  imageDescription: string | undefined,
   threadContext: ThreadContextForTurn | undefined,
-): Array<ContentBlock.Text | ContentBlock.Multimodal.Image> => [
+): ContentBlock.Text[] => [
   ...(threadContext?.text !== undefined
     ? [{ type: 'text' as const, text: threadContext.text }]
     : []),
   { type: 'text', text: userText },
-  ...(threadContext?.images ?? []).map(toImageContentBlock),
-  ...images.map(toImageContentBlock),
+  ...(threadContext?.imageDescription !== undefined
+    ? [toImageDescriptionBlock(threadContext.imageDescription)]
+    : []),
+  ...(imageDescription !== undefined
+    ? [toImageDescriptionBlock(imageDescription)]
+    : []),
 ]
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -228,7 +236,7 @@ export const createConversationAgent = (
     respond({
       threadId,
       userText,
-      images,
+      imageDescription,
       slackEventId,
       triggerTs,
       threadContext,
@@ -240,15 +248,9 @@ export const createConversationAgent = (
       const turnMessageId = randomUUID()
       const message = new HumanMessage({
         id: turnMessageId,
-        // contentBlocks (not content) is required for @langchain/openai to
-        // recognize these as standard v1 content blocks: it sets
-        // response_metadata.output_version = 'v1', which is what the
-        // Chat Completions/Responses converters key off of to route
-        // image blocks through the standard-block conversion path instead
-        // of treating them as (unrecognized) provider-native content.
         contentBlocks: buildHumanMessageContent(
           userText,
-          images,
+          imageDescription,
           threadContext,
         ),
         // Read back by computeThreadCursor (via getThreadCursor) to resume
@@ -278,7 +280,7 @@ export const createConversationAgent = (
                 slackChannelId: channelId,
                 threadRootTs,
               },
-              images: [...images],
+              imageDescription,
             },
           },
         ),

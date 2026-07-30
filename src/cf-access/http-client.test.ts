@@ -11,6 +11,7 @@ const baseEnv = {
   DATABASE_URL: 'postgres://localhost/test',
   SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/gpt-5',
   OPENCODE_API_KEY: 'sk-test',
+  SLACK_BOT_IMAGE_ANALYSIS_MODEL: 'grok-4.5',
   A2A_NOTIFICATION_TOKEN: 'notif-token',
 }
 

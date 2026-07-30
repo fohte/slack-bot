@@ -9,6 +9,7 @@ import {
   createStubSlackClient,
   TEST_ENV,
 } from '#plugins/llm-agent/_test-utils'
+import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import {
   EMPTY_THREAD_CONTEXT,
@@ -47,11 +48,29 @@ const createRecordingLogger = (): Logger & { readonly entries: LogEntry[] } => {
 
 const BOT_USER_ID = 'U_BOT'
 
+// Echoes each image's base64 data back with its `[画像 N]` label, so tests
+// can assert on the resulting imageDescription without depending on a real
+// vision model's wording.
+const createTestImageAnalysisModel = () =>
+  createRecordingChatModel((messages) => {
+    const content = messages[0]?.content
+    const blocks = Array.isArray(content) ? content : []
+    return blocks
+      .filter(
+        (block): block is { type: 'image'; data: string } =>
+          typeof block === 'object' &&
+          (block as { type?: unknown }).type === 'image',
+      )
+      .map((block, i) => `[画像 ${String(i + 1)}] ${block.data}`)
+      .join('\n')
+  })
+
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
   resolveDeps({
     conversationAgent: createFakeConversationAgent(() => {
       throw new Error('not implemented')
     }),
+    imageAnalysisModel: createTestImageAnalysisModel(),
     remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
     a2aTaskTracker: createFakeA2aTaskTracker(),
     eventLogStore: createScriptedEventLogStore(),
@@ -190,7 +209,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: `<thread_context>\n[${iso('300.000')}] <@U2>: retry\n</thread_context>`,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '300.000',
     })
   })
@@ -221,7 +240,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: undefined,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '300.000',
     })
   })
@@ -252,7 +271,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: `<thread_context>\n[${iso('300.000')}] <@${BOT_USER_ID}> (you): earlier reply\n</thread_context>`,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '300.000',
     })
   })
@@ -282,7 +301,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: `<thread_context>\n[${iso('300.000')}] <bot:B_OTHER>: crawler finished\n</thread_context>`,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '300.000',
     })
   })
@@ -303,7 +322,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: undefined,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '300.000',
     })
   })
@@ -329,7 +348,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: undefined,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '200.000',
     })
   })
@@ -359,7 +378,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: undefined,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '200.000',
     })
   })
@@ -392,7 +411,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: `<thread_context>\n[${iso('300.000')}] <@U2>: here is the doc [添付ファイル: notes.pdf]\n</thread_context>`,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '300.000',
     })
   })
@@ -446,14 +465,75 @@ describe('syncThreadContext', () => {
         `[${iso('304.000')}] <@U2>: photo 5 [画像 4]`,
         '</thread_context>',
       ].join('\n'),
-      images: [
-        { base64: Buffer.from([1]).toString('base64'), mimeType: 'image/png' },
-        { base64: Buffer.from([2]).toString('base64'), mimeType: 'image/png' },
-        { base64: Buffer.from([3]).toString('base64'), mimeType: 'image/png' },
-        { base64: Buffer.from([4]).toString('base64'), mimeType: 'image/png' },
-      ],
+      imageDescription: [1, 2, 3, 4]
+        .map(
+          (n, i) =>
+            `[画像 ${String(i + 1)}] ${Buffer.from([n]).toString('base64')}`,
+        )
+        .join('\n'),
       contextMaxTs: '304.000',
     })
+  })
+
+  it('falls back to no image description and warns when the vision model call fails', async () => {
+    const { client } = scriptedSlackClient(
+      [
+        {
+          messages: [
+            message({
+              ts: '300.000',
+              userId: 'U2',
+              text: 'photo',
+              files: [
+                {
+                  id: 'F1',
+                  name: 'photo.png',
+                  mimetype: 'image/png',
+                  thumb_360: 'https://files.slack.com/1.png',
+                },
+              ],
+            }),
+          ],
+          hasMore: false,
+          nextCursor: undefined,
+        },
+      ],
+      new Map([
+        [
+          'https://files.slack.com/1.png',
+          { bytes: new Uint8Array([1]), contentType: 'image/png' },
+        ],
+      ]),
+    )
+    const logger = createRecordingLogger()
+    const failingModel = createRecordingChatModel(() => {
+      throw new Error('vision model unavailable')
+    })
+    const deps = baseDeps({
+      slackClient: client,
+      imageAnalysisModel: failingModel,
+      logger,
+    })
+
+    const result = await syncThreadContext(
+      deps,
+      ENV,
+      '200.000',
+      NEVER_IN_FLIGHT,
+    )
+
+    expect(result).toEqual({
+      text: `<thread_context>\n[${iso('300.000')}] <@U2>: photo [画像 1]\n</thread_context>`,
+      imageDescription: undefined,
+      contextMaxTs: '300.000',
+    })
+    expect(
+      logger.entries.some(
+        (entry) =>
+          entry.payload['event'] ===
+          'llm_agent_thread_context_image_analysis_failed',
+      ),
+    ).toBe(true)
   })
 
   it("falls back to a placeholder when a selected image's thumbnail can't be resolved", async () => {
@@ -483,7 +563,7 @@ describe('syncThreadContext', () => {
 
     expect(result).toEqual({
       text: `<thread_context>\n[${iso('300.000')}] <@U2>: no thumbnail here [画像省略: raw.png]\n</thread_context>`,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '300.000',
     })
     expect(logger.entries).toEqual([
@@ -536,7 +616,7 @@ describe('syncThreadContext', () => {
     expect(calls.map((c) => c.cursor)).toEqual([undefined, 'CURSOR_1'])
     expect(result).toEqual({
       text: `<thread_context>\n[${iso('300.000')}] <@U2>: first\n[${iso('301.000')}] <@U2>: second\n</thread_context>`,
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '301.000',
     })
   })
@@ -571,7 +651,7 @@ describe('syncThreadContext', () => {
         ...expectedLines,
         '</thread_context>',
       ].join('\n'),
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '400.000',
     })
   })
@@ -603,7 +683,7 @@ describe('syncThreadContext', () => {
         `[${iso('302.000')}] <@U2>: newest`,
         '</thread_context>',
       ].join('\n'),
-      images: [],
+      imageDescription: undefined,
       contextMaxTs: '302.000',
     })
   })

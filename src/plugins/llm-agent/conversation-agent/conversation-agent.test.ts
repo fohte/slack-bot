@@ -1,6 +1,5 @@
 import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import { MemorySaver } from '@langchain/langgraph'
-import { convertMessagesToCompletionsMessageParams } from '@langchain/openai'
 import { tool } from 'langchain'
 import { err, ok } from 'neverthrow'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -57,7 +56,7 @@ describe('createConversationAgent', () => {
     const outcome = await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'hi',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -82,7 +81,7 @@ describe('createConversationAgent', () => {
     const outcome = await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'hi',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -109,7 +108,7 @@ describe('createConversationAgent', () => {
     await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'hi',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -134,7 +133,7 @@ describe('createConversationAgent', () => {
     await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'hi',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -155,14 +154,14 @@ describe('createConversationAgent', () => {
     await agent.respond({
       threadId,
       userText: 'first turn',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
     await agent.respond({
       threadId,
       userText: 'second turn',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev2',
       triggerTs: '111.222',
     })
@@ -191,14 +190,14 @@ describe('createConversationAgent', () => {
     await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'thread one turn',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
     await agent.respond({
       threadId: 'T1:C2:333.444',
       userText: 'thread two turn',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev2',
       triggerTs: '333.444',
     })
@@ -208,7 +207,7 @@ describe('createConversationAgent', () => {
     ).toEqual([[['human', 'thread one turn']], [['human', 'thread two turn']]])
   })
 
-  it('embeds resized images as base64 content blocks alongside the text', async () => {
+  it('embeds the image description as a text block alongside the user text, never as raw image bytes', async () => {
     const model = createRecordingChatModel(() => 'described the photo')
     const agent = createConversationAgent({
       model,
@@ -218,7 +217,7 @@ describe('createConversationAgent', () => {
     const outcome = await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'what is this?',
-      images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
+      imageDescription: '[画像 1] a photo of a receipt',
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -227,48 +226,9 @@ describe('createConversationAgent', () => {
     const [humanMessage] = model.calls[0] ?? []
     expect(humanMessage?.content).toEqual([
       { type: 'text', text: 'what is this?' },
-      { type: 'image', mimeType: 'image/jpeg', data: 'AAAA' },
-    ])
-  })
-
-  // Guards against images silently becoming invisible to the model:
-  // @langchain/openai only routes content through its standard-block-aware
-  // converter when response_metadata.output_version is 'v1', which only
-  // `contentBlocks` (not `content`) sets. The 'embeds resized images as
-  // base64 content blocks alongside the text' test above can't catch that
-  // on its own, since both fields end up holding the same array; this
-  // asserts on the actual OpenAI wire format the image must reach to be
-  // visible to the model.
-  it('converts the image content block to an OpenAI image_url part', async () => {
-    const model = createRecordingChatModel(() => 'described the photo')
-    const agent = createConversationAgent({
-      model,
-      checkpointer: new MemorySaver(),
-    })
-
-    await agent.respond({
-      threadId: 'T1:C1:111.222',
-      userText: 'what is this?',
-      images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
-      slackEventId: 'Ev1',
-      triggerTs: '111.222',
-    })
-
-    const [humanMessage] = model.calls[0] ?? []
-    expect(
-      convertMessagesToCompletionsMessageParams({
-        messages: humanMessage ? [humanMessage] : [],
-      }),
-    ).toEqual([
       {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'what is this?' },
-          {
-            type: 'image_url',
-            image_url: { url: 'data:image/jpeg;base64,AAAA' },
-          },
-        ],
+        type: 'text',
+        text: '<attached_images>\n[画像 1] a photo of a receipt\n</attached_images>',
       },
     ])
   })
@@ -284,7 +244,7 @@ describe('createConversationAgent', () => {
     await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'hi',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -332,7 +292,7 @@ describe('createConversationAgent', () => {
     ],
   }
 
-  it('threads slackEventId/threadKey/images into a delegation tool as runtime context', async () => {
+  it('threads slackEventId/threadKey/imageDescription into a delegation tool as runtime context', async () => {
     let capturedContext: unknown
     const model = createRecordingChatModel((_messages, callIndex) =>
       callIndex === 0 ? toolCallReply : 'handed off to meshi',
@@ -346,7 +306,7 @@ describe('createConversationAgent', () => {
     await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'log my lunch',
-      images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
+      imageDescription: '[画像 1] a photo of a receipt',
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -358,7 +318,7 @@ describe('createConversationAgent', () => {
         slackChannelId: 'C1',
         threadRootTs: '111.222',
       },
-      images: [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
+      imageDescription: '[画像 1] a photo of a receipt',
     })
   })
 
@@ -375,7 +335,7 @@ describe('createConversationAgent', () => {
     const outcome = await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'log my lunch',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -404,14 +364,14 @@ describe('createConversationAgent', () => {
     await agent.respond({
       threadId,
       userText: 'log my lunch',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
     const secondOutcome = await agent.respond({
       threadId,
       userText: 'thanks',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev2',
       triggerTs: '111.222',
     })
@@ -455,7 +415,7 @@ describe('createConversationAgent', () => {
     const outcome = await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'list my strategies',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -486,7 +446,7 @@ describe('createConversationAgent', () => {
     const outcome = await agent.respond({
       threadId: 'not-a-valid-thread-id',
       userText: 'hi',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -509,7 +469,7 @@ describe('createConversationAgent', () => {
     const outcome = await agent.respond({
       threadId: 'T1:C1:111.222',
       userText: 'hi',
-      images: [],
+      imageDescription: undefined,
       slackEventId: 'Ev1',
       triggerTs: '111.222',
     })
@@ -526,7 +486,7 @@ describe('createConversationAgent', () => {
   })
 
   describe('thread context injection', () => {
-    it('prepends the thread context text block ahead of the user text block, followed by context images then the turn own images', async () => {
+    it('prepends the thread context text block ahead of the user text block, followed by context image description then the turn own image description', async () => {
       const model = createRecordingChatModel(() => 'ok')
       const agent = createConversationAgent({
         model,
@@ -536,12 +496,12 @@ describe('createConversationAgent', () => {
       await agent.respond({
         threadId: 'T1:C1:111.222',
         userText: 'what happened?',
-        images: [{ base64: 'OWN', mimeType: 'image/png' }],
+        imageDescription: '[画像 1] a photo of a receipt',
         slackEventId: 'Ev1',
         triggerTs: '111.222',
         threadContext: {
           text: '<thread_context>\n[2026-01-01T00:00:00.000Z] <@U2>: retry [画像 1]\n</thread_context>',
-          images: [{ base64: 'CTX', mimeType: 'image/jpeg' }],
+          imageDescription: '[画像 1] a photo of a cat',
           contextMaxTs: '100.000',
         },
       })
@@ -553,8 +513,14 @@ describe('createConversationAgent', () => {
           text: '<thread_context>\n[2026-01-01T00:00:00.000Z] <@U2>: retry [画像 1]\n</thread_context>',
         },
         { type: 'text', text: 'what happened?' },
-        { type: 'image', mimeType: 'image/jpeg', data: 'CTX' },
-        { type: 'image', mimeType: 'image/png', data: 'OWN' },
+        {
+          type: 'text',
+          text: '<attached_images>\n[画像 1] a photo of a cat\n</attached_images>',
+        },
+        {
+          type: 'text',
+          text: '<attached_images>\n[画像 1] a photo of a receipt\n</attached_images>',
+        },
       ])
     })
 
@@ -568,10 +534,14 @@ describe('createConversationAgent', () => {
       await agent.respond({
         threadId: 'T1:C1:111.222',
         userText: 'hi',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev1',
         triggerTs: '111.222',
-        threadContext: { text: undefined, images: [], contextMaxTs: '100.000' },
+        threadContext: {
+          text: undefined,
+          imageDescription: undefined,
+          contextMaxTs: '100.000',
+        },
       })
 
       const [humanMessage] = model.calls[0] ?? []
@@ -590,7 +560,7 @@ describe('createConversationAgent', () => {
       await agent.respond({
         threadId: 'T1:C1:111.222',
         userText: 'hi',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev1',
         triggerTs: '111.222',
       })
@@ -624,7 +594,7 @@ describe('createConversationAgent', () => {
       await agent.respond({
         threadId,
         userText: 'hi',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev1',
         triggerTs: '111.222',
       })
@@ -648,10 +618,14 @@ describe('createConversationAgent', () => {
       await agent.respond({
         threadId,
         userText: 'hi',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev1',
         triggerTs: '111.222',
-        threadContext: { text: undefined, images: [], contextMaxTs: '999.999' },
+        threadContext: {
+          text: undefined,
+          imageDescription: undefined,
+          contextMaxTs: '999.999',
+        },
       })
 
       expect(await agent.getThreadCursor(threadId)).toEqual(ok('999.999'))
@@ -667,14 +641,14 @@ describe('createConversationAgent', () => {
       await agent.respond({
         threadId,
         userText: 'first',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev1',
         triggerTs: '111.222',
       })
       await agent.respond({
         threadId,
         userText: 'second',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev2',
         triggerTs: '222.333',
       })

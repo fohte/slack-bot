@@ -22,6 +22,7 @@ import {
   TEST_THREAD_KEY,
 } from '#plugins/llm-agent/_test-utils'
 import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
+import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import type { TaskDispatcherOptions } from '#plugins/llm-agent/dispatcher'
 import {
   createTaskDispatcher,
@@ -92,6 +93,9 @@ const baseOptions = (
     text: 'hi there',
     delegations: [],
   })),
+  imageAnalysisModel: createRecordingChatModel(() => {
+    throw new Error('not implemented')
+  }),
   remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
   a2aTaskTracker: createFakeA2aTaskTracker(),
   eventLogStore: createScriptedEventLogStore(),
@@ -374,7 +378,7 @@ describe('createTaskDispatcher', () => {
       {
         threadId: 'T1:C1:111.222',
         userText: 'hello bot',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev1',
         triggerTs: '111.222',
         threadContext: EMPTY_THREAD_CONTEXT,
@@ -428,7 +432,7 @@ describe('createTaskDispatcher', () => {
       {
         threadId: 'T1:C1:111.222',
         userText: 'hello bot',
-        images: [],
+        imageDescription: undefined,
         slackEventId: 'Ev1',
         triggerTs: '111.222',
         threadContext: EMPTY_THREAD_CONTEXT,

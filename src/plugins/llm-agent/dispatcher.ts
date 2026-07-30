@@ -7,11 +7,11 @@ import {
   INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
 } from '#plugins/llm-agent/assistant-status'
-import type {
-  ImageBlock,
-  ThreadContextForTurn,
+import type { ThreadContextForTurn } from '#plugins/llm-agent/conversation-agent/index'
+import {
+  deriveConversationThreadId,
+  describeImages,
 } from '#plugins/llm-agent/conversation-agent/index'
-import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   DispatcherDeps,
   ResolvedDispatcherDeps,
@@ -275,7 +275,7 @@ const resolveThreadContextForTurn = async (
 const respondWithConversationAgent = async (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescription: string | undefined,
   inFlightTurns: InFlightTurnRegistry,
 ): Promise<string> => {
   const threadId = deriveConversationThreadId({
@@ -292,7 +292,7 @@ const respondWithConversationAgent = async (
   const outcomeResult = await resolved.conversationAgent.respond({
     threadId,
     userText: env.text,
-    images,
+    imageDescription,
     slackEventId: env.eventId,
     triggerTs: env.triggerTs,
     threadContext,
@@ -312,9 +312,14 @@ const finalizeResumeTurn = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescription: string | undefined,
 ) => {
-  const resumeResult = await resumeActiveTask(env, activeTask, resolved, images)
+  const resumeResult = await resumeActiveTask(
+    env,
+    activeTask,
+    resolved,
+    imageDescription,
+  )
   return resumeResult.kind === 'suppressed'
     ? await suppressFinalResponse(env, resolved)
     : await postFinalResponse(env, resumeResult.text, resolved)
@@ -350,10 +355,19 @@ export const runMentionInBackground = async (
     const imagesResult = await resolveImageBlocks(resolved, env)
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (imagesResult.isErr()) throw imagesResult.error
-    const images = imagesResult.value
+    // Converted to text once here via a vision-specialized model, so neither
+    // the conversation agent's own model nor any delegate agent ever reads
+    // raw image bytes directly (see conversation-agent/image-analysis.ts).
+    const descriptionResult = await describeImages(
+      resolved.imageAnalysisModel,
+      imagesResult.value,
+    )
+    // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
+    if (descriptionResult.isErr()) throw descriptionResult.error
+    const imageDescription = descriptionResult.value
     const postResult =
       activeTask !== undefined
-        ? await finalizeResumeTurn(env, activeTask, resolved, images)
+        ? await finalizeResumeTurn(env, activeTask, resolved, imageDescription)
         : await postFinalResponse(
             env,
             await threadTurnQueue.run(
@@ -366,7 +380,7 @@ export const runMentionInBackground = async (
                 respondWithConversationAgent(
                   env,
                   resolved,
-                  images,
+                  imageDescription,
                   inFlightTurns,
                 ),
             ),

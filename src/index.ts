@@ -211,6 +211,10 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
     apiKey: config.conversationAgent.opencodeApiKey,
     model: config.conversationAgent.model,
   })
+  const imageAnalysisModel = createOpenCodeGoChatModel({
+    apiKey: config.conversationAgent.opencodeApiKey,
+    model: config.imageAnalysis.model,
+  })
   const personaParaphraser = createPersonaParaphraser({
     model,
     personaPrompt: config.conversationAgent.personaPrompt,
@@ -258,6 +262,7 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
         })
         const onAccepted = createTaskDispatcher({
           conversationAgent,
+          imageAnalysisModel,
           remoteAgentRegistry,
           a2aTaskTracker,
           eventLogStore,

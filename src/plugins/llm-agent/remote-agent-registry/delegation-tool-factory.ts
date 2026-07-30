@@ -15,8 +15,6 @@ import type {
   ThreadKey,
 } from '#plugins/llm-agent/a2a-task-tracker'
 import { isA2aTaskState } from '#plugins/llm-agent/a2a-task-tracker'
-import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
-import { toFilePart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
 import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
 import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-registry/send-message-result'
 import { DuplicateDelegationToolNameError } from '#types/errors'
@@ -33,20 +31,17 @@ const THREAD_KEY_SCHEMA = z.object({
   threadRootTs: z.string(),
 }) satisfies z.ZodType<ThreadKey>
 
-const IMAGE_BLOCK_SCHEMA = z.object({
-  base64: z.string(),
-  mimeType: z.string(),
-}) satisfies z.ZodType<ImageBlock>
-
 // Per-turn Slack context a delegation tool needs but cannot derive from its
 // own (agent-scoped, bound-once) construction: which event/thread the
-// current conversation turn belongs to, and the images attached to it.
-// Threaded into the tool via LangChain's runtime `context`, since
-// `ConversationAgentOptions.tools` is bound once and reused across turns.
+// current conversation turn belongs to, and a vision-model description of
+// the images attached to it (never raw image bytes — those never leave
+// slack-bot's process). Threaded into the tool via LangChain's runtime
+// `context`, since `ConversationAgentOptions.tools` is bound once and reused
+// across turns.
 export const DELEGATION_RUNTIME_CONTEXT_SCHEMA = z.object({
   slackEventId: z.string(),
   threadKey: THREAD_KEY_SCHEMA,
-  images: z.array(IMAGE_BLOCK_SCHEMA),
+  imageDescription: z.string().optional(),
 })
 
 // Initial client-side deadline armed on every newly delegated task; a
@@ -102,8 +97,8 @@ const DELEGATION_INPUT_SCHEMA = z.object({
     .describe(
       'The full, self-contained request to send to this agent. It cannot ' +
         'see this conversation, so include every relevant detail from it. ' +
-        'Attached images are forwarded automatically and do not need to be ' +
-        'described.',
+        'A text description of any attached images is forwarded ' +
+        'automatically and does not need to be repeated.',
     ),
 })
 
@@ -121,7 +116,7 @@ export const createDelegationTool = (
       input: z.infer<typeof DELEGATION_INPUT_SCHEMA>,
       runtime: ToolRuntime<unknown, typeof DELEGATION_RUNTIME_CONTEXT_SCHEMA>,
     ): Promise<[string, Delegation | undefined]> => {
-      const { slackEventId, threadKey, images } = runtime.context
+      const { slackEventId, threadKey, imageDescription } = runtime.context
 
       // New delegations always start a fresh message/send; resuming an
       // input-required task is a different, tool-independent flow that
@@ -150,7 +145,9 @@ export const createDelegationTool = (
         role: 'user',
         parts: [
           { kind: 'text', text: input.request },
-          ...images.map(toFilePart),
+          ...(imageDescription !== undefined
+            ? [{ kind: 'text' as const, text: imageDescription }]
+            : []),
         ],
         ...(contextId !== undefined ? { contextId } : {}),
       }

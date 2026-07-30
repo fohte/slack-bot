@@ -17,6 +17,13 @@ export interface ConversationAgentConfig {
   readonly opencodeApiKey: string
 }
 
+// Shares ConversationAgentConfig.opencodeApiKey and the same OpenCode Go
+// endpoint; only the model differs, since image analysis needs a
+// vision-accurate model independent of the conversation agent's own model.
+export interface ImageAnalysisConfig {
+  readonly model: string
+}
+
 export interface Config {
   readonly slackSigningSecret: string
   readonly slackBotToken: string
@@ -27,6 +34,7 @@ export interface Config {
   readonly maxWebApiRetries: number
   readonly logLevel: LogLevel
   readonly conversationAgent: ConversationAgentConfig
+  readonly imageAnalysis: ImageAnalysisConfig
   // Delegation targets for RemoteAgentRegistry. Empty means the
   // conversation agent runs with no delegation tools.
   readonly remoteAgentUrls: readonly string[]
@@ -88,6 +96,10 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     opencodeApiKey: requireEnv(env, 'OPENCODE_API_KEY'),
   }
 
+  const imageAnalysis: ImageAnalysisConfig = {
+    model: requireEnv(env, 'SLACK_BOT_IMAGE_ANALYSIS_MODEL'),
+  }
+
   const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')
   const mcpServerUrls = optionalUrlList(env, 'MCP_SERVER_URLS')
   const a2aNotificationToken = requireEnv(env, 'A2A_NOTIFICATION_TOKEN')
@@ -103,6 +115,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     maxWebApiRetries,
     logLevel,
     conversationAgent,
+    imageAnalysis,
     remoteAgentUrls,
     mcpServerUrls,
     a2aNotificationToken,
