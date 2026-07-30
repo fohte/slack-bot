@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
+
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
 import type { A2aTaskTracker } from '#plugins/llm-agent/a2a-task-tracker'
@@ -30,6 +32,10 @@ export interface SlackEnvelope {
 
 export interface DispatcherDeps {
   readonly conversationAgent: ConversationAgent
+  // Vision-specialized chat model dedicated to converting Slack image
+  // attachments into text (see conversation-agent/image-analysis.ts),
+  // independent of ConversationAgent's own (persona/text-generation) model.
+  readonly imageAnalysisModel: BaseChatModel
   readonly remoteAgentRegistry: RemoteAgentRegistry
   readonly a2aTaskTracker: A2aTaskTracker
   readonly eventLogStore: EventLogStore
@@ -52,6 +58,7 @@ export interface DispatcherDeps {
 
 export interface ResolvedDispatcherDeps {
   readonly conversationAgent: ConversationAgent
+  readonly imageAnalysisModel: BaseChatModel
   readonly remoteAgentRegistry: RemoteAgentRegistry
   readonly a2aTaskTracker: A2aTaskTracker
   readonly eventLogStore: EventLogStore
@@ -67,6 +74,7 @@ export interface ResolvedDispatcherDeps {
 
 export const resolveDeps = (deps: DispatcherDeps): ResolvedDispatcherDeps => ({
   conversationAgent: deps.conversationAgent,
+  imageAnalysisModel: deps.imageAnalysisModel,
   remoteAgentRegistry: deps.remoteAgentRegistry,
   a2aTaskTracker: deps.a2aTaskTracker,
   eventLogStore: deps.eventLogStore,

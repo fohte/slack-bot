@@ -10,6 +10,7 @@ const baseEnv = {
   DATABASE_URL: 'postgres://localhost/test',
   SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/gpt-5',
   OPENCODE_API_KEY: 'sk-test',
+  SLACK_BOT_IMAGE_ANALYSIS_MODEL: 'grok-4.5',
   A2A_NOTIFICATION_TOKEN: 'notif-token',
 } satisfies NodeJS.ProcessEnv
 
@@ -29,6 +30,7 @@ describe('loadConfig', () => {
       personaPrompt: undefined,
       opencodeApiKey: 'sk-test',
     })
+    expect(config.imageAnalysis).toEqual({ model: 'grok-4.5' })
     expect(config.remoteAgentUrls).toEqual([])
     expect(config.mcpServerUrls).toEqual([])
     expect(config.a2aNotificationToken).toBe('notif-token')
@@ -160,6 +162,13 @@ describe('loadConfig', () => {
   it('throws ConfigLoadError when OPENCODE_API_KEY is missing', () => {
     const env = { ...baseEnv, OPENCODE_API_KEY: undefined }
     expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
+  })
+
+  it('falls back to the conversation agent model when SLACK_BOT_IMAGE_ANALYSIS_MODEL is not set', () => {
+    const config = loadConfig({
+      env: { ...baseEnv, SLACK_BOT_IMAGE_ANALYSIS_MODEL: undefined },
+    })
+    expect(config.imageAnalysis).toEqual({ model: 'opencode-go/gpt-5' })
   })
 
   it('throws ConfigLoadError when A2A_NOTIFICATION_TOKEN is missing', () => {

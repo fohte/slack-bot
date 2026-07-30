@@ -9,6 +9,7 @@ import {
   createStubSlackClient,
   TEST_ENV,
 } from '#plugins/llm-agent/_test-utils'
+import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
 import type { SlackFileDownload, SlackWebClient } from '#slack/web-client'
@@ -18,6 +19,9 @@ import type { SlackFile } from '#types/slack-payloads'
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
   resolveDeps({
     conversationAgent: createFakeConversationAgent(() => {
+      throw new Error('not implemented')
+    }),
+    imageAnalysisModel: createRecordingChatModel(() => {
       throw new Error('not implemented')
     }),
     remoteAgentRegistry: createFakeRemoteAgentRegistry([]),

@@ -16,6 +16,7 @@ import {
   TEST_THREAD_KEY,
 } from '#plugins/llm-agent/_test-utils'
 import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
+import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import {
   RESUME_SEND_FAILURE_TEXT,
@@ -39,6 +40,9 @@ const ACTIVE_TASK: A2aTaskRow = {
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
   resolveDeps({
     conversationAgent: createFakeConversationAgent(() => {
+      throw new Error('not implemented')
+    }),
+    imageAnalysisModel: createRecordingChatModel(() => {
       throw new Error('not implemented')
     }),
     remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
@@ -67,7 +71,7 @@ describe('resumeActiveTask', () => {
       { ...TEST_ENV, text: 'here is more info' },
       ACTIVE_TASK,
       deps,
-      [],
+      undefined,
     )
 
     expect(calls).toEqual<MessageSendParams[]>([
@@ -97,7 +101,7 @@ describe('resumeActiveTask', () => {
       taskDeadlineMs: 60_000,
     })
 
-    await resumeActiveTask(TEST_ENV, ACTIVE_TASK, deps, [])
+    await resumeActiveTask(TEST_ENV, ACTIVE_TASK, deps, undefined)
 
     expect(tracker.transitions).toEqual([
       {
@@ -111,7 +115,7 @@ describe('resumeActiveTask', () => {
     ])
   })
 
-  it('forwards attached images as A2A FileParts', async () => {
+  it('forwards the vision-model image description as an additional text part', async () => {
     const { handle, calls } = recordingHandleFor(async () => taskResult())
 
     await resumeActiveTask(
@@ -120,12 +124,12 @@ describe('resumeActiveTask', () => {
       baseDeps({
         remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
       }),
-      [{ base64: 'AAAA', mimeType: 'image/jpeg' }],
+      '[画像 1] a photo of a cat',
     )
 
     expect(calls[0]?.message.parts).toEqual([
       { kind: 'text', text: TEST_ENV.text },
-      { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/jpeg' } },
+      { kind: 'text', text: '[画像 1] a photo of a cat' },
     ])
   })
 
@@ -142,7 +146,7 @@ describe('resumeActiveTask', () => {
         remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
         a2aTaskTracker: tracker,
       }),
-      [],
+      undefined,
     )
 
     expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
@@ -172,7 +176,7 @@ describe('resumeActiveTask', () => {
       { ...TEST_ENV, text: 'still there?' },
       ACTIVE_TASK,
       deps,
-      [],
+      undefined,
     )
 
     expect(tracker.transitions).toEqual([
@@ -233,7 +237,7 @@ describe('resumeActiveTask', () => {
         remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
         a2aTaskTracker: tracker,
       }),
-      [],
+      undefined,
     )
 
     // No tracked row exists for the new task, so no future push/heartbeat
@@ -262,7 +266,7 @@ describe('resumeActiveTask', () => {
         remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
         a2aTaskTracker: tracker,
       }),
-      [],
+      undefined,
     )
 
     expect(tracker.transitions).toEqual([
@@ -301,7 +305,7 @@ describe('resumeActiveTask', () => {
         remoteAgentRegistry: createFakeRemoteAgentRegistry([handle]),
         a2aTaskTracker: tracker,
       }),
-      [],
+      undefined,
     )
 
     expect(tracker.transitions).toEqual([
@@ -319,7 +323,7 @@ describe('resumeActiveTask', () => {
       TEST_ENV,
       ACTIVE_TASK,
       baseDeps({ remoteAgentRegistry: createFakeRemoteAgentRegistry([]) }),
-      [],
+      undefined,
     )
 
     expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })

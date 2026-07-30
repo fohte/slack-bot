@@ -2,7 +2,10 @@ import type {
   ImageBlock,
   ThreadContextForTurn,
 } from '#plugins/llm-agent/conversation-agent/index'
-import { imageBlockFromDownloadedImage } from '#plugins/llm-agent/conversation-agent/index'
+import {
+  describeImages,
+  imageBlockFromDownloadedImage,
+} from '#plugins/llm-agent/conversation-agent/index'
 import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
@@ -29,7 +32,7 @@ const REPLIES_MAX_PAGES = 5
 
 export const EMPTY_THREAD_CONTEXT: ThreadContextForTurn = {
   text: undefined,
-  images: [],
+  imageDescription: undefined,
   contextMaxTs: undefined,
 }
 
@@ -235,6 +238,33 @@ const resolveContextImages = async (
   return resolvedImages
 }
 
+// Converts resolvedImages into text via the vision-specialized model, in the
+// same order buildLines' markerByFile assigns `[画像 N]` labels, so the
+// returned description lines up with those markers. Best-effort like the
+// rest of this file's context sync: a failure here degrades to no image
+// descriptions rather than failing the turn, unlike the current turn's own
+// images (steps/dispatcher.ts treats that failure as fatal).
+const describeContextImages = async (
+  resolved: ResolvedDispatcherDeps,
+  env: SlackEnvelope,
+  resolvedImages: readonly ResolvedContextImage[],
+): Promise<string | undefined> => {
+  const result = await describeImages(
+    resolved.imageAnalysisModel,
+    resolvedImages.map(({ block }) => block),
+  )
+  if (result.isOk()) return result.value
+  resolved.logger.warn(
+    {
+      event: 'llm_agent_thread_context_image_analysis_failed',
+      event_id: env.eventId,
+      err: result.error,
+    },
+    'thread context image analysis failed; continuing without image descriptions',
+  )
+  return undefined
+}
+
 const buildLines = (
   budgeted: readonly DatedMessage[],
   resolvedImages: readonly ResolvedContextImage[],
@@ -340,7 +370,7 @@ export const syncThreadContext = async (
       },
       'every unseen thread message was excluded by dedup rules',
     )
-    return { text: undefined, images: [], contextMaxTs }
+    return { text: undefined, imageDescription: undefined, contextMaxTs }
   }
 
   const resolvedImages = await resolveContextImages(resolved, env, budgeted)
@@ -361,9 +391,15 @@ export const syncThreadContext = async (
     'synced unseen thread messages into context',
   )
 
+  const imageDescription = await describeContextImages(
+    resolved,
+    env,
+    resolvedImages,
+  )
+
   return {
     text: buildContextText(lines, truncated),
-    images: resolvedImages.map(({ block }) => block),
+    imageDescription,
     contextMaxTs,
   }
 }
