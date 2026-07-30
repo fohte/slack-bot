@@ -22,7 +22,10 @@ import type {
   SlackThreadReplyMessage,
   SlackWebClient,
 } from '#slack/web-client'
-import { SlackImageThumbnailUnavailableError } from '#types/errors'
+import {
+  ImageAnalysisError,
+  SlackImageThumbnailUnavailableError,
+} from '#types/errors'
 
 interface LogEntry {
   readonly level: 'info' | 'warn'
@@ -527,13 +530,29 @@ describe('syncThreadContext', () => {
       imageDescription: undefined,
       contextMaxTs: '300.000',
     })
-    expect(
-      logger.entries.some(
-        (entry) =>
-          entry.payload['event'] ===
-          'llm_agent_thread_context_image_analysis_failed',
-      ),
-    ).toBe(true)
+    expect(logger.entries).toEqual([
+      {
+        level: 'info',
+        payload: {
+          event: 'llm_agent_thread_context_synced',
+          event_id: ENV.eventId,
+          injected_message_count: 1,
+          injected_image_count: 1,
+          truncated: false,
+        },
+      },
+      {
+        level: 'warn',
+        payload: {
+          event: 'llm_agent_thread_context_image_analysis_failed',
+          event_id: ENV.eventId,
+          err: new ImageAnalysisError(
+            'vision model image analysis failed',
+            new Error('vision model unavailable'),
+          ),
+        },
+      },
+    ])
   })
 
   it("falls back to a placeholder when a selected image's thumbnail can't be resolved", async () => {

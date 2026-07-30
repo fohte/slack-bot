@@ -486,7 +486,7 @@ describe('createConversationAgent', () => {
   })
 
   describe('thread context injection', () => {
-    it('prepends the thread context text block ahead of the user text block, followed by context image description then the turn own image description', async () => {
+    it('prepends the thread context text block ahead of the user text block, wrapping the context image description and the turn own image description in distinct tags', async () => {
       const model = createRecordingChatModel(() => 'ok')
       const agent = createConversationAgent({
         model,
@@ -515,7 +515,7 @@ describe('createConversationAgent', () => {
         { type: 'text', text: 'what happened?' },
         {
           type: 'text',
-          text: '<attached_images>\n[画像 1] a photo of a cat\n</attached_images>',
+          text: '<thread_context_images>\n[画像 1] a photo of a cat\n</thread_context_images>',
         },
         {
           type: 'text',

@@ -11,6 +11,7 @@ import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
 } from '#plugins/llm-agent/dispatcher-deps'
+import { toOptionalTextPart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
 import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/index'
 import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-registry/index'
 
@@ -64,9 +65,7 @@ const buildParams = (
       : {}),
     parts: [
       { kind: 'text', text: env.text },
-      ...(imageDescription !== undefined
-        ? [{ kind: 'text' as const, text: imageDescription }]
-        : []),
+      ...toOptionalTextPart(imageDescription),
     ],
   }
   return {

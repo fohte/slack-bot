@@ -146,10 +146,25 @@ export interface ConversationAgentOptions {
   readonly logger?: Logger | undefined
 }
 
-const toImageDescriptionBlock = (description: string): ContentBlock.Text => ({
+const toDescriptionBlock = (
+  tag: string,
+  description: string,
+): ContentBlock.Text => ({
   type: 'text',
-  text: `<attached_images>\n${description}\n</attached_images>`,
+  text: `<${tag}>\n${description}\n</${tag}>`,
 })
+
+// Each describeImages call independently restarts its own `[画像 N]`
+// numbering (see conversation-agent/image-analysis.ts), so a thread-context
+// description and this turn's own description can both legitimately contain
+// a "[画像 1]" label. Wrapping them in distinct tags keeps those labels from
+// being read as referring to the same image.
+const toThreadContextImageDescriptionBlock = (
+  description: string,
+): ContentBlock.Text => toDescriptionBlock('thread_context_images', description)
+
+const toOwnImageDescriptionBlock = (description: string): ContentBlock.Text =>
+  toDescriptionBlock('attached_images', description)
 
 // The thread-context text block, when present, is prepended ahead of the
 // user's own text block rather than merged into it, so a prompt-cache replay
@@ -165,10 +180,10 @@ const buildHumanMessageContent = (
     : []),
   { type: 'text', text: userText },
   ...(threadContext?.imageDescription !== undefined
-    ? [toImageDescriptionBlock(threadContext.imageDescription)]
+    ? [toThreadContextImageDescriptionBlock(threadContext.imageDescription)]
     : []),
   ...(imageDescription !== undefined
-    ? [toImageDescriptionBlock(imageDescription)]
+    ? [toOwnImageDescriptionBlock(imageDescription)]
     : []),
 ]
 

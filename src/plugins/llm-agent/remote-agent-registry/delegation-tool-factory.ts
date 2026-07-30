@@ -15,6 +15,7 @@ import type {
   ThreadKey,
 } from '#plugins/llm-agent/a2a-task-tracker'
 import { isA2aTaskState } from '#plugins/llm-agent/a2a-task-tracker'
+import { toOptionalTextPart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
 import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
 import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-registry/send-message-result'
 import { DuplicateDelegationToolNameError } from '#types/errors'
@@ -145,9 +146,7 @@ export const createDelegationTool = (
         role: 'user',
         parts: [
           { kind: 'text', text: input.request },
-          ...(imageDescription !== undefined
-            ? [{ kind: 'text' as const, text: imageDescription }]
-            : []),
+          ...toOptionalTextPart(imageDescription),
         ],
         ...(contextId !== undefined ? { contextId } : {}),
       }

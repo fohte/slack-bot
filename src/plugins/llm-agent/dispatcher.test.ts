@@ -17,6 +17,7 @@ import {
   createScriptedEventLogStore,
   createStubSlackClient,
   recordingHandleFor,
+  type StubSlackClient,
   taskResult,
   TEST_ENV,
   TEST_THREAD_KEY,
@@ -399,6 +400,119 @@ describe('createTaskDispatcher', () => {
         thread: '111.222',
         text: 'sure, here is the answer',
         blocks: [{ type: 'markdown', text: 'sure, here is the answer' }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+  })
+
+  it("converts the turn's own image attachment to text via the vision model and passes it to the conversation agent", async () => {
+    const slackClient: StubSlackClient = {
+      ...createStubSlackClient(),
+      async downloadFile(url: string) {
+        if (url !== 'https://files.slack.com/1.png') {
+          throw new Error(`unexpected url: ${url}`)
+        }
+        return { bytes: new Uint8Array([1]), contentType: 'image/png' }
+      },
+    } as StubSlackClient
+    const conversationAgent = createFakeConversationAgent(() => ({
+      text: 'that looks like a receipt',
+      delegations: [],
+    }))
+    const imageAnalysisModel = createRecordingChatModel(
+      () => '[画像 1] a photo of a receipt',
+    )
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({
+        slackClient,
+        conversationAgent,
+        imageAnalysisModel,
+        inFlightTasks,
+      }),
+    )
+
+    await dispatch(
+      acceptedMention({
+        files: [
+          {
+            id: 'F1',
+            mimetype: 'image/png',
+            thumb_360: 'https://files.slack.com/1.png',
+          },
+        ],
+      }),
+    )
+    await inFlightTasks.waitForIdle()
+
+    expect(conversationAgent.calls).toEqual([
+      {
+        threadId: 'T1:C1:111.222',
+        userText: 'hello bot',
+        imageDescription: '[画像 1] a photo of a receipt',
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+        threadContext: EMPTY_THREAD_CONTEXT,
+      },
+    ])
+  })
+
+  it('fails the turn without ever reaching the conversation agent when the vision model call fails', async () => {
+    const slackClient: StubSlackClient = {
+      ...createStubSlackClient(),
+      async downloadFile(url: string) {
+        if (url !== 'https://files.slack.com/1.png') {
+          throw new Error(`unexpected url: ${url}`)
+        }
+        return { bytes: new Uint8Array([1]), contentType: 'image/png' }
+      },
+    } as StubSlackClient
+    const conversationAgent = createFakeConversationAgent(() => ({
+      text: 'unreachable',
+      delegations: [],
+    }))
+    const imageAnalysisModel = createRecordingChatModel(() => {
+      throw new Error('vision model unavailable')
+    })
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({
+        slackClient,
+        conversationAgent,
+        imageAnalysisModel,
+        inFlightTasks,
+      }),
+    )
+
+    await dispatch(
+      acceptedMention({
+        files: [
+          {
+            id: 'F1',
+            mimetype: 'image/png',
+            thumb_360: 'https://files.slack.com/1.png',
+          },
+        ],
+      }),
+    )
+    await inFlightTasks.waitForIdle()
+
+    expect(conversationAgent.calls).toEqual([])
+    expect(slackClient.calls.slice(1)).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: DISPATCH_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: DISPATCH_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {
