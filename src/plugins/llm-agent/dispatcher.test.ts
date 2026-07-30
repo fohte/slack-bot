@@ -413,6 +413,56 @@ describe('createTaskDispatcher', () => {
     ])
   })
 
+  it('does not post a reply and leaves the assistant status in place when a new turn delegates', async () => {
+    const slackClient = createStubSlackClient()
+    const conversationAgent = createFakeConversationAgent(() => ({
+      text: '託しておきました',
+      delegations: [
+        { agentName: 'meshi', taskId: 'task-1', contextId: 'ctx-1' },
+      ],
+    }))
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({ slackClient, conversationAgent, inFlightTasks }),
+    )
+
+    await dispatch(acceptedMention())
+    await inFlightTasks.waitForIdle()
+
+    // A turn that delegated settles silently, same as a successful resume:
+    // no Slack post, and the initial thinking-bubble status is left in place
+    // so the delegate's next heartbeat can take over the indicator.
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: 'is thinking...',
+        blocks: undefined,
+        loadingMessages: ['Preparing your task…'],
+      },
+    ])
+  })
+
+  it('marks the event responded when a new turn delegates, even though nothing is posted to Slack', async () => {
+    const eventLogStore = createScriptedEventLogStore()
+    const conversationAgent = createFakeConversationAgent(() => ({
+      text: '託しておきました',
+      delegations: [
+        { agentName: 'meshi', taskId: 'task-1', contextId: 'ctx-1' },
+      ],
+    }))
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({ eventLogStore, conversationAgent, inFlightTasks }),
+    )
+
+    await dispatch(acceptedMention())
+    await inFlightTasks.waitForIdle()
+
+    expect(eventLogStore.markedResponded).toEqual([TEST_ENV.eventId])
+  })
+
   it("converts the turn's own image attachment to text via the vision model and passes it to the conversation agent", async () => {
     const slackClient: StubSlackClient = {
       ...createStubSlackClient(),
