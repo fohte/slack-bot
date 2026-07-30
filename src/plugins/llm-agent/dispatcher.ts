@@ -1,4 +1,5 @@
 import { SpanStatusCode, trace } from '@opentelemetry/api'
+import type { ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
@@ -7,11 +8,11 @@ import {
   INITIAL_PHASE_STATUS,
   trySetAssistantStatus,
 } from '#plugins/llm-agent/assistant-status'
-import type {
-  ImageBlock,
-  ThreadContextForTurn,
+import type { ThreadContextForTurn } from '#plugins/llm-agent/conversation-agent/index'
+import {
+  deriveConversationThreadId,
+  describeImages,
 } from '#plugins/llm-agent/conversation-agent/index'
-import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   DispatcherDeps,
   ResolvedDispatcherDeps,
@@ -43,6 +44,7 @@ import type { ThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
 import { createThreadTurnQueue } from '#plugins/llm-agent/thread-turn-queue'
 import type { InFlightTasks } from '#server/in-flight-tasks'
 import type { SlackWebClient } from '#slack/web-client'
+import type { ImageAnalysisError } from '#types/errors'
 import type { SlackFile } from '#types/slack-payloads'
 
 const TRACER_NAME = 'slack-bot'
@@ -282,7 +284,7 @@ interface ConversationTurnResult {
 const respondWithConversationAgent = async (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescriptionResult: ResultAsync<string | undefined, ImageAnalysisError>,
   inFlightTurns: InFlightTurnRegistry,
 ): Promise<ConversationTurnResult> => {
   const threadId = deriveConversationThreadId({
@@ -290,16 +292,19 @@ const respondWithConversationAgent = async (
     channelId: env.channelId,
     threadRootTs: env.threadRootTs,
   })
-  const threadContext = await resolveThreadContextForTurn(
-    env,
-    resolved,
-    threadId,
-    inFlightTurns,
-  )
+  // Independent of each other — this turn's own images and thread-context
+  // images are described by separate describeImages calls — so run
+  // concurrently rather than paying two sequential vision-model round trips.
+  const [descriptionResult, threadContext] = await Promise.all([
+    imageDescriptionResult,
+    resolveThreadContextForTurn(env, resolved, threadId, inFlightTurns),
+  ])
+  // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for runMentionInBackground's catch below to handle uniformly
+  if (descriptionResult.isErr()) throw descriptionResult.error
   const outcomeResult = await resolved.conversationAgent.respond({
     threadId,
     userText: env.text,
-    images,
+    imageDescription: descriptionResult.value,
     slackEventId: env.eventId,
     triggerTs: env.triggerTs,
     threadContext,
@@ -323,9 +328,17 @@ const finalizeResumeTurn = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescriptionResult: ResultAsync<string | undefined, ImageAnalysisError>,
 ) => {
-  const resumeResult = await resumeActiveTask(env, activeTask, resolved, images)
+  const descriptionResult = await imageDescriptionResult
+  // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for runMentionInBackground's catch below to handle uniformly
+  if (descriptionResult.isErr()) throw descriptionResult.error
+  const resumeResult = await resumeActiveTask(
+    env,
+    activeTask,
+    resolved,
+    descriptionResult.value,
+  )
   return resumeResult.kind === 'suppressed'
     ? await suppressFinalResponse(env, resolved)
     : await postFinalResponse(env, resumeResult.text, resolved)
@@ -340,7 +353,7 @@ const finalizeResumeTurn = async (
 const finalizeNewTurn = async (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescriptionResult: ResultAsync<string | undefined, ImageAnalysisError>,
   inFlightTurns: InFlightTurnRegistry,
   threadTurnQueue: ThreadTurnQueue,
 ) => {
@@ -350,7 +363,12 @@ const finalizeNewTurn = async (
     threadRootTs: env.threadRootTs,
   })
   const result = await threadTurnQueue.run(threadId, () =>
-    respondWithConversationAgent(env, resolved, images, inFlightTurns),
+    respondWithConversationAgent(
+      env,
+      resolved,
+      imageDescriptionResult,
+      inFlightTurns,
+    ),
   )
   return result.delegated
     ? await suppressFinalResponse(env, resolved)
@@ -387,14 +405,28 @@ export const runMentionInBackground = async (
     const imagesResult = await resolveImageBlocks(resolved, env)
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (imagesResult.isErr()) throw imagesResult.error
-    const images = imagesResult.value
+    // Converted to text once here via a vision-specialized model, so neither
+    // the conversation agent's own model nor any delegate agent ever reads
+    // raw image bytes directly (see conversation-agent/image-analysis.ts).
+    // Not awaited yet: neither downstream branch has anything else to do
+    // before it needs this, and respondWithConversationAgent below runs it
+    // concurrently with its own (independent) thread-context vision call.
+    const imageDescriptionResult = describeImages(
+      resolved.imageAnalysisModel,
+      imagesResult.value,
+    )
     const postResult =
       activeTask !== undefined
-        ? await finalizeResumeTurn(env, activeTask, resolved, images)
+        ? await finalizeResumeTurn(
+            env,
+            activeTask,
+            resolved,
+            imageDescriptionResult,
+          )
         : await finalizeNewTurn(
             env,
             resolved,
-            images,
+            imageDescriptionResult,
             inFlightTurns,
             threadTurnQueue,
           )

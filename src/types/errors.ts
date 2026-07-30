@@ -196,3 +196,10 @@ export class DuplicateDelegationToolNameError extends Error {
     )
   }
 }
+
+export class ImageAnalysisError extends Error {
+  override readonly name = 'ImageAnalysisError'
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+  }
+}

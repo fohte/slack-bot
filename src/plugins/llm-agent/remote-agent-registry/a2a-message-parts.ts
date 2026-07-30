@@ -1,15 +1,14 @@
 import type { Part, TextPart } from '@a2a-js/sdk'
 
-import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
+export const isTextPart = (part: Part): part is TextPart => part.kind === 'text'
 
 // Shared between fresh delegations (DelegationToolFactory) and task-resume
-// message/send calls (steps/resume-active-task.ts).
-export const toFilePart = (image: ImageBlock) => ({
-  kind: 'file' as const,
-  file: { bytes: image.base64, mimeType: image.mimeType },
-})
-
-export const isTextPart = (part: Part): part is TextPart => part.kind === 'text'
+// message/send calls (steps/resume-active-task.ts): both append the
+// vision-model image description as an extra text part when one is present,
+// and omit it otherwise.
+export const toOptionalTextPart = (
+  text: string | undefined,
+): readonly TextPart[] => (text !== undefined ? [{ kind: 'text', text }] : [])
 
 // Shared between ResponseFinalizer (settle/question text) and
 // TaskProgressStatus (progress text): both read a Message's text parts the

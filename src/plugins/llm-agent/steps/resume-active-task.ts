@@ -7,12 +7,11 @@ import type {
   A2aTaskRow,
 } from '#plugins/llm-agent/a2a-task-tracker'
 import { isA2aTaskState } from '#plugins/llm-agent/a2a-task-tracker'
-import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/index'
 import type {
   ResolvedDispatcherDeps,
   SlackEnvelope,
 } from '#plugins/llm-agent/dispatcher-deps'
-import { toFilePart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
+import { toOptionalTextPart } from '#plugins/llm-agent/remote-agent-registry/a2a-message-parts'
 import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/index'
 import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-registry/index'
 
@@ -53,7 +52,7 @@ const findHandle = async (
 const buildParams = (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
-  images: readonly ImageBlock[],
+  imageDescription: string | undefined,
   taskAndContext: { readonly taskId?: string; readonly contextId: string },
 ): MessageSendParams => {
   const message: Message = {
@@ -64,7 +63,10 @@ const buildParams = (
     ...(taskAndContext.taskId !== undefined
       ? { taskId: taskAndContext.taskId }
       : {}),
-    parts: [{ kind: 'text', text: env.text }, ...images.map(toFilePart)],
+    parts: [
+      { kind: 'text', text: env.text },
+      ...toOptionalTextPart(imageDescription),
+    ],
   }
   return {
     message,
@@ -121,9 +123,9 @@ const redelegate = async (
   activeTask: A2aTaskRow,
   handle: RemoteAgentHandle,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescription: string | undefined,
 ): Promise<ResumeResult> => {
-  const params = buildParams(resolved, env, images, {
+  const params = buildParams(resolved, env, imageDescription, {
     contextId: activeTask.contextId,
   })
 
@@ -202,7 +204,7 @@ const settleAndRedelegate = async (
   activeTask: A2aTaskRow,
   handle: RemoteAgentHandle,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescription: string | undefined,
   originalError: unknown,
 ): Promise<ResumeResult> => {
   resolved.logger.info(
@@ -223,14 +225,14 @@ const settleAndRedelegate = async (
       failedEvent: 'llm_agent_resume_settle_failed',
     },
   )
-  return redelegate(env, activeTask, handle, resolved, images)
+  return redelegate(env, activeTask, handle, resolved, imageDescription)
 }
 
 export const resumeActiveTask = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow,
   resolved: ResolvedDispatcherDeps,
-  images: readonly ImageBlock[],
+  imageDescription: string | undefined,
 ): Promise<ResumeResult> => {
   const handle = await findHandle(resolved, activeTask.agentName)
   if (handle === undefined) {
@@ -245,7 +247,7 @@ export const resumeActiveTask = async (
     return { kind: 'failed', text: RESUME_SEND_FAILURE_TEXT }
   }
 
-  const params = buildParams(resolved, env, images, {
+  const params = buildParams(resolved, env, imageDescription, {
     taskId: activeTask.taskId,
     contextId: activeTask.contextId,
   })
@@ -262,7 +264,7 @@ export const resumeActiveTask = async (
         activeTask,
         handle,
         resolved,
-        images,
+        imageDescription,
         error,
       )
     }
