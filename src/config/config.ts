@@ -18,8 +18,9 @@ export interface ConversationAgentConfig {
 }
 
 // Shares ConversationAgentConfig.opencodeApiKey and the same OpenCode Go
-// endpoint; only the model differs, since image analysis needs a
-// vision-accurate model independent of the conversation agent's own model.
+// endpoint. The model can differ from the conversation agent's since image
+// analysis benefits from a vision-accurate model, but when unset it falls
+// back to the conversation agent's own model rather than being required.
 export interface ImageAnalysisConfig {
   readonly model: string
 }
