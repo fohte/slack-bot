@@ -96,8 +96,13 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     opencodeApiKey: requireEnv(env, 'OPENCODE_API_KEY'),
   }
 
+  // Falls back to the conversation agent's own model so a deployment that
+  // hasn't set this yet still starts up, just without the vision-accuracy
+  // improvement this config exists for.
   const imageAnalysis: ImageAnalysisConfig = {
-    model: requireEnv(env, 'SLACK_BOT_IMAGE_ANALYSIS_MODEL'),
+    model:
+      optionalString(env, 'SLACK_BOT_IMAGE_ANALYSIS_MODEL') ??
+      conversationAgent.model,
   }
 
   const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')

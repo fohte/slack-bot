@@ -164,9 +164,11 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 
-  it('throws ConfigLoadError when SLACK_BOT_IMAGE_ANALYSIS_MODEL is missing', () => {
-    const env = { ...baseEnv, SLACK_BOT_IMAGE_ANALYSIS_MODEL: undefined }
-    expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
+  it('falls back to the conversation agent model when SLACK_BOT_IMAGE_ANALYSIS_MODEL is not set', () => {
+    const config = loadConfig({
+      env: { ...baseEnv, SLACK_BOT_IMAGE_ANALYSIS_MODEL: undefined },
+    })
+    expect(config.imageAnalysis).toEqual({ model: 'opencode-go/gpt-5' })
   })
 
   it('throws ConfigLoadError when A2A_NOTIFICATION_TOKEN is missing', () => {
