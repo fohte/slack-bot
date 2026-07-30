@@ -411,7 +411,7 @@ describe('createTaskDispatcher', () => {
   it('does not post a reply and leaves the assistant status in place when a new turn delegates', async () => {
     const slackClient = createStubSlackClient()
     const conversationAgent = createFakeConversationAgent(() => ({
-      text: 'meshi さんに託しておきました。記録ができたら追ってお返事しますね……。へばな。',
+      text: '託しておきました',
       delegations: [
         { agentName: 'meshi', taskId: 'task-1', contextId: 'ctx-1' },
       ],
