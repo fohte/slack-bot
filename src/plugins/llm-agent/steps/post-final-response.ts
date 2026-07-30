@@ -47,10 +47,12 @@ const markResponded = (
     return true
   })
 
-// Posts this Slack event's single response (a plain conversational reply, a
-// delegation acknowledgement, or a resume outcome — all funnel through
-// here), gated by event_log so a redelivered event can never double-post.
-// Clears the assistant-status indicator once the post succeeds.
+// Posts this Slack event's single response — a plain conversational reply,
+// or a failed-resume error message. A turn that produced a delegation
+// (fresh, or a successful resume/redelegate) settles via
+// suppressFinalResponse instead and never reaches here. Gated by event_log
+// so a redelivered event can never double-post. Clears the assistant-status
+// indicator once the post succeeds.
 export const postFinalResponse = (
   env: SlackEnvelope,
   text: string,
@@ -109,9 +111,10 @@ export const postFinalResponse = (
   })
 
 // Settles this Slack event's response without posting or touching the
-// assistant-status indicator: used for a successful resume/redelegate, where
-// the delegate task's own next heartbeat carries the status forward instead.
-// Still gated by event_log so a redelivered event can't be processed twice.
+// assistant-status indicator: used whenever this turn produced a delegation
+// (a fresh one, or a successful resume/redelegate), where the delegate
+// task's own next heartbeat carries the status forward instead. Still gated
+// by event_log so a redelivered event can't be processed twice.
 export const suppressFinalResponse = (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,

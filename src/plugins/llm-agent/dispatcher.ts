@@ -272,12 +272,19 @@ const resolveThreadContextForTurn = async (
   )
 }
 
+interface ConversationTurnResult {
+  readonly text: string
+  // True when conversationAgent.respond() delegated during this turn, per
+  // ConversationOutcome.delegations.
+  readonly delegated: boolean
+}
+
 const respondWithConversationAgent = async (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,
   images: readonly ImageBlock[],
   inFlightTurns: InFlightTurnRegistry,
-): Promise<string> => {
+): Promise<ConversationTurnResult> => {
   const threadId = deriveConversationThreadId({
     teamId: env.teamId,
     channelId: env.channelId,
@@ -300,9 +307,13 @@ const respondWithConversationAgent = async (
   // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for runMentionInBackground's catch below to handle uniformly
   if (outcomeResult.isErr()) throw outcomeResult.error
   const trimmed = outcomeResult.value.text.trim()
-  return trimmed.length > 0
-    ? outcomeResult.value.text
-    : resolved.successFallbackText
+  return {
+    text:
+      trimmed.length > 0
+        ? outcomeResult.value.text
+        : resolved.successFallbackText,
+    delegated: outcomeResult.value.delegations.length > 0,
+  }
 }
 
 // A successful resume/redelegate is settled silently (suppressFinalResponse);
@@ -320,14 +331,40 @@ const finalizeResumeTurn = async (
     : await postFinalResponse(env, resumeResult.text, resolved)
 }
 
+// A turn that delegated is settled silently (suppressFinalResponse), mirroring
+// finalizeResumeTurn: the delegate task's own next heartbeat
+// (task-progress-status.ts) will surface its live progress in the
+// assistant-status indicator, so posting the LLM's hand-off acknowledgement
+// text here would only get the indicator cleared right behind it. A turn
+// with no delegation posts its reply and clears the status as before.
+const finalizeNewTurn = async (
+  env: SlackEnvelope,
+  resolved: ResolvedDispatcherDeps,
+  images: readonly ImageBlock[],
+  inFlightTurns: InFlightTurnRegistry,
+  threadTurnQueue: ThreadTurnQueue,
+) => {
+  const threadId = deriveConversationThreadId({
+    teamId: env.teamId,
+    channelId: env.channelId,
+    threadRootTs: env.threadRootTs,
+  })
+  const result = await threadTurnQueue.run(threadId, () =>
+    respondWithConversationAgent(env, resolved, images, inFlightTurns),
+  )
+  return result.delegated
+    ? await suppressFinalResponse(env, resolved)
+    : await postFinalResponse(env, result.text, resolved)
+}
+
 // Runs the (potentially slow) LLM/A2A work detached from the Slack HTTP
 // handler: whichever branch runs, it always ends by settling this event's
-// single response, though a successful resume/redelegate settles silently
-// rather than posting one. Any unexpected failure falls back to a generic,
-// ungated dispatch-failure notification. The try/catch here is deliberately
-// broad: it is the last line of defense against a genuine bug (an actual
-// throw, not just a Result error) in any of the steps below, since a task
-// that silently hangs never gets a reply.
+// single response, though a successful resume/redelegate or a turn that
+// delegated settles silently rather than posting one. Any unexpected failure
+// falls back to a generic, ungated dispatch-failure notification. The
+// try/catch here is deliberately broad: it is the last line of defense
+// against a genuine bug (an actual throw, not just a Result error) in any of
+// the steps below, since a task that silently hangs never gets a reply.
 export const runMentionInBackground = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow | undefined,
@@ -354,23 +391,12 @@ export const runMentionInBackground = async (
     const postResult =
       activeTask !== undefined
         ? await finalizeResumeTurn(env, activeTask, resolved, images)
-        : await postFinalResponse(
+        : await finalizeNewTurn(
             env,
-            await threadTurnQueue.run(
-              deriveConversationThreadId({
-                teamId: env.teamId,
-                channelId: env.channelId,
-                threadRootTs: env.threadRootTs,
-              }),
-              () =>
-                respondWithConversationAgent(
-                  env,
-                  resolved,
-                  images,
-                  inFlightTurns,
-                ),
-            ),
             resolved,
+            images,
+            inFlightTurns,
+            threadTurnQueue,
           )
     // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for the catch above to handle uniformly
     if (postResult.isErr()) throw postResult.error
