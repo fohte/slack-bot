@@ -233,7 +233,12 @@ describe('createConversationAgent', () => {
     ])
   })
 
-  it('prepends the persona prompt as a system message', async () => {
+  // Asserts on `content` (not `text`) because the `text` getter normalizes
+  // both string and multi-part content to the same string, which would hide
+  // a regression to multi-part content — the shape an upstream model used in
+  // production (gpt-5.6-luna via OpenCode Go's Zen gateway) silently drops
+  // the entire system prompt for.
+  it('prepends the persona prompt as a system message with string content', async () => {
     const model = createRecordingChatModel(() => 'ok')
     const agent = createConversationAgent({
       model,
@@ -250,11 +255,11 @@ describe('createConversationAgent', () => {
     })
 
     expect(
-      model.calls.map((call) => call.map((m) => [m.type, m.text])),
+      model.calls.map((call) => call.map((m) => [m.type, m.content])),
     ).toEqual([
       [
         ['system', 'You are a cheerful assistant.'],
-        ['human', 'hi'],
+        ['human', [{ type: 'text', text: 'hi' }]],
       ],
     ])
   })

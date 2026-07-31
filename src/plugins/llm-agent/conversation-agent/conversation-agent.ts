@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ContentBlock } from '@langchain/core/messages'
-import { HumanMessage } from '@langchain/core/messages'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import type { BaseCheckpointSaver } from '@langchain/langgraph'
 import { ChatOpenAI } from '@langchain/openai'
 import { createAgent } from 'langchain'
@@ -242,8 +242,13 @@ export const createConversationAgent = (
     middleware: [
       createGenAiTracingMiddleware({ providerName: GEN_AI_PROVIDER_NAME }),
     ],
+    // Passed as a SystemMessage with string content rather than a plain
+    // string: createAgent's normalizeSystemPrompt() wraps a plain string in
+    // multi-part content ([{type: "text", text: ...}]), and the upstream
+    // model (gpt-5.6-luna via OpenCode Go's Zen gateway) silently drops the
+    // entire system prompt when it receives multi-part system content.
     ...(options.personaPrompt !== undefined && options.personaPrompt !== ''
-      ? { systemPrompt: options.personaPrompt }
+      ? { systemPrompt: new SystemMessage(options.personaPrompt) }
       : {}),
   })
 
