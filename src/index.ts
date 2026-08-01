@@ -210,10 +210,12 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
   const model = createOpenCodeGoChatModel({
     apiKey: config.conversationAgent.opencodeApiKey,
     model: config.conversationAgent.model,
+    logger,
   })
   const imageAnalysisModel = createOpenCodeGoChatModel({
     apiKey: config.conversationAgent.opencodeApiKey,
     model: config.imageAnalysis.model,
+    logger,
   })
   const personaParaphraser = createPersonaParaphraser({
     model,

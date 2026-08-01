@@ -12,6 +12,7 @@ import { errAsync, ResultAsync } from 'neverthrow'
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
 import { createGenAiTracingMiddleware } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
+import { createRestoreSystemRoleFetch } from '#plugins/llm-agent/conversation-agent/restore-system-role-fetch'
 import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
 import { parseConversationThreadId } from '#plugins/llm-agent/conversation-agent/thread-id'
 // Delegation is defined in remote-agent-registry (the tool call that
@@ -46,6 +47,7 @@ export interface CreateOpenCodeGoChatModelOptions {
   readonly apiKey: string
   readonly model: string
   readonly baseUrl?: string | undefined
+  readonly logger?: Logger | undefined
 }
 
 // 429s are retried by ChatOpenAI's underlying client following the
@@ -58,6 +60,9 @@ export const createOpenCodeGoChatModel = (
     model: options.model,
     configuration: {
       baseURL: options.baseUrl ?? DEFAULT_OPENCODE_GO_BASE_URL,
+      // See restore-system-role-fetch.ts: undoes @langchain/openai's
+      // system->developer role rewrite for this reasoning-model-shaped name.
+      fetch: createRestoreSystemRoleFetch({ logger: options.logger }),
     },
     // Asks the upstream API to move reasoning out of `content` into a
     // separate field (see strip-think-blocks.ts for why that matters).
