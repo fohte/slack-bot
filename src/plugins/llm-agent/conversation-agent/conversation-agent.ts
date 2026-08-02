@@ -1,17 +1,17 @@
 import { randomUUID } from 'node:crypto'
 
+import { createGenAiTracingMiddleware } from '@fohte/service-kit/langchain-genai'
 import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ContentBlock } from '@langchain/core/messages'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import type { BaseCheckpointSaver } from '@langchain/langgraph'
 import { ChatOpenAI } from '@langchain/openai'
-import { createAgent } from 'langchain'
+import { createAgent, toolErrorMiddleware } from 'langchain'
 import { errAsync, ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
-import { createGenAiTracingMiddleware } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
 import { createRestoreSystemRoleFetch } from '#plugins/llm-agent/conversation-agent/restore-system-role-fetch'
 import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
 import { parseConversationThreadId } from '#plugins/llm-agent/conversation-agent/thread-id'
@@ -246,6 +246,15 @@ export const createConversationAgent = (
     contextSchema: DELEGATION_RUNTIME_CONTEXT_SCHEMA,
     middleware: [
       createGenAiTracingMiddleware({ providerName: GEN_AI_PROVIDER_NAME }),
+      // Any wrapToolCall middleware (the tracing middleware above adds one
+      // for its execute_tool span) makes LangChain's ToolNode stop
+      // auto-recovering thrown tool errors into a ToolMessage, so this
+      // restores that recovery explicitly. Content mirrors ToolNode's own
+      // default handleToolErrors text.
+      toolErrorMiddleware({
+        onError: (error) =>
+          `${error instanceof Error ? error.message : String(error)}\n Please fix your mistakes.`,
+      }),
     ],
     // Passed as a SystemMessage with string content rather than a plain
     // string: createAgent's normalizeSystemPrompt() wraps a plain string in
