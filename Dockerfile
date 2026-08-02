@@ -34,11 +34,22 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod
 COPY --from=builder /app/dist ./dist
+<<<<<<< before updating
 COPY drizzle ./drizzle
 COPY otel-register.mjs ./
+||||||| last update
+COPY otel-register.mjs ./
+=======
+>>>>>>> after updating
 USER node
 EXPOSE 8080
+<<<<<<< before updating
 # No HEALTHCHECK: the only deployment target is Kubernetes, whose kubelet
 # drives liveness/readiness against /health/live and /health/ready directly
 # and never consults the Docker-level healthcheck.
 CMD ["node", "--import", "./otel-register.mjs", "dist/index.js"]
+||||||| last update
+CMD ["node", "--import", "./otel-register.mjs", "dist/index.js"]
+=======
+CMD ["node", "--import", "@fohte/service-kit/otel-register", "dist/index.js"]
+>>>>>>> after updating
