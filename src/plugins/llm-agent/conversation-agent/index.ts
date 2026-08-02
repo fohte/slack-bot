@@ -12,8 +12,6 @@ export {
   createOpenCodeGoChatModel,
   DEFAULT_OPENCODE_GO_BASE_URL,
 } from '#plugins/llm-agent/conversation-agent/conversation-agent'
-export type { GenAiTracingMiddlewareOptions } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
-export { createGenAiTracingMiddleware } from '#plugins/llm-agent/conversation-agent/genai-tracing-middleware'
 export { describeImages } from '#plugins/llm-agent/conversation-agent/image-analysis'
 export type {
   DownloadedImage,

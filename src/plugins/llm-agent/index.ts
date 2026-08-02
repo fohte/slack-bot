@@ -36,7 +36,6 @@ export type {
   ConversationThreadKey,
   CreateOpenCodeGoChatModelOptions,
   Delegation,
-  GenAiTracingMiddlewareOptions,
   ImageBlock,
   ThreadContextForTurn,
 } from '#plugins/llm-agent/conversation-agent/index'
@@ -44,7 +43,6 @@ export {
   CONVERSATION_CHECKPOINT_SCHEMA,
   createConversationAgent,
   createConversationCheckpointer,
-  createGenAiTracingMiddleware,
   createOpenCodeGoChatModel,
   DEFAULT_OPENCODE_GO_BASE_URL,
   deriveConversationThreadId,

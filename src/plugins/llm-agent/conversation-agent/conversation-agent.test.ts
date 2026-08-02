@@ -432,8 +432,9 @@ describe('createConversationAgent', () => {
       }),
     )
     // The exact error-wrapping text (e.g. "Error: ...\n Please fix your
-    // mistakes.") is createAgent's own tool-error formatting, not this
-    // repo's, so only the message sequence is asserted here.
+    // mistakes.") is toolErrorMiddleware's onError formatting, which mirrors
+    // createAgent's own default but isn't this test's concern, so only the
+    // message sequence is asserted here.
     expect((model.calls[1] ?? []).map((m) => m.type)).toEqual([
       'human',
       'ai',
