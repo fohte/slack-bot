@@ -1,13 +1,13 @@
 {
   "name": "slack-bot",
   "private": true,
-  "packageManager": "pnpm@11.15.1",
+  "packageManager": "pnpm@11.16.0",
   "type": "module",
   "imports": {
     "#*": "./src/*.ts"
   },
   "scripts": {
-    "start": "node --import ./otel-register.mjs dist/index.js",
+    "start": "node --import @fohte/service-kit/otel-register dist/index.js",
     "build": "tsup",
     "lint": "eslint .",
     "format:eslint": "eslint --fix .",
@@ -19,12 +19,12 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:prod": "node dist/db/migrate.js",
-    "dev": "tsx watch --import ./otel-register.mjs src/index.ts",
+    "dev": "tsx watch --import @fohte/service-kit/otel-register src/index.ts",
     "print-slash-commands": "tsx src/scripts/print-slash-commands.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.1",
-    "@eslint/eslintrc": "3.3.5",
+    "@eslint/eslintrc": "3.3.6",
     "@fohte/eslint-config": "0.4.0",
     "@ninoseki/eslint-plugin-neverthrow": "0.2.0",
     "@opentelemetry/context-async-hooks": "2.8.0",

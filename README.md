@@ -66,7 +66,7 @@ The `llm-agent` plugin shows an "is thinking…" loading indicator on accepted e
 2. Enable corepack for pnpm: `corepack enable`.
 3. Install dependencies: `pnpm install`.
 4. Create a `.env` file based on the table above. Do not commit it.
-5. Start the bot: `pnpm dev` (runs `tsx watch --import ./otel-register.mjs src/index.ts`).
+5. Start the bot: `pnpm dev` (runs `tsx watch --import @fohte/service-kit/otel-register src/index.ts`).
 6. Expose the local server to Slack with ngrok: `ngrok http 8080`. Use the `https://...ngrok-free.app` URL as the Request URL prefix in the Slack App settings while developing.
 7. Run checks: `pnpm test` (typecheck plus unit) and `pnpm lint`.
 
