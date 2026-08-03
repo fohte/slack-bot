@@ -1,10 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { describeImages } from '#plugins/llm-agent/conversation-agent/image-analysis'
 import { ImageAnalysisError } from '#types/errors'
 
+vi.mock('@fohte/service-kit/observability', () => ({
+  captureWithFingerprint: vi.fn(),
+}))
+
+const IMAGE_ANALYSIS_FINGERPRINT = 'llm-agent.image-analysis.describe-failed'
+
 describe('describeImages', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('returns undefined without calling the model when there are no images', async () => {
     const model = createRecordingChatModel(() => 'should never be called')
 
@@ -68,5 +79,20 @@ describe('describeImages', () => {
 
     expect(result.isErr()).toBe(true)
     expect(result._unsafeUnwrapErr()).toBeInstanceOf(ImageAnalysisError)
+  })
+
+  it('reports a model invocation failure to Sentry', async () => {
+    const model = createRecordingChatModel(() => {
+      throw new Error('upstream unavailable')
+    })
+
+    const result = await describeImages(model, [
+      { base64: 'AAAA', mimeType: 'image/jpeg' },
+    ])
+
+    const error = result._unsafeUnwrapErr()
+    expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
+      [error, IMAGE_ANALYSIS_FINGERPRINT, { extras: { imageCount: 1 } }],
+    ])
   })
 })

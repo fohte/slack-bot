@@ -1,3 +1,4 @@
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ContentBlock } from '@langchain/core/messages'
 import { HumanMessage } from '@langchain/core/messages'
@@ -6,6 +7,10 @@ import { okAsync, ResultAsync } from 'neverthrow'
 import type { ImageBlock } from '#plugins/llm-agent/conversation-agent/image-block'
 import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
 import { ImageAnalysisError } from '#types/errors'
+
+// Groups every image analysis failure under one Sentry issue regardless of
+// which caller triggered it, rather than scattering per call site.
+const IMAGE_ANALYSIS_FINGERPRINT = 'llm-agent.image-analysis.describe-failed'
 
 const IMAGE_ANALYSIS_INSTRUCTION =
   'Describe each of the following images faithfully and in detail, in the ' +
@@ -40,11 +45,16 @@ export const describeImages = (
       ...images.map(toImageContentBlock),
     ],
   })
-  return ResultAsync.fromPromise(
-    model.invoke([message]),
-    (caughtErr) =>
-      new ImageAnalysisError('vision model image analysis failed', caughtErr),
-  ).map((result) => {
+  return ResultAsync.fromPromise(model.invoke([message]), (caughtErr) => {
+    const wrapped = new ImageAnalysisError(
+      'vision model image analysis failed',
+      caughtErr,
+    )
+    captureWithFingerprint(wrapped, IMAGE_ANALYSIS_FINGERPRINT, {
+      extras: { imageCount: images.length },
+    })
+    return wrapped
+  }).map((result) => {
     const { text } = stripThinkBlocks(result.text)
     return text.length > 0 ? text : undefined
   })
