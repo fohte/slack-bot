@@ -151,7 +151,10 @@ export {
   postFinalResponse,
   suppressFinalResponse,
 } from '#plugins/llm-agent/steps/post-final-response'
-export { DISPATCH_FAILURE_TEXT } from '#plugins/llm-agent/steps/report-dispatch-failure'
+export {
+  DISPATCH_FAILURE_TEXT,
+  IMAGE_ANALYSIS_FAILURE_TEXT,
+} from '#plugins/llm-agent/steps/report-dispatch-failure'
 export {
   resolveImageBlocks,
   resolveThumbnail,

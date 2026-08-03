@@ -441,7 +441,7 @@ export const runMentionInBackground = async (
       },
       'llm-agent mention processing failed',
     )
-    await reportDispatchFailure(env, resolved)
+    await reportDispatchFailure(env, resolved, error)
   } finally {
     inFlightTurns.finish(turnKey)
   }
@@ -519,7 +519,7 @@ export const createTaskDispatcher = (
             },
             'llm-agent dispatch failed before background processing started',
           )
-          await reportDispatchFailure(env, resolved)
+          await reportDispatchFailure(env, resolved, err)
           // eslint-disable-next-line no-restricted-syntax -- boundary: re-throws after span/log bookkeeping so tracer.startActiveSpan still marks the span as failed
           throw err
         } finally {

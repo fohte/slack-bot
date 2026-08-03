@@ -7,6 +7,7 @@ import type {
   SlackEnvelope,
 } from '#plugins/llm-agent/dispatcher-deps'
 import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
+import { ImageAnalysisError } from '#types/errors'
 
 // Shown for a dispatch-level failure (the gating step throwing, or the
 // detached background mention-processing chain crashing unexpectedly)
@@ -15,20 +16,29 @@ import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
 export const DISPATCH_FAILURE_TEXT =
   'Something went wrong before this request could be completed. Please try again.'
 
+export const IMAGE_ANALYSIS_FAILURE_TEXT =
+  "I couldn't read the image(s) in this request, so I'm stopping here instead of continuing without them. If this keeps happening, please let a maintainer know."
+
+const textFor = (error: unknown): string =>
+  error instanceof ImageAnalysisError
+    ? IMAGE_ANALYSIS_FAILURE_TEXT
+    : DISPATCH_FAILURE_TEXT
+
 // Best-effort Slack notification for a dispatch-level failure: post a
-// generic failure message and clear the "thinking..." indicator so it
-// doesn't sit stuck in the thread forever. Never throws — both Slack
-// calls swallow their own errors, since callers reach this from a
-// failure path with nothing further to roll back to. The two calls are
-// independent, so serializing them would only add needless latency.
+// failure message and clear the "thinking..." indicator so it doesn't sit
+// stuck in the thread forever. Never throws — both Slack calls swallow
+// their own errors, since callers reach this from a failure path with
+// nothing further to roll back to. The two calls are independent, so
+// serializing them would only add needless latency.
 export const reportDispatchFailure = async (
   env: SlackEnvelope,
   resolved: ResolvedDispatcherDeps,
+  error: unknown,
 ): Promise<void> => {
   const postPromise = postThreadMessage(
     resolved.slackClient,
     { channel: env.channelId, threadTs: env.threadRootTs },
-    DISPATCH_FAILURE_TEXT,
+    textFor(error),
   ).catch((postError: unknown) => {
     resolved.logger.error(
       {
