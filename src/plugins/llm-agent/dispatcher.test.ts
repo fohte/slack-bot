@@ -31,7 +31,10 @@ import {
   resolveInlineImageFiles,
 } from '#plugins/llm-agent/dispatcher'
 import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
-import { DISPATCH_FAILURE_TEXT } from '#plugins/llm-agent/steps/report-dispatch-failure'
+import {
+  DISPATCH_FAILURE_TEXT,
+  IMAGE_ANALYSIS_FAILURE_TEXT,
+} from '#plugins/llm-agent/steps/report-dispatch-failure'
 import { RESUME_SEND_FAILURE_TEXT } from '#plugins/llm-agent/steps/resume-active-task'
 import { EMPTY_THREAD_CONTEXT } from '#plugins/llm-agent/steps/sync-thread-context'
 import { createDeferred } from '#server/_test-utils'
@@ -561,8 +564,97 @@ describe('createTaskDispatcher', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: DISPATCH_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: DISPATCH_FAILURE_TEXT }],
+        text: IMAGE_ANALYSIS_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: IMAGE_ANALYSIS_FAILURE_TEXT }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+  })
+
+  const stubSlackClientWithThreadContextImage = (): StubSlackClient =>
+    ({
+      ...createStubSlackClient(),
+      async getConversationReplies() {
+        return {
+          messages: [
+            {
+              ts: '50.000',
+              userId: 'U2',
+              botId: undefined,
+              text: 'check this out',
+              files: [
+                {
+                  id: 'F1',
+                  mimetype: 'image/png',
+                  thumb_360: 'https://files.slack.com/1.png',
+                },
+              ],
+            },
+          ],
+          hasMore: false,
+          nextCursor: undefined,
+        }
+      },
+      async downloadFile(url: string) {
+        if (url !== 'https://files.slack.com/1.png') {
+          throw new Error(`unexpected url: ${url}`)
+        }
+        return { bytes: new Uint8Array([1]), contentType: 'image/png' }
+      },
+    }) as StubSlackClient
+
+  it('does not reach the conversation agent when a thread-context image fails analysis', async () => {
+    const conversationAgent = createFakeConversationAgent(() => ({
+      text: 'unreachable',
+      delegations: [],
+    }))
+    const imageAnalysisModel = createRecordingChatModel(() => {
+      throw new Error('vision model unavailable')
+    })
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({
+        slackClient: stubSlackClientWithThreadContextImage(),
+        conversationAgent,
+        imageAnalysisModel,
+        inFlightTasks,
+      }),
+    )
+
+    await dispatch(acceptedMention())
+    await inFlightTasks.waitForIdle()
+
+    expect(conversationAgent.calls).toEqual([])
+  })
+
+  it('posts the image-analysis failure text and clears the assistant status when a thread-context image fails analysis', async () => {
+    const slackClient = stubSlackClientWithThreadContextImage()
+    const imageAnalysisModel = createRecordingChatModel(() => {
+      throw new Error('vision model unavailable')
+    })
+    const inFlightTasks = createInFlightTasks()
+    const dispatch = createTaskDispatcher(
+      baseOptions({ slackClient, imageAnalysisModel, inFlightTasks }),
+    )
+
+    await dispatch(acceptedMention())
+    await inFlightTasks.waitForIdle()
+
+    expect(slackClient.calls.slice(1)).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: IMAGE_ANALYSIS_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: IMAGE_ANALYSIS_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {

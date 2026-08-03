@@ -478,8 +478,8 @@ describe('syncThreadContext', () => {
     })
   })
 
-  it('falls back to no image description and warns when the vision model call fails', async () => {
-    const { client } = scriptedSlackClient(
+  const scriptedSlackClientWithOneImage = () =>
+    scriptedSlackClient(
       [
         {
           messages: [
@@ -508,6 +508,29 @@ describe('syncThreadContext', () => {
         ],
       ]),
     )
+
+  it('rejects with ImageAnalysisError instead of continuing without image descriptions when the vision model call fails', async () => {
+    const { client } = scriptedSlackClientWithOneImage()
+    const failingModel = createRecordingChatModel(() => {
+      throw new Error('vision model unavailable')
+    })
+    const deps = baseDeps({
+      slackClient: client,
+      imageAnalysisModel: failingModel,
+    })
+
+    await expect(
+      syncThreadContext(deps, ENV, '200.000', NEVER_IN_FLIGHT),
+    ).rejects.toEqual(
+      new ImageAnalysisError(
+        'vision model image analysis failed',
+        new Error('vision model unavailable'),
+      ),
+    )
+  })
+
+  it('warns about the failed thread-context image analysis before rejecting', async () => {
+    const { client } = scriptedSlackClientWithOneImage()
     const logger = createRecordingLogger()
     const failingModel = createRecordingChatModel(() => {
       throw new Error('vision model unavailable')
@@ -518,18 +541,10 @@ describe('syncThreadContext', () => {
       logger,
     })
 
-    const result = await syncThreadContext(
-      deps,
-      ENV,
-      '200.000',
-      NEVER_IN_FLIGHT,
+    await syncThreadContext(deps, ENV, '200.000', NEVER_IN_FLIGHT).catch(
+      () => undefined,
     )
 
-    expect(result).toEqual({
-      text: `<thread_context>\n[${iso('300.000')}] <@U2>: photo [画像 1]\n</thread_context>`,
-      imageDescription: undefined,
-      contextMaxTs: '300.000',
-    })
     expect(logger.entries).toEqual([
       {
         level: 'info',

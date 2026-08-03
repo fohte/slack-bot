@@ -240,10 +240,10 @@ const resolveContextImages = async (
 
 // Converts resolvedImages into text via the vision-specialized model, in the
 // same order buildLines' markerByFile assigns `[画像 N]` labels, so the
-// returned description lines up with those markers. Best-effort like the
-// rest of this file's context sync: a failure here degrades to no image
-// descriptions rather than failing the turn, unlike the current turn's own
-// images (steps/dispatcher.ts treats that failure as fatal).
+// returned description lines up with those markers. Fatal on failure, same
+// as the current turn's own images (steps/dispatcher.ts): degrading to "no
+// image descriptions" here would let a delegate agent run with zero image
+// context and no signal that images existed but couldn't be read.
 const describeContextImages = async (
   resolved: ResolvedDispatcherDeps,
   env: SlackEnvelope,
@@ -260,9 +260,10 @@ const describeContextImages = async (
       event_id: env.eventId,
       err: result.error,
     },
-    'thread context image analysis failed; continuing without image descriptions',
+    'thread context image analysis failed',
   )
-  return undefined
+  // eslint-disable-next-line no-restricted-syntax -- boundary: converts the Result into a throw for runMentionInBackground's catch to handle uniformly, same as the current turn's own image failure (steps/dispatcher.ts)
+  throw result.error
 }
 
 const buildLines = (

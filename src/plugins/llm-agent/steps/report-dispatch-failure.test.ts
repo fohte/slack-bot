@@ -15,9 +15,11 @@ import type { ResolvedDispatcherDeps } from '#plugins/llm-agent/dispatcher-deps'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import {
   DISPATCH_FAILURE_TEXT,
+  IMAGE_ANALYSIS_FAILURE_TEXT,
   reportDispatchFailure,
 } from '#plugins/llm-agent/steps/report-dispatch-failure'
 import type { SlackWebClient } from '#slack/web-client'
+import { ImageAnalysisError } from '#types/errors'
 
 const baseDeps = (
   slackClient: SlackWebClient,
@@ -41,7 +43,11 @@ const baseDeps = (
 describe('reportDispatchFailure', () => {
   it('posts the generic failure text and clears the assistant status', async () => {
     const slackClient = createStubSlackClient()
-    await reportDispatchFailure(TEST_ENV, baseDeps(slackClient))
+    await reportDispatchFailure(
+      TEST_ENV,
+      baseDeps(slackClient),
+      new Error('boom'),
+    )
     expect(slackClient.calls).toEqual([
       {
         kind: 'post',
@@ -49,6 +55,33 @@ describe('reportDispatchFailure', () => {
         thread: '111.222',
         text: DISPATCH_FAILURE_TEXT,
         blocks: [{ type: 'markdown', text: DISPATCH_FAILURE_TEXT }],
+        loadingMessages: undefined,
+      },
+      {
+        kind: 'status',
+        channel: 'C1',
+        thread: '111.222',
+        text: '',
+        blocks: undefined,
+        loadingMessages: undefined,
+      },
+    ])
+  })
+
+  it('posts the image-analysis-specific failure text when the error is an ImageAnalysisError', async () => {
+    const slackClient = createStubSlackClient()
+    await reportDispatchFailure(
+      TEST_ENV,
+      baseDeps(slackClient),
+      new ImageAnalysisError('vision model image analysis failed'),
+    )
+    expect(slackClient.calls).toEqual([
+      {
+        kind: 'post',
+        channel: 'C1',
+        thread: '111.222',
+        text: IMAGE_ANALYSIS_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: IMAGE_ANALYSIS_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {
@@ -72,7 +105,11 @@ describe('reportDispatchFailure', () => {
       },
     }
     const logger = createRecordingLogger()
-    await reportDispatchFailure(TEST_ENV, baseDeps(slackClient, logger))
+    await reportDispatchFailure(
+      TEST_ENV,
+      baseDeps(slackClient, logger),
+      new Error('boom'),
+    )
     expect(stub.calls).toEqual([
       {
         kind: 'status',
