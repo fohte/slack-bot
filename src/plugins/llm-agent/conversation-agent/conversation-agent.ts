@@ -148,8 +148,55 @@ export interface ConversationAgentOptions {
   // design; domain agents live behind A2A delegation).
   readonly personaPrompt?: string | undefined
   readonly tools?: CreateAgentTools | undefined
+  readonly now?: (() => Date) | undefined
   readonly logger?: Logger | undefined
 }
+
+// Fixed rather than derived from Intl's (locale-dependent) UTC-offset
+// output: Asia/Tokyo has held a constant UTC+9 offset year-round since 1951,
+// with no DST.
+const CURRENT_DATETIME_TIMEZONE = 'Asia/Tokyo'
+
+const formatCurrentDatetime = (date: Date): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CURRENT_DATETIME_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const get = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}+09:00`
+}
+
+// Prepended to every HumanMessage (see buildHumanMessageContent) so the
+// model can resolve relative or year-omitting dates ("today", "7/27")
+// against the actual turn time instead of guessing from training data.
+const toCurrentDatetimeMetaBlock = (now: Date): ContentBlock.Text => ({
+  type: 'text',
+  text: `(meta: current_datetime=${formatCurrentDatetime(now)}, timezone=${CURRENT_DATETIME_TIMEZONE})`,
+})
+
+// Tells the model how to read the block toCurrentDatetimeMetaBlock adds to
+// every HumanMessage. Kept out of personaPrompt (tone only) and always
+// included in the system prompt regardless of whether personaPrompt is set.
+const CURRENT_DATETIME_INSTRUCTION =
+  'Every message from the user starts with a ' +
+  '`(meta: current_datetime=<ISO 8601>, timezone=<IANA name>)` line. Treat ' +
+  'current_datetime as the actual current date and time, in the given ' +
+  'timezone, at the moment the user sent the message. Anchor every date or ' +
+  'time you resolve to it — including relative expressions such as ' +
+  '"today"/"yesterday" or a bare month/day such as "7/27" that omits the ' +
+  'year — instead of guessing from anything else.'
+
+const buildSystemPromptText = (personaPrompt: string | undefined): string =>
+  [personaPrompt, CURRENT_DATETIME_INSTRUCTION]
+    .filter((text): text is string => text !== undefined && text !== '')
+    .join('\n\n')
 
 const toDescriptionBlock = (
   tag: string,
@@ -171,15 +218,18 @@ const toThreadContextImageDescriptionBlock = (
 const toOwnImageDescriptionBlock = (description: string): ContentBlock.Text =>
   toDescriptionBlock('attached_images', description)
 
-// The thread-context text block, when present, is prepended ahead of the
-// user's own text block rather than merged into it, so a prompt-cache replay
-// of this turn from the checkpoint never has to reconstruct where one ends
-// and the other begins.
+// The current-datetime meta block always leads, followed by the
+// thread-context text block when present, ahead of the user's own text
+// block rather than merged into it, so a prompt-cache replay of this turn
+// from the checkpoint never has to reconstruct where one ends and the other
+// begins.
 const buildHumanMessageContent = (
+  now: Date,
   userText: string,
   imageDescription: string | undefined,
   threadContext: ThreadContextForTurn | undefined,
 ): ContentBlock.Text[] => [
+  toCurrentDatetimeMetaBlock(now),
   ...(threadContext?.text !== undefined
     ? [{ type: 'text' as const, text: threadContext.text }]
     : []),
@@ -238,6 +288,7 @@ export const createConversationAgent = (
   options: ConversationAgentOptions,
 ): ConversationAgent => {
   const logger = options.logger ?? noopLogger
+  const now = options.now ?? (() => new Date())
 
   const agent = createAgent({
     model: options.model,
@@ -261,9 +312,9 @@ export const createConversationAgent = (
     // multi-part content ([{type: "text", text: ...}]), and the upstream
     // model (gpt-5.6-luna via OpenCode Go's Zen gateway) silently drops the
     // entire system prompt when it receives multi-part system content.
-    ...(options.personaPrompt !== undefined && options.personaPrompt !== ''
-      ? { systemPrompt: new SystemMessage(options.personaPrompt) }
-      : {}),
+    systemPrompt: new SystemMessage(
+      buildSystemPromptText(options.personaPrompt),
+    ),
   })
 
   return {
@@ -283,6 +334,7 @@ export const createConversationAgent = (
       const message = new HumanMessage({
         id: turnMessageId,
         contentBlocks: buildHumanMessageContent(
+          now(),
           userText,
           imageDescription,
           threadContext,

@@ -14,6 +14,25 @@ import {
   ConversationThreadIdParseError,
 } from '#types/errors'
 
+// Asia/Tokyo is UTC+9 year-round, so this always renders as
+// 2026-08-05T12:34:56+09:00 (see CURRENT_DATETIME_META_TEXT below).
+const FIXED_NOW = () => new Date('2026-08-05T03:34:56.000Z')
+const CURRENT_DATETIME_META_TEXT =
+  '(meta: current_datetime=2026-08-05T12:34:56+09:00, timezone=Asia/Tokyo)'
+const CURRENT_DATETIME_META_BLOCK = {
+  type: 'text',
+  text: CURRENT_DATETIME_META_TEXT,
+}
+const CURRENT_DATETIME_INSTRUCTION =
+  'Every message from the user starts with a ' +
+  '`(meta: current_datetime=<ISO 8601>, timezone=<IANA name>)` line. Treat ' +
+  'current_datetime as the actual current date and time, in the given ' +
+  'timezone, at the moment the user sent the message. Anchor every date or ' +
+  'time you resolve to it — including relative expressions such as ' +
+  '"today"/"yesterday" or a bare month/day such as "7/27" that omits the ' +
+  'year — instead of guessing from anything else.'
+const SYSTEM_MESSAGE_ENTRY = ['system', CURRENT_DATETIME_INSTRUCTION]
+
 vi.mock('@fohte/service-kit/observability', () => ({
   captureWithFingerprint: vi.fn(),
 }))
@@ -148,6 +167,7 @@ describe('createConversationAgent', () => {
     const agent = createConversationAgent({
       model,
       checkpointer: new MemorySaver(),
+      now: FIXED_NOW,
     })
     const threadId = 'T1:C1:111.222'
 
@@ -169,11 +189,15 @@ describe('createConversationAgent', () => {
     expect(
       model.calls.map((call) => call.map((m) => [m.type, m.text])),
     ).toEqual([
-      [['human', 'first turn']],
       [
-        ['human', 'first turn'],
+        SYSTEM_MESSAGE_ENTRY,
+        ['human', `${CURRENT_DATETIME_META_TEXT}first turn`],
+      ],
+      [
+        SYSTEM_MESSAGE_ENTRY,
+        ['human', `${CURRENT_DATETIME_META_TEXT}first turn`],
         ['ai', 'reply-0'],
-        ['human', 'second turn'],
+        ['human', `${CURRENT_DATETIME_META_TEXT}second turn`],
       ],
     ])
   })
@@ -185,6 +209,7 @@ describe('createConversationAgent', () => {
     const agent = createConversationAgent({
       model,
       checkpointer: new MemorySaver(),
+      now: FIXED_NOW,
     })
 
     await agent.respond({
@@ -204,7 +229,16 @@ describe('createConversationAgent', () => {
 
     expect(
       model.calls.map((call) => call.map((m) => [m.type, m.text])),
-    ).toEqual([[['human', 'thread one turn']], [['human', 'thread two turn']]])
+    ).toEqual([
+      [
+        SYSTEM_MESSAGE_ENTRY,
+        ['human', `${CURRENT_DATETIME_META_TEXT}thread one turn`],
+      ],
+      [
+        SYSTEM_MESSAGE_ENTRY,
+        ['human', `${CURRENT_DATETIME_META_TEXT}thread two turn`],
+      ],
+    ])
   })
 
   it('embeds the image description as a text block alongside the user text, never as raw image bytes', async () => {
@@ -212,6 +246,7 @@ describe('createConversationAgent', () => {
     const agent = createConversationAgent({
       model,
       checkpointer: new MemorySaver(),
+      now: FIXED_NOW,
     })
 
     const outcome = await agent.respond({
@@ -223,8 +258,9 @@ describe('createConversationAgent', () => {
     })
 
     expect(outcome._unsafeUnwrap().text).toBe('described the photo')
-    const [humanMessage] = model.calls[0] ?? []
+    const [, humanMessage] = model.calls[0] ?? []
     expect(humanMessage?.content).toEqual([
+      CURRENT_DATETIME_META_BLOCK,
       { type: 'text', text: 'what is this?' },
       {
         type: 'text',
@@ -244,6 +280,7 @@ describe('createConversationAgent', () => {
       model,
       checkpointer: new MemorySaver(),
       personaPrompt: 'You are a cheerful assistant.',
+      now: FIXED_NOW,
     })
 
     await agent.respond({
@@ -258,8 +295,37 @@ describe('createConversationAgent', () => {
       model.calls.map((call) => call.map((m) => [m.type, m.content])),
     ).toEqual([
       [
-        ['system', 'You are a cheerful assistant.'],
-        ['human', [{ type: 'text', text: 'hi' }]],
+        [
+          'system',
+          `You are a cheerful assistant.\n\n${CURRENT_DATETIME_INSTRUCTION}`,
+        ],
+        ['human', [CURRENT_DATETIME_META_BLOCK, { type: 'text', text: 'hi' }]],
+      ],
+    ])
+  })
+
+  it('includes the current-datetime instruction in the system message even with no persona prompt', async () => {
+    const model = createRecordingChatModel(() => 'ok')
+    const agent = createConversationAgent({
+      model,
+      checkpointer: new MemorySaver(),
+      now: FIXED_NOW,
+    })
+
+    await agent.respond({
+      threadId: 'T1:C1:111.222',
+      userText: 'hi',
+      imageDescription: undefined,
+      slackEventId: 'Ev1',
+      triggerTs: '111.222',
+    })
+
+    expect(
+      model.calls.map((call) => call.map((m) => [m.type, m.content])),
+    ).toEqual([
+      [
+        ['system', CURRENT_DATETIME_INSTRUCTION],
+        ['human', [CURRENT_DATETIME_META_BLOCK, { type: 'text', text: 'hi' }]],
       ],
     ])
   })
@@ -436,6 +502,7 @@ describe('createConversationAgent', () => {
     // createAgent's own default but isn't this test's concern, so only the
     // message sequence is asserted here.
     expect((model.calls[1] ?? []).map((m) => m.type)).toEqual([
+      'system',
       'human',
       'ai',
       'tool',
@@ -491,12 +558,52 @@ describe('createConversationAgent', () => {
     ])
   })
 
+  describe('current datetime injection', () => {
+    it('formats the current-datetime meta block in Asia/Tokyo regardless of the UTC calendar date', async () => {
+      const model = createRecordingChatModel(() => 'ok')
+      const agent = createConversationAgent({
+        model,
+        checkpointer: new MemorySaver(),
+        // 2026-08-04T15:00:00Z is 2026-08-05T00:00:00+09:00: crosses into
+        // the next calendar day once converted to Asia/Tokyo.
+        now: () => new Date('2026-08-04T15:00:00.000Z'),
+      })
+
+      await agent.respond({
+        threadId: 'T1:C1:111.222',
+        userText: 'hi',
+        imageDescription: undefined,
+        slackEventId: 'Ev1',
+        triggerTs: '111.222',
+      })
+
+      expect(
+        model.calls.map((call) => call.map((m) => [m.type, m.content])),
+      ).toEqual([
+        [
+          ['system', CURRENT_DATETIME_INSTRUCTION],
+          [
+            'human',
+            [
+              {
+                type: 'text',
+                text: '(meta: current_datetime=2026-08-05T00:00:00+09:00, timezone=Asia/Tokyo)',
+              },
+              { type: 'text', text: 'hi' },
+            ],
+          ],
+        ],
+      ])
+    })
+  })
+
   describe('thread context injection', () => {
     it('prepends the thread context text block ahead of the user text block, wrapping the context image description and the turn own image description in distinct tags', async () => {
       const model = createRecordingChatModel(() => 'ok')
       const agent = createConversationAgent({
         model,
         checkpointer: new MemorySaver(),
+        now: FIXED_NOW,
       })
 
       await agent.respond({
@@ -512,8 +619,9 @@ describe('createConversationAgent', () => {
         },
       })
 
-      const [humanMessage] = model.calls[0] ?? []
+      const [, humanMessage] = model.calls[0] ?? []
       expect(humanMessage?.content).toEqual([
+        CURRENT_DATETIME_META_BLOCK,
         {
           type: 'text',
           text: '<thread_context>\n[2026-01-01T00:00:00.000Z] <@U2>: retry [画像 1]\n</thread_context>',
@@ -550,7 +658,7 @@ describe('createConversationAgent', () => {
         },
       })
 
-      const [humanMessage] = model.calls[0] ?? []
+      const [, humanMessage] = model.calls[0] ?? []
       expect(humanMessage?.additional_kwargs).toEqual({
         slack: { turnTs: '111.222', contextMaxTs: '100.000' },
       })
@@ -571,7 +679,7 @@ describe('createConversationAgent', () => {
         triggerTs: '111.222',
       })
 
-      const [humanMessage] = model.calls[0] ?? []
+      const [, humanMessage] = model.calls[0] ?? []
       expect(humanMessage?.additional_kwargs).toEqual({
         slack: { turnTs: '111.222' },
       })
