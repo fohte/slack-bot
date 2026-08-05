@@ -29,6 +29,7 @@ describe('loadConfig', () => {
       model: 'opencode-go/gpt-5',
       personaPrompt: undefined,
       opencodeApiKey: 'sk-test',
+      llmBaseUrl: undefined,
     })
     expect(config.imageAnalysis).toEqual({ model: 'grok-4.5' })
     expect(config.remoteAgentUrls).toEqual([])
@@ -44,13 +45,23 @@ describe('loadConfig', () => {
         SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/claude-sonnet-4-6',
         SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT: 'Be concise.',
         OPENCODE_API_KEY: 'sk-test',
+        SLACK_BOT_LLM_BASE_URL: 'https://litellm.example.com/v1',
       },
     })
     expect(config.conversationAgent).toEqual({
       model: 'opencode-go/claude-sonnet-4-6',
       personaPrompt: 'Be concise.',
       opencodeApiKey: 'sk-test',
+      llmBaseUrl: 'https://litellm.example.com/v1',
     })
+  })
+
+  it('rejects an invalid SLACK_BOT_LLM_BASE_URL', () => {
+    expect(() =>
+      loadConfig({
+        env: { ...baseEnv, SLACK_BOT_LLM_BASE_URL: 'not-a-url' },
+      }),
+    ).toThrow(ConfigLoadError)
   })
 
   it('parses REMOTE_AGENT_URLS as a comma-separated, trimmed URL list', () => {
