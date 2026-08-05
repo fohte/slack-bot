@@ -148,9 +148,6 @@ export interface ConversationAgentOptions {
   // design; domain agents live behind A2A delegation).
   readonly personaPrompt?: string | undefined
   readonly tools?: CreateAgentTools | undefined
-  // Wall clock read once per respond() call to stamp the current-datetime
-  // meta block (see toCurrentDatetimeMetaBlock); overridable for
-  // deterministic tests.
   readonly now?: (() => Date) | undefined
   readonly logger?: Logger | undefined
 }

@@ -577,13 +577,22 @@ describe('createConversationAgent', () => {
         triggerTs: '111.222',
       })
 
-      const [, humanMessage] = model.calls[0] ?? []
-      expect(humanMessage?.content).toEqual([
-        {
-          type: 'text',
-          text: '(meta: current_datetime=2026-08-05T00:00:00+09:00, timezone=Asia/Tokyo)',
-        },
-        { type: 'text', text: 'hi' },
+      expect(
+        model.calls.map((call) => call.map((m) => [m.type, m.content])),
+      ).toEqual([
+        [
+          ['system', CURRENT_DATETIME_INSTRUCTION],
+          [
+            'human',
+            [
+              {
+                type: 'text',
+                text: '(meta: current_datetime=2026-08-05T00:00:00+09:00, timezone=Asia/Tokyo)',
+              },
+              { type: 'text', text: 'hi' },
+            ],
+          ],
+        ],
       ])
     })
   })
