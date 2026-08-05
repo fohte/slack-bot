@@ -9,14 +9,13 @@ export interface ServiceTokenPair {
   readonly clientSecret: string
 }
 
-// OPENCODE_API_KEY and OPENCODE_BASE_URL are unprefixed: multiple
-// services share this credential/endpoint, so neither is namespaced
-// per-service like SLACK_BOT_CONVERSATION_AGENT_*.
+// OPENCODE_API_KEY is unprefixed: multiple services share this credential,
+// so it isn't namespaced per-service like SLACK_BOT_CONVERSATION_AGENT_*.
 export interface ConversationAgentConfig {
   readonly model: string
   readonly personaPrompt: string | undefined
   readonly opencodeApiKey: string
-  readonly opencodeBaseUrl: string | undefined
+  readonly llmBaseUrl: string | undefined
 }
 
 // Shares ConversationAgentConfig.opencodeApiKey and the same OpenCode Go
@@ -97,7 +96,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
       'SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT',
     ),
     opencodeApiKey: requireEnv(env, 'OPENCODE_API_KEY'),
-    opencodeBaseUrl: optionalUrl(env, 'OPENCODE_BASE_URL'),
+    llmBaseUrl: optionalUrl(env, 'SLACK_BOT_LLM_BASE_URL'),
   }
 
   // Falls back to the conversation agent's own model so a deployment that
