@@ -45,7 +45,7 @@ describe('loadConfig', () => {
         SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/claude-sonnet-4-6',
         SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT: 'Be concise.',
         OPENCODE_API_KEY: 'sk-test',
-        OPENCODE_GO_BASE_URL: 'https://litellm.example.com/v1',
+        OPENCODE_BASE_URL: 'https://litellm.example.com/v1',
       },
     })
     expect(config.conversationAgent).toEqual({
@@ -56,9 +56,9 @@ describe('loadConfig', () => {
     })
   })
 
-  it('rejects an invalid OPENCODE_GO_BASE_URL', () => {
+  it('rejects an invalid OPENCODE_BASE_URL', () => {
     expect(() =>
-      loadConfig({ env: { ...baseEnv, OPENCODE_GO_BASE_URL: 'not-a-url' } }),
+      loadConfig({ env: { ...baseEnv, OPENCODE_BASE_URL: 'not-a-url' } }),
     ).toThrow(ConfigLoadError)
   })
 
