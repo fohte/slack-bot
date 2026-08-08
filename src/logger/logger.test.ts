@@ -15,59 +15,69 @@ const collect = (): {
       callback()
     },
   })
-  const lines = (): Record<string, unknown>[] => {
-    const text = Buffer.concat(chunks).toString('utf8')
-    return text
+  const lines = (): Record<string, unknown>[] =>
+    Buffer.concat(chunks)
+      .toString('utf8')
       .split('\n')
       .filter((line) => line.length > 0)
       .map((line) => JSON.parse(line) as Record<string, unknown>)
-  }
   return { stream, lines }
 }
 
+const normalizeTime = (
+  record: Record<string, unknown>,
+): Record<string, unknown> => ({ ...record, time: 'TIME' })
+
+// createLogger() is a thin wrapper around @fohte/service-kit/logger, whose
+// own test suite already covers level filtering, base merging, pretty
+// transport, and default redaction. Only this wrapper's own behavior
+// (extending the default redact patterns) is tested here.
 describe('createLogger', () => {
-  it('emits structured JSON logs', () => {
+  it("redacts this repo's `_secret`-suffixed keys in addition to service-kit's defaults", () => {
     const { stream, lines } = collect()
     const logger = createLogger({ level: 'info', destination: stream })
-    logger.info({ event: 'hello', endpoint: 'commands' }, 'message text')
-    const entry = lines()[0]
-    expect(entry).toBeDefined()
-    expect(entry?.['event']).toBe('hello')
-    expect(entry?.['endpoint']).toBe('commands')
-    expect(entry?.['level']).toBe('info')
-    expect(entry?.['msg']).toBe('message text')
+
+    logger.info(
+      {
+        slack_bot_token: 'xoxb-leaked',
+        signing_secret: 'sss',
+        cf_access_client_secret: 'cfs',
+        nested: { service_token_secret: 'nested-secret' },
+      },
+      'redacted',
+    )
+
+    expect(lines().map(normalizeTime)).toEqual([
+      {
+        level: 30,
+        time: 'TIME',
+        slack_bot_token: '[REDACTED]',
+        signing_secret: '[REDACTED]',
+        cf_access_client_secret: '[REDACTED]',
+        nested: { service_token_secret: '[REDACTED]' },
+        msg: 'redacted',
+      },
+    ])
   })
 
-  it('redacts known secret keys', () => {
+  it('combines a caller-supplied extraSecretKeyPatterns with its own default instead of replacing it', () => {
     const { stream, lines } = collect()
-    const logger = createLogger({ level: 'info', destination: stream })
-    logger.info({
-      event: 'leak',
-      slack_bot_token: 'xoxb-leaked',
-      authorization: 'Bearer leaked',
-      nested: { token: 'inner-secret' },
+    const logger = createLogger({
+      level: 'info',
+      destination: stream,
+      extraSecretKeyPatterns: [/^custom$/i],
     })
-    const entry = lines()[0]
-    expect(entry?.['slack_bot_token']).toBe('[REDACTED]')
-    expect(entry?.['authorization']).toBe('[REDACTED]')
-    const nested = entry?.['nested'] as Record<string, unknown>
-    expect(nested['token']).toBe('[REDACTED]')
-  })
 
-  it('respects log level filtering', () => {
-    const { stream, lines } = collect()
-    const logger = createLogger({ level: 'warn', destination: stream })
-    logger.info({ event: 'skipped' })
-    logger.warn({ event: 'kept' })
-    expect(lines()).toHaveLength(1)
-    expect(lines()[0]?.['event']).toBe('kept')
-  })
+    logger.info({ signing_secret: 'sss', custom: 'leaked' }, 'redacted')
 
-  it('child logger inherits bindings', () => {
-    const { stream, lines } = collect()
-    const logger = createLogger({ level: 'info', destination: stream })
-    const child = logger.child({ component: 'router' })
-    child.info({ event: 'dispatch' })
-    expect(lines()[0]?.['component']).toBe('router')
+    expect(lines().map(normalizeTime)).toEqual([
+      {
+        level: 30,
+        time: 'TIME',
+        signing_secret: '[REDACTED]',
+        custom: '[REDACTED]',
+        msg: 'redacted',
+      },
+    ])
   })
 })

@@ -1,3 +1,12 @@
+import {
+  optionalEnum,
+  optionalInt,
+  optionalString,
+  parseEnv,
+  requireString,
+} from '@fohte/service-kit/env'
+import { err, ok, type Result } from 'neverthrow'
+
 import { ConfigLoadError } from '#types/errors'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -71,181 +80,112 @@ export interface LoadConfigOptions {
 export const loadConfig = (options: LoadConfigOptions = {}): Config => {
   const env = options.env ?? process.env
 
-  const slackSigningSecret = requireEnv(env, 'SLACK_SIGNING_SECRET')
-  const slackBotToken = requireEnv(env, 'SLACK_BOT_TOKEN')
-  const slackBotUserId = requireEnv(env, 'SLACK_BOT_USER_ID')
-  const databaseUrl = requireEnv(env, 'DATABASE_URL')
-
-  const port = parsePositiveInt(env, 'PORT', DEFAULT_PORT)
-  const maxConcurrentTasks = parsePositiveInt(
-    env,
-    'MAX_CONCURRENT_TASKS',
-    DEFAULT_MAX_CONCURRENT_TASKS,
-  )
-  const maxWebApiRetries = parseNonNegativeInt(
-    env,
-    'MAX_WEB_API_RETRIES',
-    DEFAULT_MAX_WEB_API_RETRIES,
-  )
-  const logLevel = parseLogLevel(env, 'LOG_LEVEL', DEFAULT_LOG_LEVEL)
-
-  const conversationAgent: ConversationAgentConfig = {
-    model: requireEnv(env, 'SLACK_BOT_CONVERSATION_AGENT_MODEL'),
-    personaPrompt: optionalString(
+  const parsed = parseEnv({
+    slackSigningSecret: requireString(env, 'SLACK_SIGNING_SECRET'),
+    slackBotToken: requireString(env, 'SLACK_BOT_TOKEN'),
+    slackBotUserId: requireString(env, 'SLACK_BOT_USER_ID'),
+    databaseUrl: requireString(env, 'DATABASE_URL'),
+    port: optionalInt(env, 'PORT', DEFAULT_PORT, { min: 1 }),
+    maxConcurrentTasks: optionalInt(
+      env,
+      'MAX_CONCURRENT_TASKS',
+      DEFAULT_MAX_CONCURRENT_TASKS,
+      { min: 1 },
+    ),
+    maxWebApiRetries: optionalInt(
+      env,
+      'MAX_WEB_API_RETRIES',
+      DEFAULT_MAX_WEB_API_RETRIES,
+      { min: 0 },
+    ),
+    logLevel: optionalEnum(env, 'LOG_LEVEL', LOG_LEVELS, DEFAULT_LOG_LEVEL),
+    conversationAgentModel: requireString(
+      env,
+      'SLACK_BOT_CONVERSATION_AGENT_MODEL',
+    ),
+    conversationAgentPersonaPrompt: optionalString(
       env,
       'SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT',
     ),
-    opencodeApiKey: requireEnv(env, 'OPENCODE_API_KEY'),
+    opencodeApiKey: requireString(env, 'OPENCODE_API_KEY'),
     llmBaseUrl: optionalUrl(env, 'SLACK_BOT_LLM_BASE_URL'),
-  }
+    imageAnalysisModel: optionalString(env, 'SLACK_BOT_IMAGE_ANALYSIS_MODEL'),
+    remoteAgentUrls: optionalUrlList(env, 'REMOTE_AGENT_URLS'),
+    mcpServerUrls: optionalUrlList(env, 'MCP_SERVER_URLS'),
+    a2aNotificationToken: requireString(env, 'A2A_NOTIFICATION_TOKEN'),
+    a2aNotificationUrl: optionalUrl(env, 'A2A_NOTIFICATION_URL'),
+  })
 
-  // Falls back to the conversation agent's own model so a deployment that
-  // hasn't set this yet still starts up, just without the vision-accuracy
-  // improvement this config exists for.
-  const imageAnalysis: ImageAnalysisConfig = {
-    model:
-      optionalString(env, 'SLACK_BOT_IMAGE_ANALYSIS_MODEL') ??
-      conversationAgent.model,
+  if (parsed.isErr()) {
+    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
+    throw new ConfigLoadError(parsed.error.message)
   }
-
-  const remoteAgentUrls = optionalUrlList(env, 'REMOTE_AGENT_URLS')
-  const mcpServerUrls = optionalUrlList(env, 'MCP_SERVER_URLS')
-  const a2aNotificationToken = requireEnv(env, 'A2A_NOTIFICATION_TOKEN')
-  const a2aNotificationUrl = optionalUrl(env, 'A2A_NOTIFICATION_URL')
+  const fields = parsed.value
 
   return {
-    slackSigningSecret,
-    slackBotToken,
-    slackBotUserId,
-    databaseUrl,
-    port,
-    maxConcurrentTasks,
-    maxWebApiRetries,
-    logLevel,
-    conversationAgent,
-    imageAnalysis,
-    remoteAgentUrls,
-    mcpServerUrls,
-    a2aNotificationToken,
-    a2aNotificationUrl,
+    slackSigningSecret: fields.slackSigningSecret,
+    slackBotToken: fields.slackBotToken,
+    slackBotUserId: fields.slackBotUserId,
+    databaseUrl: fields.databaseUrl,
+    port: fields.port,
+    maxConcurrentTasks: fields.maxConcurrentTasks,
+    maxWebApiRetries: fields.maxWebApiRetries,
+    logLevel: fields.logLevel,
+    conversationAgent: {
+      model: fields.conversationAgentModel,
+      personaPrompt: fields.conversationAgentPersonaPrompt,
+      opencodeApiKey: fields.opencodeApiKey,
+      llmBaseUrl: fields.llmBaseUrl,
+    },
+    // Falls back to the conversation agent's own model so a deployment that
+    // hasn't set this yet still starts up, just without the vision-accuracy
+    // improvement this config exists for.
+    imageAnalysis: {
+      model: fields.imageAnalysisModel ?? fields.conversationAgentModel,
+    },
+    remoteAgentUrls: fields.remoteAgentUrls,
+    mcpServerUrls: fields.mcpServerUrls,
+    a2aNotificationToken: fields.a2aNotificationToken,
+    a2aNotificationUrl: fields.a2aNotificationUrl,
     serviceTokenFor: (pluginName) => lookupServiceToken(env, pluginName),
   }
 }
 
-const optionalString = (
+// service-kit's `/env` module has no URL parser, so this repo's own URL
+// validation stays here.
+const optionalUrl = (
   env: NodeJS.ProcessEnv,
   key: string,
-): string | undefined => {
+): Result<string | undefined, string> => {
   const raw = env[key]
-  if (raw === undefined || raw === '') return undefined
-  return raw
+  if (raw === undefined || raw === '') return ok(undefined)
+  if (!URL.canParse(raw)) {
+    return err(`environment variable ${key} must be a valid URL (got: ${raw})`)
+  }
+  return ok(raw)
 }
 
 const optionalUrlList = (
   env: NodeJS.ProcessEnv,
   key: string,
-): readonly string[] => {
+): Result<readonly string[], string> => {
   const raw = env[key]
-  if (raw === undefined || raw === '') return []
-  return raw.split(',').map((entry) => {
+  if (raw === undefined || raw === '') return ok([])
+  const urls: string[] = []
+  for (const entry of raw.split(',')) {
     const url = entry.trim()
     if (url === '') {
-      // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
-      throw new ConfigLoadError(
-        `Environment variable '${key}' contains an empty URL entry`,
+      return err(`environment variable ${key} contains an empty URL entry`)
+    }
+    if (!URL.canParse(url)) {
+      return err(
+        `environment variable ${key} contains an invalid URL entry '${url}'`,
       )
     }
-    // eslint-disable-next-line no-restricted-syntax -- boundary: wraps the URL constructor's throw-based validation contract
-    try {
-      new URL(url)
-    } catch {
-      // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
-      throw new ConfigLoadError(
-        `Environment variable '${key}' contains an invalid URL entry '${url}'`,
-      )
-    }
-    return url
-  })
-}
-
-const optionalUrl = (
-  env: NodeJS.ProcessEnv,
-  key: string,
-): string | undefined => {
-  const raw = optionalString(env, key)
-  if (raw === undefined) return undefined
-  if (!URL.canParse(raw)) {
-    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
-    throw new ConfigLoadError(
-      `Environment variable '${key}' must be a valid URL (got '${raw}')`,
-    )
+    urls.push(url)
   }
-  return raw
+  return ok(urls)
 }
-
-const requireEnv = (env: NodeJS.ProcessEnv, key: string): string => {
-  const value = env[key]
-  if (value === undefined || value === '') {
-    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
-    throw new ConfigLoadError(
-      `Required environment variable '${key}' is not set`,
-    )
-  }
-  return value
-}
-
-const parsePositiveInt = (
-  env: NodeJS.ProcessEnv,
-  key: string,
-  fallback: number,
-): number => {
-  const raw = env[key]
-  if (raw === undefined || raw === '') return fallback
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
-    throw new ConfigLoadError(
-      `Environment variable '${key}' must be a positive integer (got '${raw}')`,
-    )
-  }
-  return parsed
-}
-
-const parseNonNegativeInt = (
-  env: NodeJS.ProcessEnv,
-  key: string,
-  fallback: number,
-): number => {
-  const raw = env[key]
-  if (raw === undefined || raw === '') return fallback
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
-    throw new ConfigLoadError(
-      `Environment variable '${key}' must be a non-negative integer (got '${raw}')`,
-    )
-  }
-  return parsed
-}
-
-const parseLogLevel = (
-  env: NodeJS.ProcessEnv,
-  key: string,
-  fallback: LogLevel,
-): LogLevel => {
-  const raw = env[key]
-  if (raw === undefined || raw === '') return fallback
-  if (!isLogLevel(raw)) {
-    // eslint-disable-next-line no-restricted-syntax -- boundary: startup fail-fast, config loading runs once before any Result-based flow exists to receive the error
-    throw new ConfigLoadError(
-      `Environment variable '${key}' must be one of ${LOG_LEVELS.join(', ')} (got '${raw}')`,
-    )
-  }
-  return raw
-}
-
-const isLogLevel = (value: string): value is LogLevel =>
-  (LOG_LEVELS as readonly string[]).includes(value)
 
 const lookupServiceToken = (
   env: NodeJS.ProcessEnv,

@@ -94,10 +94,12 @@ describe('createRemoteAgentRegistry', () => {
         ]),
       ),
       logger: {
+        trace: vi.fn(),
         debug: vi.fn(),
         info: vi.fn(),
         warn,
         error: vi.fn(),
+        fatal: vi.fn(),
         child: vi.fn(),
       },
     })
@@ -194,10 +196,12 @@ describe('createRemoteAgentRegistry', () => {
       const registry = createRemoteAgentRegistry({
         agentUrls: ['https://broken.example.com'],
         logger: {
+          trace: vi.fn(),
           debug: vi.fn(),
           info: vi.fn(),
           warn,
           error: vi.fn(),
+          fatal: vi.fn(),
           child: vi.fn(),
         },
       })
