@@ -25,6 +25,7 @@ describe('createShutdownHandler', () => {
           await idle.promise
           timeline.push('drained')
         },
+        size: () => 0,
       },
       logger: noopLogger,
       exit: (code) => {
@@ -37,6 +38,47 @@ describe('createShutdownHandler', () => {
     expect(timeline).toEqual(['drained', 'server-closed', 'exited:0'])
   })
 
+  it('logs the in-flight task count when draining starts', async () => {
+    const infoCalls: Array<{
+      payload: Record<string, unknown>
+      message: string
+    }> = []
+    const handle = createShutdownHandler({
+      server: { close: (callback) => callback?.() },
+      inFlightTasks: { waitForIdle: async () => {}, size: () => 3 },
+      logger: {
+        ...noopLogger,
+        info: (payload, message) => {
+          infoCalls.push({ payload, message })
+        },
+      },
+      exit: () => {},
+    })
+    await handle.shutdown('SIGTERM')
+    expect(infoCalls).toEqual([
+      {
+        payload: {
+          event: 'shutdown_initiated',
+          signal: 'SIGTERM',
+          steps: ['drain_in_flight_tasks', 'close_http_server'],
+        },
+        message: 'shutdown signal received; running shutdown steps',
+      },
+      {
+        payload: { event: 'shutdown_drain_started', in_flight_tasks: 3 },
+        message: 'draining in-flight tasks before exit',
+      },
+      {
+        payload: {
+          event: 'shutdown_completed',
+          signal: 'SIGTERM',
+          hadError: false,
+        },
+        message: 'shutdown steps complete; exiting',
+      },
+    ])
+  })
+
   it('ignores a second signal received while already shutting down', async () => {
     let closeCalls = 0
     const idle = createDeferred<undefined>()
@@ -47,7 +89,7 @@ describe('createShutdownHandler', () => {
           callback?.()
         },
       },
-      inFlightTasks: { waitForIdle: () => idle.promise },
+      inFlightTasks: { waitForIdle: () => idle.promise, size: () => 0 },
       logger: noopLogger,
       exit: () => {},
     })
@@ -58,11 +100,7 @@ describe('createShutdownHandler', () => {
     expect(closeCalls).toBe(1)
   })
 
-  it('logs and still exits when server.close reports an error', async () => {
-    const warnCalls: Array<{
-      payload: Record<string, unknown>
-      message: string
-    }> = []
+  it('exits with code 1 when server.close reports an error', async () => {
     const timeline: string[] = []
     const closeError = new Error('already closed')
     const handle = createShutdownHandler({
@@ -71,19 +109,38 @@ describe('createShutdownHandler', () => {
           callback?.(closeError)
         },
       },
-      inFlightTasks: { waitForIdle: async () => {} },
-      logger: {
-        ...noopLogger,
-        warn: (payload, message) => {
-          warnCalls.push({ payload, message })
-        },
-      },
+      inFlightTasks: { waitForIdle: async () => {}, size: () => 0 },
+      logger: noopLogger,
       exit: (code) => {
         timeline.push(`exited:${code}`)
       },
     })
     await handle.shutdown('SIGTERM')
     expect(timeline).toEqual(['exited:1'])
+  })
+
+  it('logs a warning naming the failed step when server.close reports an error', async () => {
+    const warnCalls: Array<{
+      payload: Record<string, unknown>
+      message: string
+    }> = []
+    const closeError = new Error('already closed')
+    const handle = createShutdownHandler({
+      server: {
+        close: (callback) => {
+          callback?.(closeError)
+        },
+      },
+      inFlightTasks: { waitForIdle: async () => {}, size: () => 0 },
+      logger: {
+        ...noopLogger,
+        warn: (payload, message) => {
+          warnCalls.push({ payload, message })
+        },
+      },
+      exit: () => {},
+    })
+    await handle.shutdown('SIGTERM')
     expect(warnCalls).toEqual([
       {
         payload: {

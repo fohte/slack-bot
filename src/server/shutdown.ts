@@ -12,7 +12,7 @@ export interface CloseableServer {
 
 export interface ShutdownDeps {
   readonly server: CloseableServer
-  readonly inFlightTasks: Pick<InFlightTasks, 'waitForIdle'>
+  readonly inFlightTasks: Pick<InFlightTasks, 'waitForIdle' | 'size'>
   readonly logger: Logger
   readonly exit?: ((code: number) => void) | undefined
 }
@@ -31,7 +31,16 @@ export const createShutdownHandler = (deps: ShutdownDeps): ShutdownHandle =>
     [
       {
         name: 'drain_in_flight_tasks',
-        run: () => deps.inFlightTasks.waitForIdle(),
+        run: () => {
+          deps.logger.info(
+            {
+              event: 'shutdown_drain_started',
+              in_flight_tasks: deps.inFlightTasks.size(),
+            },
+            'draining in-flight tasks before exit',
+          )
+          return deps.inFlightTasks.waitForIdle()
+        },
       },
       {
         name: 'close_http_server',
