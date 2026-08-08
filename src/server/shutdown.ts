@@ -20,6 +20,12 @@ export type ShutdownHandler = (signal: string) => Promise<void>
 // reply), plus anything newly accepted while draining, to finish before
 // exiting. A task that never settles is terminated by k8s's SIGKILL
 // backstop.
+//
+// Not migrated to @fohte/service-kit/shutdown: the published 0.1.7 package
+// is broken (dist/shutdown/shutdown.js imports the internal subpath
+// '#signal-owner', which the package.json `imports` map points at
+// './src/signal-owner.ts' — a file the published npm package doesn't ship,
+// since `files` only includes `dist`). Revisit once service-kit fixes this.
 export const createShutdownHandler = (deps: ShutdownDeps): ShutdownHandler => {
   const exit = deps.exit ?? ((code: number) => process.exit(code))
   let shuttingDown = false
