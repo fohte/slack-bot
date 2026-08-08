@@ -36,6 +36,7 @@ const createRecordingLogger = (): Logger & { readonly entries: LogEntry[] } => {
   const entries: LogEntry[] = []
   const logger: Logger & { readonly entries: LogEntry[] } = {
     entries,
+    trace: () => undefined,
     debug: () => undefined,
     info: (fields: LogFields) => {
       entries.push({ level: 'info', payload: fields })
@@ -44,6 +45,7 @@ const createRecordingLogger = (): Logger & { readonly entries: LogEntry[] } => {
       entries.push({ level: 'warn', payload: fields })
     },
     error: () => undefined,
+    fatal: () => undefined,
     child: () => logger,
   }
   return logger

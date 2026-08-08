@@ -52,6 +52,7 @@ import type {
 } from '#types/slack-payloads'
 
 const noopLogger = {
+  trace() {},
   debug() {},
   info() {},
   warn() {},
