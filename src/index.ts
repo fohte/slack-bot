@@ -162,16 +162,11 @@ export const bootstrap = (options: BootstrapOptions): void => {
     },
   )
 
-  const shutdown = createShutdownHandler({
+  // Self-registers SIGTERM/SIGINT handlers (see @fohte/service-kit/shutdown).
+  createShutdownHandler({
     server: httpServer,
     inFlightTasks,
     logger,
-  })
-  process.on('SIGTERM', () => {
-    void shutdown('SIGTERM')
-  })
-  process.on('SIGINT', () => {
-    void shutdown('SIGINT')
   })
 }
 

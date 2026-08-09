@@ -11,12 +11,14 @@ const createRecordingLogger = (): Logger & {
   const warnCalls: LogFields[] = []
   return {
     warnCalls,
+    trace: () => undefined,
     debug: () => undefined,
     info: () => undefined,
     warn: (fields) => {
       warnCalls.push(fields)
     },
     error: () => undefined,
+    fatal: () => undefined,
     child() {
       return this
     },

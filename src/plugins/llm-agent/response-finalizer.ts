@@ -1,4 +1,5 @@
 import type { Task } from '@a2a-js/sdk'
+import { sleep as defaultSleep } from '@fohte/service-kit/retry'
 import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 
@@ -117,9 +118,7 @@ export const createResponseFinalizer = (
   const logger = options.logger ?? noopLogger
   const taskProgressStatus =
     options.taskProgressStatus ?? NOOP_TASK_PROGRESS_STATUS
-  const sleep =
-    options.sleep ??
-    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const sleep = options.sleep ?? defaultSleep
   const retryDelayMs =
     options.unknownTaskRetryDelayMs ?? DEFAULT_UNKNOWN_TASK_RETRY_DELAY_MS
 

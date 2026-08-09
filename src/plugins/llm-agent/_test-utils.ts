@@ -200,13 +200,15 @@ export const createRecordingLogger = (): RecordingLogger => {
   const entries: LogEntry[] = []
   const logger: RecordingLogger = {
     entries,
+    trace() {},
     debug() {},
     info() {},
+    fatal() {},
     warn(payload, message) {
-      entries.push({ level: 'warn', payload, message: message ?? '' })
+      entries.push({ level: 'warn', payload, message })
     },
     error(payload, message) {
-      entries.push({ level: 'error', payload, message: message ?? '' })
+      entries.push({ level: 'error', payload, message })
     },
     child() {
       return logger
