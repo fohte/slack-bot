@@ -9,7 +9,7 @@ const baseEnv = {
   SLACK_BOT_USER_ID: 'U_BOT',
   DATABASE_URL: 'postgres://localhost/test',
   SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/gpt-5',
-  OPENCODE_API_KEY: 'sk-test',
+  SLACK_BOT_LLM_API_KEY: 'sk-test',
   SLACK_BOT_IMAGE_ANALYSIS_MODEL: 'grok-4.5',
   A2A_NOTIFICATION_TOKEN: 'notif-token',
 } satisfies NodeJS.ProcessEnv
@@ -28,7 +28,7 @@ describe('loadConfig', () => {
     expect(config.conversationAgent).toEqual({
       model: 'opencode-go/gpt-5',
       personaPrompt: undefined,
-      opencodeApiKey: 'sk-test',
+      llmApiKey: 'sk-test',
       llmBaseUrl: undefined,
     })
     expect(config.imageAnalysis).toEqual({ model: 'grok-4.5' })
@@ -44,14 +44,14 @@ describe('loadConfig', () => {
         ...baseEnv,
         SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/claude-sonnet-4-6',
         SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT: 'Be concise.',
-        OPENCODE_API_KEY: 'sk-test',
+        SLACK_BOT_LLM_API_KEY: 'sk-test',
         SLACK_BOT_LLM_BASE_URL: 'https://litellm.example.com/v1',
       },
     })
     expect(config.conversationAgent).toEqual({
       model: 'opencode-go/claude-sonnet-4-6',
       personaPrompt: 'Be concise.',
-      opencodeApiKey: 'sk-test',
+      llmApiKey: 'sk-test',
       llmBaseUrl: 'https://litellm.example.com/v1',
     })
   })
@@ -170,8 +170,8 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 
-  it('throws ConfigLoadError when OPENCODE_API_KEY is missing', () => {
-    const env = { ...baseEnv, OPENCODE_API_KEY: undefined }
+  it('throws ConfigLoadError when SLACK_BOT_LLM_API_KEY is missing', () => {
+    const env = { ...baseEnv, SLACK_BOT_LLM_API_KEY: undefined }
     expect(() => loadConfig({ env })).toThrow(ConfigLoadError)
   })
 

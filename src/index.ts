@@ -203,13 +203,13 @@ if (entry.endsWith('index.js') || entry.endsWith('index.ts')) {
     ),
   ])
   const model = createOpenCodeGoChatModel({
-    apiKey: config.conversationAgent.opencodeApiKey,
+    apiKey: config.conversationAgent.llmApiKey,
     model: config.conversationAgent.model,
     baseUrl: config.conversationAgent.llmBaseUrl,
     logger,
   })
   const imageAnalysisModel = createOpenCodeGoChatModel({
-    apiKey: config.conversationAgent.opencodeApiKey,
+    apiKey: config.conversationAgent.llmApiKey,
     model: config.imageAnalysis.model,
     baseUrl: config.conversationAgent.llmBaseUrl,
     logger,

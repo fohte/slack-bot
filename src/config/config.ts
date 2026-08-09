@@ -18,17 +18,15 @@ export interface ServiceTokenPair {
   readonly clientSecret: string
 }
 
-// OPENCODE_API_KEY is unprefixed: multiple services share this credential,
-// so it isn't namespaced per-service like SLACK_BOT_CONVERSATION_AGENT_*.
 export interface ConversationAgentConfig {
   readonly model: string
   readonly personaPrompt: string | undefined
-  readonly opencodeApiKey: string
+  readonly llmApiKey: string
   readonly llmBaseUrl: string | undefined
 }
 
-// Shares ConversationAgentConfig.opencodeApiKey and the same OpenCode Go
-// endpoint. The model can differ from the conversation agent's since image
+// Shares ConversationAgentConfig.llmApiKey and the same LLM endpoint. The
+// model can differ from the conversation agent's since image
 // analysis benefits from a vision-accurate model, but when unset it falls
 // back to the conversation agent's own model rather than being required.
 export interface ImageAnalysisConfig {
@@ -107,7 +105,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
       env,
       'SLACK_BOT_CONVERSATION_AGENT_PERSONA_PROMPT',
     ),
-    opencodeApiKey: requireString(env, 'OPENCODE_API_KEY'),
+    llmApiKey: requireString(env, 'SLACK_BOT_LLM_API_KEY'),
     llmBaseUrl: optionalUrl(env, 'SLACK_BOT_LLM_BASE_URL'),
     imageAnalysisModel: optionalString(env, 'SLACK_BOT_IMAGE_ANALYSIS_MODEL'),
     remoteAgentUrls: optionalUrlList(env, 'REMOTE_AGENT_URLS'),
@@ -134,7 +132,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): Config => {
     conversationAgent: {
       model: fields.conversationAgentModel,
       personaPrompt: fields.conversationAgentPersonaPrompt,
-      opencodeApiKey: fields.opencodeApiKey,
+      llmApiKey: fields.llmApiKey,
       llmBaseUrl: fields.llmBaseUrl,
     },
     // Falls back to the conversation agent's own model so a deployment that
