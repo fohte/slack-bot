@@ -10,7 +10,7 @@ const baseEnv = {
   SLACK_BOT_USER_ID: 'U_BOT',
   DATABASE_URL: 'postgres://localhost/test',
   SLACK_BOT_CONVERSATION_AGENT_MODEL: 'opencode-go/gpt-5',
-  OPENCODE_API_KEY: 'sk-test',
+  SLACK_BOT_LLM_API_KEY: 'sk-test',
   A2A_NOTIFICATION_TOKEN: 'notif-token',
 }
 
