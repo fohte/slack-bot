@@ -49,7 +49,13 @@ export interface HttpServer {
 
 // The 200 response to Slack has already gone out by the time this runs, so
 // there is no request left to fail — capture only instead of re-throwing.
-const ROUTE_EVENT_FINGERPRINT = 'server.http-server.route-event-unhandled'
+// This is a catch-all reached by any plugin's routeEvent, so the fingerprint
+// keeps {{ default }} to let Sentry's normal grouping (exception type/stack)
+// split unrelated errors into separate issues instead of merging them all.
+const ROUTE_EVENT_FINGERPRINT = [
+  'server.http-server.route-event-unhandled',
+  '{{ default }}',
+] as const
 
 export const SLACK_COMMANDS_PATH = '/api/slack/commands'
 
