@@ -63,7 +63,7 @@ describe('createHttpServer', () => {
       ],
     ])
     expect(vi.mocked(captureWithFingerprint).mock.calls).toEqual([
-      [thrown, 'server.http-server.route-event-unhandled'],
+      [thrown, ['server.http-server.route-event-unhandled', '{{ default }}']],
     ])
   })
 
