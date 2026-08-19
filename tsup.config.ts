@@ -14,15 +14,8 @@ export default defineConfig({
   // installed via pnpm and not duplicated into the image.
   bundle: true,
   skipNodeModulesBundle: true,
-<<<<<<< before updating
-  // skipNodeModulesBundle externalizes any non-relative specifier by default,
-  // which would otherwise externalize "#*" subpath imports (they don't start
-  // with "./" or "../") instead of bundling the first-party source they point to.
-||||||| last update
-=======
   // skipNodeModulesBundle treats subpath imports (`#foo`) as external too,
   // leaving `./src/*.ts` specifiers unresolved in a runtime image that only
   // ships dist/. Force-bundle them so dist stays self-contained.
->>>>>>> after updating
   noExternal: [/^#/],
 })
