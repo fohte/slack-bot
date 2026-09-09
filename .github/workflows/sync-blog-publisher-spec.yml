@@ -8,6 +8,10 @@ on:
 permissions:
   id-token: write
 
+concurrency:
+  group: sync-blog-publisher-spec
+  cancel-in-progress: false
+
 jobs:
   sync-blog-publisher-spec:
     runs-on: ubuntu-latest
