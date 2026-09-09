@@ -1,4 +1,3 @@
-import type { Plan } from '@fohte/blog-publisher-contract'
 import type { Result } from 'neverthrow'
 import { err, fromThrowable, ok } from 'neverthrow'
 
@@ -7,6 +6,7 @@ import {
   ButtonValueOverflow,
   PlanButtonValueDecodeError,
 } from '#plugins/blog/errors'
+import type { Plan } from '#plugins/blog/generated/blog-publisher-contract'
 
 export const BUTTON_VALUE_LIMIT = 2000
 

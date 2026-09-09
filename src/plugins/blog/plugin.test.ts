@@ -1,14 +1,14 @@
+import { describe, expect, it, vi } from 'vitest'
+
+import { createInteractionContext } from '#interaction/context'
+import { createPluginRegistry } from '#plugin/registry'
 import type {
   ApplyResult,
   BlogPrSummary,
   CiStatus,
   Note,
   Plan,
-} from '@fohte/blog-publisher-contract'
-import { describe, expect, it, vi } from 'vitest'
-
-import { createInteractionContext } from '#interaction/context'
-import { createPluginRegistry } from '#plugin/registry'
+} from '#plugins/blog/generated/blog-publisher-contract'
 import { createBlogPlugin } from '#plugins/blog/plugin'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type { SlackWebClient } from '#slack/web-client'

@@ -1,3 +1,7 @@
+import { captureWithFingerprint } from '@fohte/service-kit/observability'
+import { z } from 'zod'
+
+import { ServiceError, ServiceUnavailable } from '#plugins/blog/errors'
 import {
   ApplyResult,
   BlogPrSummary,
@@ -5,11 +9,7 @@ import {
   Note,
   Plan,
   type PlanIssue,
-} from '@fohte/blog-publisher-contract'
-import { captureWithFingerprint } from '@fohte/service-kit/observability'
-import { z } from 'zod'
-
-import { ServiceError, ServiceUnavailable } from '#plugins/blog/errors'
+} from '#plugins/blog/generated/blog-publisher-contract'
 
 const ErrorBody = z.object({
   error: z.object({

@@ -1,7 +1,7 @@
-import type { BlogPrSummary } from '@fohte/blog-publisher-contract'
 import { ResultAsync } from 'neverthrow'
 
 import type { InteractionContext } from '#interaction/context'
+import type { BlogPrSummary } from '#plugins/blog/generated/blog-publisher-contract'
 import { escapeMrkdwn } from '#plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type { SlashCommandBody } from '#types/slack-payloads'

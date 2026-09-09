@@ -1,10 +1,12 @@
-import type { ApplyResult, PlanIssue } from '@fohte/blog-publisher-contract'
-
 import {
   ButtonValueOverflow,
   ServiceError,
   ServiceUnavailable,
 } from '#plugins/blog/errors'
+import type {
+  ApplyResult,
+  PlanIssue,
+} from '#plugins/blog/generated/blog-publisher-contract'
 
 const BUTTON_VALUE_OVERFLOW_MESSAGE =
   '選択数が多すぎます。25 件以下に絞ってください'

@@ -1,4 +1,3 @@
-import type { ApplyResult } from '@fohte/blog-publisher-contract'
 import { errAsync, okAsync, ResultAsync } from 'neverthrow'
 
 import type { InteractionContext } from '#interaction/context'
@@ -7,6 +6,7 @@ import {
   translateApplyFailure,
   translateException,
 } from '#plugins/blog/error-translator'
+import type { ApplyResult } from '#plugins/blog/generated/blog-publisher-contract'
 import {
   decodeDocIds,
   renderAlreadyAppliedBlocks,

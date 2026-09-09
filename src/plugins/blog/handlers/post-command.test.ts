@@ -1,4 +1,3 @@
-import type { Note } from '@fohte/blog-publisher-contract'
 import { err } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -9,6 +8,7 @@ import {
   makeSlack,
 } from '#plugins/blog/_test-utils'
 import { ServiceUnavailable } from '#plugins/blog/errors'
+import type { Note } from '#plugins/blog/generated/blog-publisher-contract'
 import {
   buildSelectBlocks,
   handlePostCommand,
