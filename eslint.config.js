@@ -7,7 +7,7 @@ export default config(
     errorHandling: {},
   },
   {
-    ignores: ['dist/**'],
+    ignores: ['dist/**', 'src/plugins/blog/generated/**'],
   },
   {
     files: ['**/*.test.ts', '**/_test-utils.ts', 'tests/**/*.ts'],

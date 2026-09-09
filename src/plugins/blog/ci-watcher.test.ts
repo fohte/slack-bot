@@ -1,4 +1,3 @@
-import type { CiStatus } from '@fohte/blog-publisher-contract'
 import { okAsync } from 'neverthrow'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,6 +7,7 @@ import {
   CI_WATCH_MAX_DURATION_MS,
   createCiWatcher,
 } from '#plugins/blog/ci-watcher'
+import type { CiStatus } from '#plugins/blog/generated/blog-publisher-contract'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import { createScheduler } from '#scheduler/scheduler'
 

@@ -1,9 +1,9 @@
-import type { ApplyResult } from '@fohte/blog-publisher-contract'
 import { err } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createInteractionContext } from '#interaction/context'
 import { lastBody, makeSlack, nthBody } from '#plugins/blog/_test-utils'
+import type { ApplyResult } from '#plugins/blog/generated/blog-publisher-contract'
 import {
   type ApplySuccessInput,
   handleApplyButton,

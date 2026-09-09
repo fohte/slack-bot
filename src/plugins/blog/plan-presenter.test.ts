@@ -1,4 +1,3 @@
-import type { Plan } from '@fohte/blog-publisher-contract'
 import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
@@ -6,6 +5,7 @@ import {
   ButtonValueOverflow,
   PlanButtonValueDecodeError,
 } from '#plugins/blog/errors'
+import type { Plan } from '#plugins/blog/generated/blog-publisher-contract'
 import {
   BUTTON_VALUE_LIMIT,
   decodeDocIds,

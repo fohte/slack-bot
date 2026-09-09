@@ -1,8 +1,7 @@
-import type { CiStatus } from '@fohte/blog-publisher-contract'
-
 import type { MessageUpdater } from '#interaction/message-updater'
 import type { Logger } from '#logger/logger'
 import { noopLogger } from '#logger/logger'
+import type { CiStatus } from '#plugins/blog/generated/blog-publisher-contract'
 import { escapeMrkdwn } from '#plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type { InMemoryScheduler } from '#scheduler/scheduler'

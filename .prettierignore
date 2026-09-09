@@ -5,6 +5,9 @@ CHANGELOG.md
 # fight over its formatting on every `copier update`.
 .copier-answers.yml
 
+# Handlebars templates (prettier has no parser for this syntax)
+*.hbs
+
 # Lock files
 pnpm-lock.yaml
 

@@ -1,4 +1,4 @@
-import type { PlanIssue } from '@fohte/blog-publisher-contract'
+import type { PlanIssue } from '#plugins/blog/generated/blog-publisher-contract'
 
 export class ServiceError extends Error {
   override readonly name = 'ServiceError'

@@ -1,7 +1,7 @@
-import type { Note } from '@fohte/blog-publisher-contract'
 import { ResultAsync } from 'neverthrow'
 
 import type { InteractionContext } from '#interaction/context'
+import type { Note } from '#plugins/blog/generated/blog-publisher-contract'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type { SlashCommandBody } from '#types/slack-payloads'
 
