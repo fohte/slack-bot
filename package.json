@@ -27,7 +27,7 @@
     "@commitlint/cli": "21.2.2",
     "@eslint/eslintrc": "3.3.6",
     "@fohte/eslint-config": "0.4.1",
-    "@ninoseki/eslint-plugin-neverthrow": "0.2.0",
+    "@ninoseki/eslint-plugin-neverthrow": "0.3.1",
     "@opentelemetry/context-async-hooks": "2.8.0",
     "@opentelemetry/core": "2.8.0",
     "@tsconfig/node-lts": "24.0.1",
