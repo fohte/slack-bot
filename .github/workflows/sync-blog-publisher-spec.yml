@@ -1,0 +1,26 @@
+name: Sync blog-publisher spec
+
+on:
+  repository_dispatch:
+    types: [blog-publisher-spec-updated]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+
+concurrency:
+  group: sync-blog-publisher-spec
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: fohte/spec-sync-action@5b3f79f7812986c91231fa3167b372208061fea3 # v0.1.0
+        with:
+          producer-repo: fohte/blog-publisher
+          generate-command: |
+            corepack enable
+            pnpm install --frozen-lockfile
+            pnpm run generate:blog-publisher-contract
+          octo-sts-identity: slack-bot-sync-blog-publisher-spec
