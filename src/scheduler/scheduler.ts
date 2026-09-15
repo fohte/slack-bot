@@ -8,9 +8,9 @@ import {
   SchedulerLimitError,
 } from '#types/errors'
 
-export type TaskTickResult = { done: false } | { done: true }
+type TaskTickResult = { done: false } | { done: true }
 
-export interface ScheduledTaskDef {
+interface ScheduledTaskDef {
   readonly name: string
   readonly intervalMs: number
   readonly maxDurationMs: number
@@ -19,15 +19,15 @@ export interface ScheduledTaskDef {
   readonly onError?: (err: unknown) => Promise<void>
 }
 
-export type TaskStatus = 'running' | 'completed' | 'timed-out' | 'cancelled'
+type TaskStatus = 'running' | 'completed' | 'timed-out' | 'cancelled'
 
-export interface TaskHandle {
+interface TaskHandle {
   readonly name: string
   readonly status: TaskStatus
   cancel(): void
 }
 
-export type SchedulerScheduleError =
+type SchedulerScheduleError =
   | SchedulerInvalidArgumentError
   | SchedulerDuplicateNameError
   | SchedulerLimitError

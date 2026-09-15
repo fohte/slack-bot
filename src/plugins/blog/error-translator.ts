@@ -60,7 +60,7 @@ export const translateApplyFailure = (
   return `${base} (${result.message})`
 }
 
-export const translateServiceError = (err: ServiceError): string => {
+const translateServiceError = (err: ServiceError): string => {
   switch (err.status) {
     case 400:
       return 'リクエストが不正です。bot のログを確認してください。'

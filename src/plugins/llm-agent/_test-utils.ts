@@ -32,7 +32,7 @@ import type {
   ConversationThreadIdParseError,
 } from '#types/errors'
 
-export interface SlackCall {
+interface SlackCall {
   readonly kind: 'status' | 'post'
   readonly channel: string
   readonly thread: string
@@ -186,7 +186,7 @@ export const TEST_THREAD_KEY: ThreadKey = {
   threadRootTs: TEST_ENV.threadRootTs,
 }
 
-export interface LogEntry {
+interface LogEntry {
   readonly level: 'warn' | 'error'
   readonly payload: Record<string, unknown>
   readonly message: string

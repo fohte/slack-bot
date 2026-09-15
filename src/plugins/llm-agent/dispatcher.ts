@@ -50,7 +50,7 @@ import type { SlackFile } from '#types/slack-payloads'
 const TRACER_NAME = 'slack-bot'
 const DISPATCH_SPAN_NAME = 'slack.mention.handle'
 
-export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
+type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
 export type TaskDispatcherOptions = DispatcherDeps & {
   // Registers the backgrounded mention-processing call so a graceful-
@@ -383,7 +383,7 @@ const finalizeNewTurn = async (
 // try/catch here is deliberately broad: it is the last line of defense
 // against a genuine bug (an actual throw, not just a Result error) in any of
 // the steps below, since a task that silently hangs never gets a reply.
-export const runMentionInBackground = async (
+const runMentionInBackground = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow | undefined,
   resolved: ResolvedDispatcherDeps,

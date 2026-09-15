@@ -16,8 +16,7 @@ import { createRestoreSystemRoleFetch } from '#plugins/llm-agent/conversation-ag
 import { stripThinkBlocks } from '#plugins/llm-agent/conversation-agent/strip-think-blocks'
 import { parseConversationThreadId } from '#plugins/llm-agent/conversation-agent/thread-id'
 // Delegation is defined in remote-agent-registry (the tool call that
-// produces it) and re-exported below to keep this module's existing public
-// import path (#plugins/llm-agent/conversation-agent/index) unchanged.
+// produces it).
 import type { Delegation } from '#plugins/llm-agent/remote-agent-registry/index'
 import {
   DELEGATION_RUNTIME_CONTEXT_SCHEMA,
@@ -29,10 +28,8 @@ import {
   type ConversationThreadIdParseError,
 } from '#types/errors'
 
-export type { Delegation } from '#plugins/llm-agent/remote-agent-registry/index'
-
 // OpenCode Go's OpenAI-compatible endpoint.
-export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
+const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
 
 const GEN_AI_PROVIDER_NAME = 'opencode'
 
@@ -43,7 +40,7 @@ const CONVERSATION_AGENT_INVOKE_FINGERPRINT =
 const CONVERSATION_AGENT_GET_THREAD_CURSOR_FINGERPRINT =
   'llm-agent.conversation-agent.get-thread-cursor-failed'
 
-export interface CreateOpenCodeGoChatModelOptions {
+interface CreateOpenCodeGoChatModelOptions {
   readonly apiKey: string
   readonly model: string
   readonly baseUrl?: string | undefined
@@ -141,7 +138,7 @@ export interface ConversationAgent {
 
 type CreateAgentTools = NonNullable<Parameters<typeof createAgent>[0]['tools']>
 
-export interface ConversationAgentOptions {
+interface ConversationAgentOptions {
   readonly model: BaseChatModel
   readonly checkpointer: BaseCheckpointSaver
   // Persona/tone only, never domain knowledge (kept out of this repo by

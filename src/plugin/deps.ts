@@ -23,7 +23,7 @@ export interface PluginDeps {
   readonly inFlightTasks: InFlightTasks
 }
 
-export type PluginFactory = (deps: PluginDeps) => Plugin
+type PluginFactory = (deps: PluginDeps) => Plugin
 
 export type PluginInput = Plugin | PluginFactory
 

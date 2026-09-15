@@ -89,12 +89,12 @@ export type SlackInteractivityPayload =
   | ShortcutPayload
   | MessageActionPayload
 
-export interface SlackEventBase {
+interface SlackEventBase {
   readonly type: string
   readonly [key: string]: unknown
 }
 
-export interface SlackUnknownEvent extends SlackEventBase {
+interface SlackUnknownEvent extends SlackEventBase {
   readonly type: string
 }
 

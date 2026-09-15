@@ -6,7 +6,7 @@ import { conversationThread } from '#db/schema'
 import type { ThreadKey } from '#plugins/llm-agent/a2a-task-tracker'
 import { ConversationThreadStoreError } from '#types/errors'
 
-export interface ConversationThreadRow extends ThreadKey {
+interface ConversationThreadRow extends ThreadKey {
   readonly createdAt: Date
   readonly lastActivityAt: Date
 }

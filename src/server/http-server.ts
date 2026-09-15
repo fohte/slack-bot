@@ -28,7 +28,7 @@ type Variables = {
 // Not subject to the Slack signature-verification middleware below, since
 // SLACK_PATHS only matches the fixed Slack Request URL paths; a route added
 // here is expected to authenticate itself.
-export interface HttpServerRoute {
+interface HttpServerRoute {
   readonly path: string
   readonly handler: (c: Context<{ Variables: Variables }>) => Promise<Response>
 }

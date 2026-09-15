@@ -3,7 +3,7 @@ import { err, ok } from 'neverthrow'
 
 import { ConversationThreadIdParseError } from '#types/errors'
 
-export interface ConversationThreadKey {
+interface ConversationThreadKey {
   readonly teamId: string
   readonly channelId: string
   readonly threadRootTs: string

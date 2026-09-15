@@ -25,7 +25,7 @@ export interface TaskProgressStatus {
   clear(row: A2aTaskRow): Promise<void>
 }
 
-export interface TaskProgressStatusOptions {
+interface TaskProgressStatusOptions {
   readonly slackClient: SlackWebClient
   readonly logger?: Logger | undefined
 }

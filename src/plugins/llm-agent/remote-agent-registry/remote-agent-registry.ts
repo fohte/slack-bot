@@ -61,9 +61,9 @@ const defaultResolver: RemoteAgentResolver = {
   },
 }
 
-export const DEFAULT_AGENT_CARD_CACHE_TTL_MS = 5 * 60 * 1000
+const DEFAULT_AGENT_CARD_CACHE_TTL_MS = 5 * 60 * 1000
 
-export interface RemoteAgentRegistryOptions {
+interface RemoteAgentRegistryOptions {
   // REMOTE_AGENT_URLS, already split. Adding an entry here is the entire
   // mechanism for adding a delegation target — no code change needed.
   readonly agentUrls: readonly string[]

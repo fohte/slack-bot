@@ -1,7 +1,7 @@
 import type { Config } from '#config/config'
 import { CfAccessAuthError } from '#types/errors'
 
-export interface CloudflareAccessHttpClient {
+interface CloudflareAccessHttpClient {
   request(input: string | URL, init?: RequestInit): Promise<Response>
 }
 

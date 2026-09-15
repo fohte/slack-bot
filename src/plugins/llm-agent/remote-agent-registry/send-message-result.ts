@@ -15,5 +15,3 @@ export const SEND_MESSAGE_RESULT_SCHEMA = z.discriminatedUnion('kind', [
     })
     .loose(),
 ])
-
-export type SendMessageResult = z.infer<typeof SEND_MESSAGE_RESULT_SCHEMA>

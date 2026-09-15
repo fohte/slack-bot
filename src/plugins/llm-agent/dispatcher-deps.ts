@@ -15,8 +15,7 @@ import { DEFAULT_A2A_TASK_DEADLINE_MS } from '#plugins/llm-agent/remote-agent-re
 import type { SlackWebClient } from '#slack/web-client'
 import type { SlackFile } from '#types/slack-payloads'
 
-export const DEFAULT_SUCCESS_FALLBACK =
-  '(the assistant did not produce a reply)'
+const DEFAULT_SUCCESS_FALLBACK = '(the assistant did not produce a reply)'
 
 export interface SlackEnvelope {
   readonly eventId: string

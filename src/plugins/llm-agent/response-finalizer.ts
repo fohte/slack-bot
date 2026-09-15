@@ -63,7 +63,7 @@ export interface ResponseFinalizer {
   finalizeTask(row: A2aTaskRow, task: Task): Promise<A2aPushNotificationResult>
 }
 
-export interface ResponseFinalizerOptions {
+interface ResponseFinalizerOptions {
   readonly a2aTaskTracker: A2aTaskTracker
   readonly remoteAgentRegistry: RemoteAgentRegistry
   readonly eventLogStore: EventLogStore

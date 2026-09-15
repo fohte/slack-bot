@@ -34,7 +34,7 @@ export interface AckPayload {
   [key: string]: unknown
 }
 
-export interface FollowUpPayload {
+interface FollowUpPayload {
   text?: string
   blocks?: unknown[]
   attachments?: unknown[]
@@ -62,7 +62,7 @@ export interface InteractionContextOptions {
   readonly initialRef?: SlackMessageRef | undefined
 }
 
-export interface AckCapture {
+interface AckCapture {
   called: boolean
   payload: AckPayload | undefined
 }

@@ -11,7 +11,7 @@ export interface SlackMessageRef {
   readonly messageTs: string
 }
 
-export interface SlackMessagePatch {
+interface SlackMessagePatch {
   text?: string
   blocks?: unknown[]
   attachments?: unknown[]

@@ -28,7 +28,7 @@ const isValidToken = (
   return timingSafeEqual(expectedHash, providedHash)
 }
 
-export interface A2aNotificationHandlerOptions {
+interface A2aNotificationHandlerOptions {
   readonly token: string
   readonly responseFinalizer: ResponseFinalizer
   readonly logger?: Logger | undefined

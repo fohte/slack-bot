@@ -9,7 +9,7 @@ import type { InMemoryScheduler } from '#scheduler/scheduler'
 export const CI_WATCH_INTERVAL_MS = 30_000
 export const CI_WATCH_MAX_DURATION_MS = 15 * 60 * 1000
 
-export interface CiWatchInput {
+interface CiWatchInput {
   readonly prNumber: number
   readonly prUrl: string
   readonly updater: MessageUpdater
@@ -19,7 +19,7 @@ export interface CiWatcher {
   startWatching(input: CiWatchInput): void
 }
 
-export interface CiWatcherOptions {
+interface CiWatcherOptions {
   readonly scheduler: InMemoryScheduler
   readonly client: BlogServiceClient
   readonly logger?: Logger | undefined
@@ -32,7 +32,7 @@ interface RenderedMessage {
   readonly blocks: unknown[]
 }
 
-export const renderCiSuccessBlocks = (options: {
+const renderCiSuccessBlocks = (options: {
   prNumber: number
   prUrl: string
   previewUrl: string | undefined
@@ -59,7 +59,7 @@ export const renderCiSuccessBlocks = (options: {
   }
 }
 
-export const renderCiFailureBlocks = (options: {
+const renderCiFailureBlocks = (options: {
   prNumber: number
   prUrl: string
   failedChecks: readonly string[]
@@ -84,7 +84,7 @@ export const renderCiFailureBlocks = (options: {
   }
 }
 
-export const renderCiTimeoutBlocks = (options: {
+const renderCiTimeoutBlocks = (options: {
   prNumber: number
   prUrl: string
 }): RenderedMessage => {

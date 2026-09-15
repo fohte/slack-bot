@@ -39,7 +39,7 @@ export interface BlogServiceClient {
   getCiStatus(prNumber: number, traceId?: string): Promise<CiStatus>
 }
 
-export interface BlogServiceClientOptions {
+interface BlogServiceClientOptions {
   readonly baseUrl: string
   readonly bearerToken: string
   readonly fetchImpl?: typeof fetch | undefined

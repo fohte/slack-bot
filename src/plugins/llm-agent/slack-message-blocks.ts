@@ -3,7 +3,7 @@ import type { SlackWebClient } from '#slack/web-client'
 // Slack mrkdwn would otherwise interpret <, >, & inside the response text as
 // user/channel mentions or HTML entities.
 // https://docs.slack.dev/messaging/formatting-message-text#escaping
-export const escapeMrkdwn = (s: string): string =>
+const escapeMrkdwn = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 // Structurally compatible with @slack/types' MarkdownBlock; kept local so
@@ -37,7 +37,7 @@ const truncateForMarkdownBlock = (text: string): string => {
 // follows CommonMark (https://docs.slack.dev/reference/block-kit/blocks/markdown-block),
 // where <, >, & do not trigger mention/entity parsing, so its text is not
 // escaped here.
-export const buildMarkdownBlocks = (text: string): SlackMarkdownBlock[] => [
+const buildMarkdownBlocks = (text: string): SlackMarkdownBlock[] => [
   { type: 'markdown', text: truncateForMarkdownBlock(text) },
 ]
 

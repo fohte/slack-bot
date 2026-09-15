@@ -26,7 +26,7 @@ export const RESUME_SEND_FAILURE_TEXT =
 // assistant-status indicator, so posting a fixed acknowledgement text here
 // would only duplicate that. Failures still need to tell the user something
 // went wrong, since there is no heartbeat to fall back on.
-export type ResumeResult =
+type ResumeResult =
   | { readonly kind: 'suppressed' }
   | { readonly kind: 'failed'; readonly text: string }
 

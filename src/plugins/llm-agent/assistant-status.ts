@@ -16,7 +16,7 @@ export const CLEAR_STATUS = ''
 // with its own generic copy ("Finding answers…", "Summarizing findings…"
 // etc.), which misrepresents what the bot is actually doing. Pass a
 // single-element array per phase to pin the bubble copy to text we own.
-export interface PhaseStatus {
+interface PhaseStatus {
   readonly status: string
   readonly loadingMessages: readonly string[]
 }
@@ -28,12 +28,12 @@ export const INITIAL_PHASE_STATUS: PhaseStatus = {
   loadingMessages: ['Preparing your task…'],
 }
 
-export interface AssistantStatusTarget {
+interface AssistantStatusTarget {
   readonly channelId: string
   readonly threadTs: string
 }
 
-export interface SetAssistantStatusOptions {
+interface SetAssistantStatusOptions {
   readonly slackClient: SlackWebClient
   readonly target: AssistantStatusTarget
   readonly status: string

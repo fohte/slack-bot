@@ -20,7 +20,7 @@ const A2A_TASK_STATES = [
   'rejected',
 ] as const
 
-export type A2aTaskState = (typeof A2A_TASK_STATES)[number]
+type A2aTaskState = (typeof A2A_TASK_STATES)[number]
 
 // Exported so callers outside this module (e.g. the delegation tool mapping
 // an A2A SDK TaskState into a row) can narrow an SDK-supplied state string
@@ -49,7 +49,7 @@ export const A2A_TASK_ACTIVE_EXECUTION_STATES: readonly A2aTaskState[] = [
 // `settled` is derived from `state` rather than accepted as separate input,
 // so a caller can't produce an inconsistent pair (e.g. completed + unsettled)
 // that would leave a finished task looping in the reconciler's sweep.
-export const A2A_TASK_TERMINAL_STATES = [
+const A2A_TASK_TERMINAL_STATES = [
   'completed',
   'failed',
   'canceled',
@@ -110,7 +110,7 @@ export interface A2aTaskLifecycle {
   readonly requireCurrentStates?: readonly A2aTaskState[] | undefined
 }
 
-export interface TransitionGuard {
+interface TransitionGuard {
   readonly requireStates?: readonly A2aTaskState[]
 }
 

@@ -124,10 +124,10 @@ bootstrap({ plugins: [pingPlugin] })
 When a plugin needs core services (the in-memory scheduler, the Cloudflare Access fetch helper, the Slack Web API client, the logger, or the resolved config), pass a factory function instead. `bootstrap` invokes the factory with a `PluginDeps` object at startup.
 
 ```typescript
-import { bootstrap, type PluginFactory } from 'slack-bot'
+import { bootstrap, type Plugin, type PluginDeps } from 'slack-bot'
 import { errAsync, okAsync } from 'neverthrow'
 
-const crawlPlugin: PluginFactory = ({ scheduler, cfAccess, logger }) => {
+const crawlPlugin = ({ scheduler, cfAccess, logger }: PluginDeps): Plugin => {
   const http = cfAccess.forPlugin('crawl')
   return {
     name: 'crawl',
