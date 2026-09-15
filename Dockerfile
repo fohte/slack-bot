@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Keep the Node.js version in sync with .mise.toml.
-FROM node:24.18.0-slim AS base
+FROM node:24.20.0-slim AS base
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
