@@ -32,7 +32,7 @@ interface RenderedMessage {
   readonly blocks: unknown[]
 }
 
-export const renderCiSuccessBlocks = (options: {
+const renderCiSuccessBlocks = (options: {
   prNumber: number
   prUrl: string
   previewUrl: string | undefined
@@ -59,7 +59,7 @@ export const renderCiSuccessBlocks = (options: {
   }
 }
 
-export const renderCiFailureBlocks = (options: {
+const renderCiFailureBlocks = (options: {
   prNumber: number
   prUrl: string
   failedChecks: readonly string[]
@@ -84,7 +84,7 @@ export const renderCiFailureBlocks = (options: {
   }
 }
 
-export const renderCiTimeoutBlocks = (options: {
+const renderCiTimeoutBlocks = (options: {
   prNumber: number
   prUrl: string
 }): RenderedMessage => {

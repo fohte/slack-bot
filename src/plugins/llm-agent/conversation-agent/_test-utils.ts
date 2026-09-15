@@ -6,7 +6,7 @@ export interface RecordingChatModel extends BaseChatModel {
   readonly calls: ReadonlyArray<readonly BaseMessage[]>
 }
 
-export interface RecordingChatModelToolCall {
+interface RecordingChatModelToolCall {
   readonly name: string
   readonly args: Record<string, unknown>
   readonly id: string

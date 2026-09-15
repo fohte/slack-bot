@@ -383,7 +383,7 @@ const finalizeNewTurn = async (
 // try/catch here is deliberately broad: it is the last line of defense
 // against a genuine bug (an actual throw, not just a Result error) in any of
 // the steps below, since a task that silently hangs never gets a reply.
-export const runMentionInBackground = async (
+const runMentionInBackground = async (
   env: SlackEnvelope,
   activeTask: A2aTaskRow | undefined,
   resolved: ResolvedDispatcherDeps,

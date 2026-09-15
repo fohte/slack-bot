@@ -16,32 +16,12 @@
     "test": "conc pnpm:test:type pnpm:test:unit",
     "test:type": "tsc --noEmit",
     "test:unit": "vitest run",
-<<<<<<< before updating
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:prod": "node dist/db/migrate.js",
     "dev": "tsx watch --import @fohte/service-kit/otel-register src/index.ts",
     "print-slash-commands": "tsx src/scripts/print-slash-commands.ts",
     "generate:blog-publisher-contract": "openapi-zod-client https://raw.githubusercontent.com/fohte/blog-publisher/main/openapi.json -o src/plugins/blog/generated/blog-publisher-contract.ts -t src/plugins/blog/blog-publisher-contract.template.hbs --export-schemas"
-||||||| last update
-    "build": "tsup",
-    "start": "node --import @fohte/service-kit/otel-register dist/index.js",
-    "dev": "tsx watch --import @fohte/service-kit/otel-register src/index.ts"
-  },
-  "dependencies": {
-    "@fohte/service-kit": "0.1.11",
-    "@opentelemetry/api": "1.9.1",
-    "neverthrow": "8.2.0"
-=======
-    "build": "tsup",
-    "start": "node --import @fohte/service-kit/otel-register dist/index.js",
-    "dev": "tsx watch --import @fohte/service-kit/otel-register src/index.ts"
-  },
-  "dependencies": {
-    "@fohte/service-kit": "0.1.14",
-    "@opentelemetry/api": "1.9.1",
-    "neverthrow": "8.2.0"
->>>>>>> after updating
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.2",
@@ -64,11 +44,10 @@
     "tsx": "4.23.13",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
-<<<<<<< before updating
   },
   "dependencies": {
     "@a2a-js/sdk": "0.3.14",
-    "@fohte/service-kit": "0.1.13",
+    "@fohte/service-kit": "0.1.14",
     "@hono/node-server": "2.0.12",
     "@langchain/core": "1.2.9",
     "@langchain/langgraph": "1.4.13",
@@ -76,16 +55,8 @@
     "@langchain/mcp-adapters": "1.1.4",
     "@langchain/openai": "1.5.10",
     "@opentelemetry/api": "1.9.1",
-    "@opentelemetry/auto-instrumentations-node": "0.77.0",
-    "@opentelemetry/exporter-metrics-otlp-proto": "0.219.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "0.219.0",
-    "@opentelemetry/instrumentation": "0.219.0",
-    "@opentelemetry/resources": "2.8.0",
     "@opentelemetry/sdk-metrics": "2.8.0",
-    "@opentelemetry/sdk-node": "0.219.0",
     "@opentelemetry/sdk-trace-base": "2.8.0",
-    "@opentelemetry/semantic-conventions": "1.41.1",
-    "@sentry/node": "10.65.0",
     "@slack/web-api": "7.19.0",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.34",
@@ -94,9 +65,5 @@
     "pino": "10.3.1",
     "postgres": "3.4.9",
     "zod": "4.4.3"
-||||||| last update
-    "vitest": "4.1.10"
-=======
->>>>>>> after updating
   }
 }

@@ -27,31 +27,6 @@ export class PluginInvalidNameError extends Error {
   }
 }
 
-export class InvalidSignatureError extends Error {
-  override readonly name = 'InvalidSignatureError'
-}
-
-export class StaleTimestampError extends Error {
-  override readonly name = 'StaleTimestampError'
-}
-
-export class PluginNotFoundError extends Error {
-  override readonly name = 'PluginNotFoundError'
-}
-
-export class MalformedPayloadError extends Error {
-  override readonly name = 'MalformedPayloadError'
-}
-
-export class PluginHandlerError extends Error {
-  override readonly name = 'PluginHandlerError'
-  override readonly cause: unknown
-  constructor(message: string, cause: unknown) {
-    super(message)
-    this.cause = cause
-  }
-}
-
 export class SlackApiError extends Error {
   override readonly name = 'SlackApiError'
   readonly status: number | undefined

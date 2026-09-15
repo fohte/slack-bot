@@ -6,7 +6,7 @@ import {
 import type { Logger } from '#logger/logger'
 import type { InFlightTasks } from '#server/in-flight-tasks'
 
-export interface CloseableServer {
+interface CloseableServer {
   close(callback?: (err?: Error) => void): unknown
 }
 

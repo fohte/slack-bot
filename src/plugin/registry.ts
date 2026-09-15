@@ -9,7 +9,7 @@ import {
 
 const PLUGIN_NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/
 
-export type PluginRegisterError =
+type PluginRegisterError =
   PluginInvalidNameError | PluginNameConflictError | SlashCommandConflictError
 
 export interface PluginRegistry {

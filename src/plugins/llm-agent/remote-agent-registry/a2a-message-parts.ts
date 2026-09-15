@@ -1,6 +1,6 @@
 import type { Part, TextPart } from '@a2a-js/sdk'
 
-export const isTextPart = (part: Part): part is TextPart => part.kind === 'text'
+const isTextPart = (part: Part): part is TextPart => part.kind === 'text'
 
 // Shared between fresh delegations (DelegationToolFactory) and task-resume
 // message/send calls (steps/resume-active-task.ts): both append the

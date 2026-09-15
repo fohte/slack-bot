@@ -9,16 +9,16 @@ import { err, ok, type Result } from 'neverthrow'
 
 import { ConfigLoadError } from '#types/errors'
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 const LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'warn', 'error']
 
-export interface ServiceTokenPair {
+interface ServiceTokenPair {
   readonly clientId: string
   readonly clientSecret: string
 }
 
-export interface ConversationAgentConfig {
+interface ConversationAgentConfig {
   readonly model: string
   readonly personaPrompt: string | undefined
   readonly llmApiKey: string
@@ -29,7 +29,7 @@ export interface ConversationAgentConfig {
 // model can differ from the conversation agent's since image
 // analysis benefits from a vision-accurate model, but when unset it falls
 // back to the conversation agent's own model rather than being required.
-export interface ImageAnalysisConfig {
+interface ImageAnalysisConfig {
   readonly model: string
 }
 

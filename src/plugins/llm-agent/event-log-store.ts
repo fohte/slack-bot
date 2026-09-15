@@ -29,7 +29,7 @@ export interface EventLogRow {
   readonly taskName: string | undefined
 }
 
-export interface AcceptedSiblingQuery {
+interface AcceptedSiblingQuery {
   readonly slackTeamId: string
   readonly slackChannelId: string
   readonly messageTs: string
