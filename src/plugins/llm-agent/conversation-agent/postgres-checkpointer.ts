@@ -6,7 +6,7 @@ import { ConversationCheckpointSchemaSetupError } from '#types/errors'
 // LangGraph owns this schema end-to-end (tables are created by
 // PostgresSaver.setup(), not by a Drizzle migration); Drizzle-managed tables
 // stay out of it.
-export const CONVERSATION_CHECKPOINT_SCHEMA = 'langgraph'
+const CONVERSATION_CHECKPOINT_SCHEMA = 'langgraph'
 
 export const createConversationCheckpointer = (
   databaseUrl: string,

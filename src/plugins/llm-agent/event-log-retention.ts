@@ -6,7 +6,7 @@ import { EventLogPruneError } from '#types/errors'
 export const EVENT_LOG_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS = 60 * 60 * 1000
 
-export interface EventLogRetentionOptions {
+interface EventLogRetentionOptions {
   readonly eventLogStore: EventLogStore
   readonly ttlMs?: number | undefined
   readonly intervalMs?: number | undefined
@@ -17,7 +17,7 @@ export interface EventLogRetentionOptions {
   readonly clearIntervalImpl?: ((handle: NodeJS.Timeout) => void) | undefined
 }
 
-export interface EventLogRetentionHandle {
+interface EventLogRetentionHandle {
   stop(): void
   runOnce(): Promise<number>
 }

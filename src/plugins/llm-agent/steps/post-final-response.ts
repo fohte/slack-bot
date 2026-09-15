@@ -10,7 +10,7 @@ import type {
 } from '#plugins/llm-agent/dispatcher-deps'
 import { postThreadMessage } from '#plugins/llm-agent/slack-message-blocks'
 
-export interface PostFinalResponseResult {
+interface PostFinalResponseResult {
   // False when event_log markResponded lost the race to another delivery of
   // the same Slack event, in which case this is a no-op — callers that
   // count actual Slack posts must check this rather than assume the call
@@ -18,7 +18,7 @@ export interface PostFinalResponseResult {
   readonly posted: boolean
 }
 
-export interface SuppressFinalResponseResult {
+interface SuppressFinalResponseResult {
   // False when event_log markResponded lost the race to another delivery of
   // the same Slack event; true otherwise. Either way nothing is posted to
   // Slack — this mirrors PostFinalResponseResult's race signal without a

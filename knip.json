@@ -1,7 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "treatConfigHintsAsErrors": true,
-  "entry": ["src/plugins/*/index.ts", "src/plugins/llm-agent/*/index.ts"],
   "ignoreDependencies": ["@commitlint/cli"],
   "ignore": [
     "commitlint-plugin-no-external-refs.cjs",

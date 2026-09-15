@@ -29,7 +29,7 @@ const defaultResolver: McpServerResolver = {
   },
 }
 
-export interface CreateMcpToolsOptions {
+interface CreateMcpToolsOptions {
   // MCP_SERVER_URLS, already split. Adding an entry here is the entire
   // mechanism for adding an MCP server's tools to the conversation agent.
   readonly serverUrls: readonly string[]

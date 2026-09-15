@@ -29,7 +29,7 @@ export interface PersonaParaphraser {
   paraphrase(text: string): Promise<string>
 }
 
-export interface CreatePersonaParaphraserOptions {
+interface CreatePersonaParaphraserOptions {
   // A stateless model (no checkpointer) so this can be called from
   // response-finalizer's own async trigger points (push notification
   // endpoint, task-reconciler poll) without joining ConversationAgent's

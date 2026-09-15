@@ -54,7 +54,7 @@ export interface DelegationPushNotificationConfig {
   readonly token: string
 }
 
-export interface DelegationToolDependencies {
+interface DelegationToolDependencies {
   readonly a2aTaskTracker: A2aTaskTracker
   // Own service's push endpoint + shared token. Omitted means delegated
   // tasks rely solely on tasks/get polling to surface their completion.

@@ -9,7 +9,7 @@ import type { InMemoryScheduler } from '#scheduler/scheduler'
 export const CI_WATCH_INTERVAL_MS = 30_000
 export const CI_WATCH_MAX_DURATION_MS = 15 * 60 * 1000
 
-export interface CiWatchInput {
+interface CiWatchInput {
   readonly prNumber: number
   readonly prUrl: string
   readonly updater: MessageUpdater
@@ -19,7 +19,7 @@ export interface CiWatcher {
   startWatching(input: CiWatchInput): void
 }
 
-export interface CiWatcherOptions {
+interface CiWatcherOptions {
   readonly scheduler: InMemoryScheduler
   readonly client: BlogServiceClient
   readonly logger?: Logger | undefined

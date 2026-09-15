@@ -50,7 +50,7 @@ import type { SlackFile } from '#types/slack-payloads'
 const TRACER_NAME = 'slack-bot'
 const DISPATCH_SPAN_NAME = 'slack.mention.handle'
 
-export type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
+type TaskDispatcher = (accepted: LlmAgentAcceptedEvent) => Promise<void>
 
 export type TaskDispatcherOptions = DispatcherDeps & {
   // Registers the backgrounded mention-processing call so a graceful-

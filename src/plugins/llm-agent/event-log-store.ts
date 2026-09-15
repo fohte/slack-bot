@@ -20,7 +20,7 @@ export interface EventLogRecord {
   readonly messageTs?: string | undefined
 }
 
-export interface EventLogRow {
+interface EventLogRow {
   readonly slackEventId: string
   readonly outcome: string
   readonly slackTeamId: string | undefined

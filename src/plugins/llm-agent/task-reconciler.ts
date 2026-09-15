@@ -40,7 +40,7 @@ export const DEADLINE_EXCEEDED_TEXT =
 export const TASK_NOT_FOUND_TEXT =
   'The delegated agent no longer has a record of this task, so it is being treated as failed. Please try again.'
 
-export interface TaskReconcilerOptions {
+interface TaskReconcilerOptions {
   readonly a2aTaskTracker: A2aTaskTracker
   readonly remoteAgentRegistry: RemoteAgentRegistry
   // The same finalizer the push notification path uses, so a poll that
@@ -66,7 +66,7 @@ export interface TaskReconcilerOptions {
   readonly logger?: Logger | undefined
 }
 
-export interface TaskReconcilerResult {
+interface TaskReconcilerResult {
   // Rows the reconciler itself decided the outcome for this tick: a
   // deadline-forced failure, a TaskNotFound-forced failure, or a poll that
   // observed a terminal state. Excludes no-op observations (heartbeat,
@@ -75,7 +75,7 @@ export interface TaskReconcilerResult {
   readonly pruned: number
 }
 
-export interface TaskReconcilerHandle {
+interface TaskReconcilerHandle {
   stop(): void
   runOnce(): Promise<TaskReconcilerResult>
 }
