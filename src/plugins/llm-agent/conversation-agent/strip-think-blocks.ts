@@ -14,8 +14,7 @@ const UNCLOSED_THINK_BLOCK_PATTERN = /<think>[\s\S]*$/i
 export interface StripThinkBlocksResult {
   readonly text: string
   // True when a <think> block was actually found and removed, signaling
-  // that the reasoning_split request parameter wasn't honored end-to-end
-  // and this fallback was the only thing that kept it out of Slack.
+  // that this fallback was the only thing that kept it out of Slack.
   readonly stripped: boolean
 }
 
