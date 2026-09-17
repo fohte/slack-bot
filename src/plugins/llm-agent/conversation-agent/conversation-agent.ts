@@ -61,12 +61,6 @@ export const createOpenCodeGoChatModel = (
       // system->developer role rewrite for this reasoning-model-shaped name.
       fetch: createRestoreSystemRoleFetch({ logger: options.logger }),
     },
-    // Asks the upstream API to move reasoning out of `content` into a
-    // separate field (see strip-think-blocks.ts for why that matters).
-    // Whether OpenCode Go forwards this to the underlying provider is
-    // unconfirmed, so stripThinkBlocks in respond() below is the actual
-    // guarantee against a <think> leak.
-    modelKwargs: { reasoning_split: true },
   })
 
 export interface ConversationOutcome {
@@ -393,9 +387,6 @@ export const createConversationAgent = (
           turnStart === -1 ? result.messages : result.messages.slice(turnStart)
         const { text, stripped } = stripThinkBlocks(lastMessage?.text ?? '')
         if (stripped) {
-          // Signals that reasoning_split (see createOpenCodeGoChatModel
-          // above) wasn't honored end-to-end and this fallback was the only
-          // thing that kept a <think> block out of Slack.
           logger.warn(
             {
               event: 'llm_agent_think_block_leaked',
