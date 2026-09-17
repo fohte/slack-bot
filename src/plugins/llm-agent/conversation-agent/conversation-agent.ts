@@ -387,8 +387,6 @@ export const createConversationAgent = (
           turnStart === -1 ? result.messages : result.messages.slice(turnStart)
         const { text, stripped } = stripThinkBlocks(lastMessage?.text ?? '')
         if (stripped) {
-          // Signals a model emitted an inline <think> block that this
-          // fallback had to strip (see strip-think-blocks.ts).
           logger.warn(
             {
               event: 'llm_agent_think_block_leaked',
