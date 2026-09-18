@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.2",
-    "@fohte/eslint-config": "0.4.4",
+    "@fohte/eslint-config": "0.5.0",
     "@ninoseki/eslint-plugin-neverthrow": "0.3.1",
     "@opentelemetry/context-async-hooks": "2.11.0",
     "@opentelemetry/core": "2.11.0",

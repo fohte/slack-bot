@@ -12,6 +12,7 @@ dist
 .pinact.yaml
 .gitignore
 CLAUDE.md
+AGENTS.md
 README.md
 lefthook.yml
 commitlint.config.cjs
