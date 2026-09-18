@@ -228,8 +228,8 @@ importers:
         specifier: 21.2.2
         version: 21.2.2(@types/node@24.13.3)(conventional-commits-parser@7.1.0)(typescript@6.0.3)
       '@fohte/eslint-config':
-        specifier: 0.4.4
-        version: 0.4.4(d04ecafddcaaf41954e4f2736b59f93a)
+        specifier: 0.5.0
+        version: 0.5.0(d04ecafddcaaf41954e4f2736b59f93a)
       '@ninoseki/eslint-plugin-neverthrow':
         specifier: 0.3.1
         version: 0.3.1(@typescript-eslint/parser@8.63.0(eslint@10.10.0(jiti@2.6.1)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3))(eslint@10.10.0(jiti@2.6.1)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)
@@ -1157,8 +1157,8 @@ packages:
     resolution: {integrity: sha512-IkO+/KEUvwbVpiURZg+P7zF74z5Jxe0UgJxVni+RtoHQ6IZieXaO02kmadomap/q+l6bc/jdPGGqTjhuZnuz1Q==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@fohte/eslint-config@0.4.4':
-    resolution: {integrity: sha512-dvOHMJMwVm8it1i3uIEg199ukCy6lEHK4XonMqfUWzMQbR/tSvcd9nJ/7E4Q/r1onLcGJNGs2N5ep4vRciY7eg==}
+  '@fohte/eslint-config@0.5.0':
+    resolution: {integrity: sha512-tdjxUL2nfLe0UFqQWGxBkUF1jSYkLSBqkkRNRQYu2UtmYd0bFyy47TLFBwMkCx4Nxm2KLin4bKngHUa3BVC+Gg==}
     engines: {node: '>=20.19.0 || >=22.13.0'}
     peerDependencies:
       '@eslint-community/eslint-plugin-eslint-comments': ^4.0.0
@@ -5459,7 +5459,7 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@fohte/eslint-config@0.4.4(d04ecafddcaaf41954e4f2736b59f93a)':
+  '@fohte/eslint-config@0.5.0(d04ecafddcaaf41954e4f2736b59f93a)':
     dependencies:
       '@eslint-community/eslint-plugin-eslint-comments': 4.7.2(eslint@10.10.0(jiti@2.6.1)(supports-color@10.2.2))
       '@eslint/eslintrc': 3.3.6(supports-color@10.2.2)
