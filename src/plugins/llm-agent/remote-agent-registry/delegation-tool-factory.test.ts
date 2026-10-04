@@ -101,7 +101,14 @@ describe('createDelegationTool', () => {
     const card = cardFor({
       name: 'sample agent',
       description: 'Performs sample work.',
-      skills: [],
+      skills: [
+        {
+          id: 'example',
+          name: 'Example skill',
+          description: 'Performs example work.',
+          tags: [],
+        },
+      ],
     })
     const { handle } = recordingHandleFor(async () => submittedTask(), card)
     return createDelegationTool(handle, {
@@ -115,7 +122,7 @@ describe('createDelegationTool', () => {
 
   it('describes the tool from the Agent Card', () => {
     expect(createSampleTool().description).toBe(
-      'Delegate a task to the "sample agent" agent. Performs sample work.',
+      'Delegate a task to the "sample agent" agent. Performs sample work.\nSkills:\n- Example skill: Performs example work.',
     )
   })
 

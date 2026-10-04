@@ -6,7 +6,6 @@ import type {
   A2aTaskTracker,
   ThreadKey,
 } from '#plugins/llm-agent/a2a-task-tracker'
-import { A2A_TASK_ACTIVE_EXECUTION_STATES } from '#plugins/llm-agent/a2a-task-tracker'
 import { transitionGuard } from '#plugins/llm-agent/a2a-task-transition-guard'
 
 type NewA2aTask = Parameters<A2aTaskTracker['recordDelegated']>[0]
@@ -32,39 +31,27 @@ const newTask = (override: Partial<NewA2aTask> = {}): NewA2aTask => ({
 
 describe('transitionGuard', () => {
   it('requires the task still be actively executing when failing it', () => {
-    expect(
-      transitionGuard({ state: 'failed' }, A2A_TASK_ACTIVE_EXECUTION_STATES),
-    ).toEqual({
-      requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES,
+    expect(transitionGuard({ state: 'failed' })).toEqual({
+      requireStates: ['submitted', 'working'],
     })
   })
 
   it('does not restrict other transitions', () => {
-    expect(
-      transitionGuard({ state: 'completed' }, A2A_TASK_ACTIVE_EXECUTION_STATES),
-    ).toEqual({})
+    expect(transitionGuard({ state: 'completed' })).toEqual({})
   })
 
   it('lets a caller override the required current states', () => {
     expect(
-      transitionGuard(
-        {
-          state: 'failed',
-          requireCurrentStates: ['input-required'],
-        },
-        A2A_TASK_ACTIVE_EXECUTION_STATES,
-      ),
+      transitionGuard({
+        state: 'failed',
+        requireCurrentStates: ['input-required'],
+      }),
     ).toEqual({ requireStates: ['input-required'] })
   })
 
   it('requires the task still be actively executing when moving it to input-required', () => {
-    expect(
-      transitionGuard(
-        { state: 'input-required' },
-        A2A_TASK_ACTIVE_EXECUTION_STATES,
-      ),
-    ).toEqual({
-      requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES,
+    expect(transitionGuard({ state: 'input-required' })).toEqual({
+      requireStates: ['submitted', 'working'],
     })
   })
 })

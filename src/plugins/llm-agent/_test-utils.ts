@@ -3,16 +3,14 @@ import type { Client } from '@a2a-js/sdk/client'
 import { okAsync, ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
+import { FIND_UNSETTLED_LIMIT } from '#plugins/llm-agent/a2a-task-limits'
 import type {
   A2aTaskLifecycle,
   A2aTaskRow,
   A2aTaskTracker,
   ThreadKey,
 } from '#plugins/llm-agent/a2a-task-tracker'
-import {
-  A2A_TASK_ACTIVE_EXECUTION_STATES,
-  isA2aTaskTerminalState,
-} from '#plugins/llm-agent/a2a-task-tracker'
+import { isA2aTaskTerminalState } from '#plugins/llm-agent/a2a-task-tracker'
 import { transitionGuard } from '#plugins/llm-agent/a2a-task-transition-guard'
 import type { ConversationAgent } from '#plugins/llm-agent/conversation-agent/index'
 import type { SlackEnvelope } from '#plugins/llm-agent/dispatcher-deps'
@@ -460,7 +458,7 @@ export const createInMemoryA2aTaskTracker = (
         [...rows.values()]
           .filter((row) => !row.settled && row.updatedAt < olderThan)
           .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
-          .slice(0, 100),
+          .slice(0, FIND_UNSETTLED_LIMIT),
       )
     },
     findByTaskId(taskId) {
@@ -469,7 +467,7 @@ export const createInMemoryA2aTaskTracker = (
     transition(taskId, to) {
       const row = rows.get(taskId)
       if (row === undefined || row.settled) return okAsync({ updated: false })
-      const guard = transitionGuard(to, A2A_TASK_ACTIVE_EXECUTION_STATES)
+      const guard = transitionGuard(to)
       if (
         guard.requireStates !== undefined &&
         !guard.requireStates.includes(row.state)

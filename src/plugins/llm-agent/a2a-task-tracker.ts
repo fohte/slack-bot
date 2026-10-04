@@ -3,13 +3,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { err, ok, Result, ResultAsync } from 'neverthrow'
 
 import { a2aTask } from '#db/schema'
+import { FIND_UNSETTLED_LIMIT } from '#plugins/llm-agent/a2a-task-limits'
 import { transitionGuard } from '#plugins/llm-agent/a2a-task-transition-guard'
 import { A2aTaskTrackerError } from '#types/errors'
 
-// Caps a single findUnsettled query so a large backlog (e.g. during an
-// extended reconciler outage) cannot pull an unbounded result set into
-// memory; the reconciler picks up any remainder on its next tick.
-const FIND_UNSETTLED_LIMIT = 100
+export { A2A_TASK_ACTIVE_EXECUTION_STATES } from '#plugins/llm-agent/a2a-task-transition-guard'
 
 const A2A_TASK_STATES = [
   'submitted',
@@ -37,15 +35,6 @@ const toA2aTaskState = (
     new A2aTaskTrackerError(`unexpected a2a_task.state value: ${value}`),
   )
 }
-
-// States in which a task may still be actively executing. A transition to
-// `failed` only applies to rows still in one of these — this is what stops a
-// deadline sweep from failing a task that is legitimately waiting on the
-// user (input-required).
-export const A2A_TASK_ACTIVE_EXECUTION_STATES: readonly A2aTaskState[] = [
-  'submitted',
-  'working',
-]
 
 // `settled` is derived from `state` rather than accepted as separate input,
 // so a caller can't produce an inconsistent pair (e.g. completed + unsettled)
@@ -272,7 +261,7 @@ export const createA2aTaskTracker = (
     })
   },
   transition(taskId, to) {
-    const guard = transitionGuard(to, A2A_TASK_ACTIVE_EXECUTION_STATES)
+    const guard = transitionGuard(to)
     const conditions = [eq(a2aTask.taskId, taskId), eq(a2aTask.settled, false)]
     if (guard.requireStates !== undefined) {
       conditions.push(inArray(a2aTask.state, guard.requireStates))
