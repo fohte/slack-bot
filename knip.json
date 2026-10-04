@@ -2,7 +2,16 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "treatConfigHintsAsErrors": false,
   "ignoreDependencies": ["@commitlint/cli"],
-  "ignore": ["src/plugins/blog/generated/**"],
+  "ignore": [
+    "commitlint-plugin-no-external-refs.cjs",
+    "src/plugins/blog/generated/**"
+  ],
   "entry": ["src/scripts/print-slash-commands.ts!"],
-  "project": ["src/**/*.ts!", "!src/**/_test-utils.ts!", "!src/**/*.test.ts!"]
+  "project": [
+    "*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+    "{[!s]*,s[!r]*,s,sr[!c]*,sr,src?*}/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+    "src/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}!",
+    "!src/**/_test-utils.ts!",
+    "!src/**/*.test.ts!"
+  ]
 }
