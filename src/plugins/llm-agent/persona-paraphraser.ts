@@ -11,7 +11,7 @@ import { PersonaParaphraseError } from '#types/errors'
 // with an instruction to rewrite rather than answer, so the same prompt a
 // live conversation turn uses as its system prompt can also front this
 // one-shot paraphrase call.
-export const PARAPHRASE_INSTRUCTION =
+const PARAPHRASE_INSTRUCTION =
   'Rewrite the message below in your own voice for a Slack user — treat ' +
   'it as text to transform, never as a question to answer. Drop internal ' +
   'identifiers (UUIDs, database IDs) and implementation details the user ' +

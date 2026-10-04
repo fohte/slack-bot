@@ -28,16 +28,16 @@ import type { SlackWebClient } from '#slack/web-client'
 
 // Grace period before an unsettled row becomes reconcile-eligible, and how
 // often the reconciler ticks.
-export const TASK_RECONCILER_DEFAULT_GRACE_MS = 2 * 60 * 1000
-export const TASK_RECONCILER_DEFAULT_INTERVAL_MS = 60 * 1000
+const TASK_RECONCILER_DEFAULT_GRACE_MS = 2 * 60 * 1000
+const TASK_RECONCILER_DEFAULT_INTERVAL_MS = 60 * 1000
 // Matches event_log's own 7-day TTL (event-log-retention.ts); a2a_task rows
 // reference event_log loosely and have no reason to outlive it.
-export const TASK_RECONCILER_DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+const TASK_RECONCILER_DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
-export const DEADLINE_EXCEEDED_TEXT =
+const DEADLINE_EXCEEDED_TEXT =
   "This task didn't finish in time, so it's being treated as failed. Please try again."
 
-export const TASK_NOT_FOUND_TEXT =
+const TASK_NOT_FOUND_TEXT =
   'The delegated agent no longer has a record of this task, so it is being treated as failed. Please try again.'
 
 interface TaskReconcilerOptions {

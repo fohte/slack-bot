@@ -5,7 +5,7 @@ import { err, ok } from 'neverthrow'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import type { LogFields, Logger } from '#logger/logger'
+import type { Logger } from '#logger/logger'
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { createConversationAgent } from '#plugins/llm-agent/conversation-agent/conversation-agent'
 import {
@@ -13,6 +13,8 @@ import {
   ConversationAgentInvokeError,
   ConversationThreadIdParseError,
 } from '#types/errors'
+
+type LogFields = Parameters<Logger['warn']>[0]
 
 // Asia/Tokyo is UTC+9 year-round, so this always renders as
 // 2026-08-05T12:34:56+09:00 (see CURRENT_DATETIME_META_TEXT below).

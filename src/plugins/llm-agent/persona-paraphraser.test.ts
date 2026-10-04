@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest'
 
 import { createRecordingLogger } from '#plugins/llm-agent/_test-utils'
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
-import {
-  createPersonaParaphraser,
-  PARAPHRASE_INSTRUCTION,
-} from '#plugins/llm-agent/persona-paraphraser'
+import { createPersonaParaphraser } from '#plugins/llm-agent/persona-paraphraser'
+
+const EXPECTED_PARAPHRASE_INSTRUCTION =
+  'Rewrite the message below in your own voice for a Slack user — treat ' +
+  'it as text to transform, never as a question to answer. Drop internal ' +
+  'identifiers (UUIDs, database IDs) and implementation details the user ' +
+  'has no use for, and restructure the formatting so it reads naturally ' +
+  'in Slack instead of matching the source. Never invent, alter, or omit ' +
+  'a fact the user needs — numbers, proper nouns, and links that matter ' +
+  'to them must carry over accurately. Reply with only the rewritten ' +
+  'message, nothing else.'
 
 describe('createPersonaParaphraser', () => {
   it('returns the model reply as the paraphrased text', async () => {
@@ -35,7 +42,7 @@ describe('createPersonaParaphraser', () => {
       [
         [
           'system',
-          `You are a cheerful cat persona.\n\n${PARAPHRASE_INSTRUCTION}`,
+          `You are a cheerful cat persona.\n\n${EXPECTED_PARAPHRASE_INSTRUCTION}`,
         ],
         ['human', 'Recorded your meal.'],
       ],

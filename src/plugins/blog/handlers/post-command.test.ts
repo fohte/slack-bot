@@ -9,10 +9,7 @@ import {
 } from '#plugins/blog/_test-utils'
 import { ServiceUnavailable } from '#plugins/blog/errors'
 import type { Note } from '#plugins/blog/generated/blog-publisher-contract'
-import {
-  buildSelectBlocks,
-  handlePostCommand,
-} from '#plugins/blog/handlers/post-command'
+import { handlePostCommand } from '#plugins/blog/handlers/post-command'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import { SlackApiError } from '#types/errors'
 
@@ -25,43 +22,154 @@ const note = (overrides: Partial<Note> = {}): Note => ({
   ...overrides,
 })
 
+const runPostCommand = async (notes: readonly Note[]) => {
+  const client = {
+    listNotes: vi.fn(async () => notes),
+  } as unknown as BlogServiceClient
+  const slack = makeSlack()
+  const result = createInteractionContext({
+    source: {
+      kind: 'slash_command',
+      command: '/blog-post',
+      body: { command: '/blog-post' },
+    },
+    slackClient: slack.client,
+    responseUrl: 'https://hooks.example/x',
+  })
+  await handlePostCommand({
+    ctx: result.ctx,
+    body: { command: '/blog-post' },
+    client,
+  })
+  return lastBody(slack.postToResponseUrl)
+}
+
 describe('PostCommandHandler', () => {
-  it('builds Static Select with one option per note plus Submit button', () => {
-    const blocks = buildSelectBlocks([
-      note({ docId: 'a', title: 'A' }),
-      note({ docId: 'b', title: 'B', kind: 'update' }),
-      note({ docId: 'c', title: 'C' }),
-    ])
-    const actions = blocks.find(
-      (b) => (b as { type?: string }).type === 'actions',
-    ) as { elements: unknown[] }
-    expect(actions).toBeDefined()
-    const select = actions.elements[0] as {
-      type: string
-      options: unknown[]
-    }
-    expect(select.type).toBe('multi_static_select')
-    expect(select.options).toHaveLength(3)
-    const submit = actions.elements[1] as { action_id: string }
-    expect(submit.action_id).toBe('blog:select-submit')
+  it('builds Static Select with one option per note plus Submit button', async () => {
+    expect(
+      await runPostCommand([
+        note({ docId: 'a', title: 'A' }),
+        note({ docId: 'b', title: 'B', kind: 'update' }),
+        note({ docId: 'c', title: 'C' }),
+      ]),
+    ).toEqual({
+      response_type: 'ephemeral',
+      text: '公開候補 3 件から選択してください。',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: ':memo: 公開するノートを選択してください (3 件)',
+          },
+        },
+        {
+          type: 'actions',
+          block_id: 'blog:select',
+          elements: [
+            {
+              type: 'multi_static_select',
+              action_id: 'blog:select-options',
+              placeholder: { type: 'plain_text', text: 'ノートを選択' },
+              options: [
+                {
+                  text: { type: 'plain_text', text: '[NEW] A' },
+                  description: undefined,
+                  value: 'a',
+                },
+                {
+                  text: { type: 'plain_text', text: '[UPD] B' },
+                  description: undefined,
+                  value: 'b',
+                },
+                {
+                  text: { type: 'plain_text', text: '[NEW] C' },
+                  description: undefined,
+                  value: 'c',
+                },
+              ],
+            },
+            {
+              type: 'button',
+              style: 'primary',
+              text: { type: 'plain_text', text: 'Submit' },
+              action_id: 'blog:select-submit',
+            },
+          ],
+        },
+      ],
+    })
   })
 
-  it('truncates to 100 options and adds a warning', () => {
+  it('truncates to 100 options and adds a warning', async () => {
     const notes = Array.from({ length: 150 }, (_, i) =>
       note({ docId: `n${String(i)}`, title: `T${String(i)}` }),
     )
-    const blocks = buildSelectBlocks(notes)
-    const actions = blocks.find(
-      (b) => (b as { type?: string }).type === 'actions',
-    ) as { elements: unknown[] }
-    const select = actions.elements[0] as { options: unknown[] }
-    expect(select.options).toHaveLength(100)
-    expect(JSON.stringify(blocks)).toContain('150')
+    const expectedOptions = notes.slice(0, 100).map((n) => ({
+      text: {
+        type: 'plain_text',
+        text: `${n.kind === 'new' ? '[NEW]' : '[UPD]'} ${n.title}`,
+      },
+      description: undefined,
+      value: n.docId,
+    }))
+
+    expect(await runPostCommand(notes)).toEqual({
+      response_type: 'ephemeral',
+      text: '公開候補 150 件から選択してください。',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: ':memo: 公開するノートを選択してください (150 件)',
+          },
+        },
+        {
+          type: 'actions',
+          block_id: 'blog:select',
+          elements: [
+            {
+              type: 'multi_static_select',
+              action_id: 'blog:select-options',
+              placeholder: { type: 'plain_text', text: 'ノートを選択' },
+              options: expectedOptions,
+            },
+            {
+              type: 'button',
+              style: 'primary',
+              text: { type: 'plain_text', text: 'Submit' },
+              action_id: 'blog:select-submit',
+            },
+          ],
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: ':warning: 候補が 150 件あり、先頭 100 件のみ表示しています。',
+            },
+          ],
+        },
+      ],
+    })
   })
 
-  it('shows empty-state when no notes', () => {
-    const blocks = buildSelectBlocks([])
-    expect(JSON.stringify(blocks)).toContain('見つかりませんでした')
+  it('shows empty-state when no notes', async () => {
+    expect(await runPostCommand([])).toEqual({
+      response_type: 'ephemeral',
+      text: '公開候補のノートが見つかりませんでした。',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: ':information_source: 公開候補のノートが見つかりませんでした。',
+          },
+        },
+      ],
+    })
   })
 
   it('calls listNotes and posts ephemeral followUp', async () => {

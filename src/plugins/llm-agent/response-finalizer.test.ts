@@ -10,14 +10,16 @@ import {
   createStubSlackClient,
   recordingHandleForGetTask,
 } from '#plugins/llm-agent/_test-utils'
-import type { NewA2aTask } from '#plugins/llm-agent/a2a-task-tracker'
+import type { A2aTaskTracker } from '#plugins/llm-agent/a2a-task-tracker'
 import type { PersonaParaphraser } from '#plugins/llm-agent/persona-paraphraser'
-import {
-  createResponseFinalizer,
-  USAGE_LIMIT_TEXT,
-} from '#plugins/llm-agent/response-finalizer'
+import { createResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 import { createTaskProgressStatus } from '#plugins/llm-agent/task-progress-status'
 import type { SlackWebClient } from '#slack/web-client'
+
+type NewA2aTask = Parameters<A2aTaskTracker['recordDelegated']>[0]
+
+const EXPECTED_USAGE_LIMIT_TEXT =
+  "The delegated agent hit its LLM usage limit and couldn't finish this request. Please try again in a while."
 
 interface StubPersonaParaphraser extends PersonaParaphraser {
   readonly calls: readonly string[]
@@ -142,8 +144,8 @@ describe('createResponseFinalizer', () => {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
-          text: USAGE_LIMIT_TEXT,
-          blocks: [{ type: 'markdown', text: USAGE_LIMIT_TEXT }],
+          text: EXPECTED_USAGE_LIMIT_TEXT,
+          blocks: [{ type: 'markdown', text: EXPECTED_USAGE_LIMIT_TEXT }],
           loadingMessages: undefined,
         },
       ])
@@ -218,8 +220,8 @@ describe('createResponseFinalizer', () => {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
-          text: USAGE_LIMIT_TEXT,
-          blocks: [{ type: 'markdown', text: USAGE_LIMIT_TEXT }],
+          text: EXPECTED_USAGE_LIMIT_TEXT,
+          blocks: [{ type: 'markdown', text: EXPECTED_USAGE_LIMIT_TEXT }],
           loadingMessages: undefined,
         },
       ])

@@ -28,7 +28,7 @@ export interface HandleApplyButtonInput {
   readonly onSuccess?: (input: ApplySuccessInput) => void | Promise<void>
 }
 
-export interface ApplySuccessInput {
+interface ApplySuccessInput {
   readonly ctx: InteractionContext
   readonly prNumber: number
   readonly prUrl: string

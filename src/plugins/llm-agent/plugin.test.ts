@@ -10,17 +10,13 @@ import { createFakeA2aTaskTracker } from '#plugins/llm-agent/_test-utils'
 import type { A2aTaskRow, ThreadKey } from '#plugins/llm-agent/a2a-task-tracker'
 import { deriveConversationThreadId } from '#plugins/llm-agent/conversation-agent/index'
 import type { ConversationThreadStore } from '#plugins/llm-agent/conversation-thread-store'
-import type {
-  EventLogRecord,
-  EventLogStore,
-} from '#plugins/llm-agent/event-log-store'
+import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
 import type {
   LlmAgentAcceptedEvent,
   LlmAgentPluginOptions,
 } from '#plugins/llm-agent/plugin'
 import {
   createLlmAgentPlugin,
-  LLM_AGENT_EVENT_SUBSCRIPTIONS,
   LLM_AGENT_PLUGIN_NAME,
 } from '#plugins/llm-agent/plugin'
 import { createInteractionRouter } from '#router/router'
@@ -29,15 +25,16 @@ import {
   A2aTaskTrackerError,
   ConversationThreadStoreError,
 } from '#types/errors'
-import type {
-  SlackAppMentionEvent,
-  SlackEvent,
-  SlackEventCallback,
-  SlackMessageEvent,
-} from '#types/slack-payloads'
+import type { SlackEvent, SlackEventCallback } from '#types/slack-payloads'
 
 type OnEventFn = NonNullable<Plugin['onEvent']>
 type OnEventArgs = [EventContext, SlackEvent]
+type EventLogRecord = Parameters<EventLogStore['recordReceived']>[0]
+type SlackMessageEvent = Extract<SlackEvent, { readonly type: 'message' }>
+type SlackAppMentionEvent = Extract<
+  SlackEvent,
+  { readonly type: 'app_mention' }
+>
 
 const stubSlackClient = (): SlackWebClient =>
   ({
@@ -224,7 +221,7 @@ describe('createLlmAgentPlugin', () => {
     expect(normalizePlugin(plugin)).toEqual({
       name: LLM_AGENT_PLUGIN_NAME,
       commands: [],
-      eventSubscriptions: LLM_AGENT_EVENT_SUBSCRIPTIONS,
+      eventSubscriptions: ['message', 'app_mention'],
       onEvent: '<fn>',
     })
   })

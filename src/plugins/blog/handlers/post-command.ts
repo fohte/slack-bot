@@ -37,7 +37,7 @@ const buildHeaderText = (notes: readonly Note[]): string => {
   return `公開候補 ${String(notes.length)} 件から選択してください。`
 }
 
-export const buildSelectBlocks = (notes: readonly Note[]): unknown[] => {
+const buildSelectBlocks = (notes: readonly Note[]): unknown[] => {
   if (notes.length === 0) {
     return [
       {

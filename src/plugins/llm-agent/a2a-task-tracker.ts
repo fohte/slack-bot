@@ -3,12 +3,13 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { err, ok, Result, ResultAsync } from 'neverthrow'
 
 import { a2aTask } from '#db/schema'
+import { transitionGuard } from '#plugins/llm-agent/a2a-task-transition-guard'
 import { A2aTaskTrackerError } from '#types/errors'
 
 // Caps a single findUnsettled query so a large backlog (e.g. during an
 // extended reconciler outage) cannot pull an unbounded result set into
 // memory; the reconciler picks up any remainder on its next tick.
-export const FIND_UNSETTLED_LIMIT = 100
+const FIND_UNSETTLED_LIMIT = 100
 
 const A2A_TASK_STATES = [
   'submitted',
@@ -76,7 +77,7 @@ export interface ThreadKey {
   readonly threadRootTs: string
 }
 
-export interface NewA2aTask extends ThreadKey {
+interface NewA2aTask extends ThreadKey {
   readonly taskId: string
   readonly contextId: string
   readonly agentName: string
@@ -109,27 +110,6 @@ export interface A2aTaskLifecycle {
   // input-required is not an active-execution state.
   readonly requireCurrentStates?: readonly A2aTaskState[] | undefined
 }
-
-interface TransitionGuard {
-  readonly requireStates?: readonly A2aTaskState[]
-}
-
-// Which extra WHERE condition a transition needs, kept as a pure function
-// separate from the SQL/in-memory execution so it is directly testable and
-// shared between the production store and its test double.
-//
-// Transitioning into 'input-required' gets the same active-execution guard
-// as 'failed': without it, two concurrent observations of the same
-// input-required task (e.g. a push notification racing a reconciler poll)
-// would both succeed, since input-required never sets `settled` and so
-// can't rely on that flag to elect a single winner the way a terminal
-// transition does.
-export const transitionGuard = (to: A2aTaskLifecycle): TransitionGuard =>
-  to.requireCurrentStates !== undefined
-    ? { requireStates: to.requireCurrentStates }
-    : to.state === 'failed' || to.state === 'input-required'
-      ? { requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES }
-      : {}
 
 export interface A2aTaskTracker {
   recordDelegated(rec: NewA2aTask): ResultAsync<void, A2aTaskTrackerError>
@@ -292,7 +272,7 @@ export const createA2aTaskTracker = (
     })
   },
   transition(taskId, to) {
-    const guard = transitionGuard(to)
+    const guard = transitionGuard(to, A2A_TASK_ACTIVE_EXECUTION_STATES)
     const conditions = [eq(a2aTask.taskId, taskId), eq(a2aTask.settled, false)]
     if (guard.requireStates !== undefined) {
       conditions.push(inArray(a2aTask.state, guard.requireStates))

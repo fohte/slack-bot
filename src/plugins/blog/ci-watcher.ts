@@ -6,8 +6,8 @@ import { escapeMrkdwn } from '#plugins/blog/plan-presenter'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type { InMemoryScheduler } from '#scheduler/scheduler'
 
-export const CI_WATCH_INTERVAL_MS = 30_000
-export const CI_WATCH_MAX_DURATION_MS = 15 * 60 * 1000
+const CI_WATCH_INTERVAL_MS = 30_000
+const CI_WATCH_MAX_DURATION_MS = 15 * 60 * 1000
 
 interface CiWatchInput {
   readonly prNumber: number

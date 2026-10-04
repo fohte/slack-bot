@@ -11,24 +11,24 @@ import {
   createStubSlackClient,
   recordingHandleForGetTask,
 } from '#plugins/llm-agent/_test-utils'
-import type { NewA2aTask } from '#plugins/llm-agent/a2a-task-tracker'
+import type { A2aTaskTracker } from '#plugins/llm-agent/a2a-task-tracker'
 import { createResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
 import { createTaskProgressStatus } from '#plugins/llm-agent/task-progress-status'
-import {
-  DEADLINE_EXCEEDED_TEXT,
-  startTaskReconciler,
-  TASK_NOT_FOUND_TEXT,
-  TASK_RECONCILER_DEFAULT_GRACE_MS,
-  TASK_RECONCILER_DEFAULT_INTERVAL_MS,
-  TASK_RECONCILER_DEFAULT_RETENTION_MS,
-} from '#plugins/llm-agent/task-reconciler'
+import { startTaskReconciler } from '#plugins/llm-agent/task-reconciler'
 import type { SlackWebClient } from '#slack/web-client'
+
+type NewA2aTask = Parameters<A2aTaskTracker['recordDelegated']>[0]
 
 const NOW = new Date('2026-01-10T00:00:00Z')
 // Well before NOW minus the default grace period, so findUnsettled's
 // "updated before the cutoff" condition picks up rows created at this
 // timestamp once the clock advances to NOW for the reconciler tick.
 const CREATED_AT = new Date('2026-01-09T22:00:00Z')
+const EXPECTED_DEADLINE_EXCEEDED_TEXT =
+  "This task didn't finish in time, so it's being treated as failed. Please try again."
+const EXPECTED_TASK_NOT_FOUND_TEXT =
+  'The delegated agent no longer has a record of this task, so it is being ' +
+  'treated as failed. Please try again.'
 
 const baseTask = (override: Partial<NewA2aTask> = {}): NewA2aTask => ({
   taskId: 'task-1',
@@ -42,6 +42,44 @@ const baseTask = (override: Partial<NewA2aTask> = {}): NewA2aTask => ({
   deadlineAt: new Date('2026-01-10T01:00:00Z'),
   ...override,
 })
+
+const createReconcilerWithDefaultOptions = () => {
+  const reconcileCutoffs: Date[] = []
+  const retentionCutoffs: Date[] = []
+  const intervals: number[] = []
+  const tracker = {
+    ...createFakeA2aTaskTracker(),
+    findUnsettled(olderThan: Date) {
+      reconcileCutoffs.push(olderThan)
+      return okAsync([])
+    },
+    deleteSettledOlderThan(cutoff: Date) {
+      retentionCutoffs.push(cutoff)
+      return okAsync(0)
+    },
+  }
+  const reconciler = startTaskReconciler({
+    a2aTaskTracker: tracker,
+    remoteAgentRegistry: createFakeRemoteAgentRegistry([]),
+    responseFinalizer: {
+      async finalize() {},
+      async finalizeRow() {},
+      async finalizeTask() {
+        return 'duplicate'
+      },
+    },
+    eventLogStore: createScriptedEventLogStore(),
+    slackClient: createStubSlackClient(),
+    now: () => NOW,
+    setIntervalImpl: (_callback, intervalMs) => {
+      intervals.push(intervalMs)
+      return {} as NodeJS.Timeout
+    },
+    clearIntervalImpl: () => {},
+  })
+
+  return { reconcileCutoffs, retentionCutoffs, intervals, reconciler }
+}
 
 describe('startTaskReconciler', () => {
   it('recovers a missed push by settling through the finalizer when polling observes a decided task', async () => {
@@ -259,8 +297,8 @@ describe('startTaskReconciler', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: DEADLINE_EXCEEDED_TEXT,
-        blocks: [{ type: 'markdown', text: DEADLINE_EXCEEDED_TEXT }],
+        text: EXPECTED_DEADLINE_EXCEEDED_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_DEADLINE_EXCEEDED_TEXT }],
         loadingMessages: undefined,
       },
     ])
@@ -417,8 +455,8 @@ describe('startTaskReconciler', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: TASK_NOT_FOUND_TEXT,
-        blocks: [{ type: 'markdown', text: TASK_NOT_FOUND_TEXT }],
+        text: EXPECTED_TASK_NOT_FOUND_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_TASK_NOT_FOUND_TEXT }],
         loadingMessages: undefined,
       },
     ])
@@ -472,8 +510,8 @@ describe('startTaskReconciler', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: TASK_NOT_FOUND_TEXT,
-        blocks: [{ type: 'markdown', text: TASK_NOT_FOUND_TEXT }],
+        text: EXPECTED_TASK_NOT_FOUND_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_TASK_NOT_FOUND_TEXT }],
         loadingMessages: undefined,
       },
     ])
@@ -531,8 +569,8 @@ describe('startTaskReconciler', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: TASK_NOT_FOUND_TEXT,
-        blocks: [{ type: 'markdown', text: TASK_NOT_FOUND_TEXT }],
+        text: EXPECTED_TASK_NOT_FOUND_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_TASK_NOT_FOUND_TEXT }],
         loadingMessages: undefined,
       },
     ])
@@ -607,10 +645,31 @@ describe('startTaskReconciler', () => {
     expect(clearIntervalImpl.mock.calls).toEqual([[fakeTimer]])
   })
 
-  it('exposes default grace, interval, and retention constants used when options are omitted', () => {
-    expect(TASK_RECONCILER_DEFAULT_GRACE_MS).toBe(2 * 60 * 1000)
-    expect(TASK_RECONCILER_DEFAULT_INTERVAL_MS).toBe(60 * 1000)
-    expect(TASK_RECONCILER_DEFAULT_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000)
+  it('uses the default reconciler interval', () => {
+    const { intervals, reconciler } = createReconcilerWithDefaultOptions()
+    reconciler.stop()
+
+    expect(intervals).toEqual([60 * 1000])
+  })
+
+  it('uses the default grace period for reconciliation', async () => {
+    const { reconcileCutoffs, reconciler } =
+      createReconcilerWithDefaultOptions()
+    await reconciler.runOnce()
+    reconciler.stop()
+
+    expect(reconcileCutoffs).toEqual([new Date(NOW.getTime() - 2 * 60 * 1000)])
+  })
+
+  it('uses the default retention period when pruning', async () => {
+    const { retentionCutoffs, reconciler } =
+      createReconcilerWithDefaultOptions()
+    await reconciler.runOnce()
+    reconciler.stop()
+
+    expect(retentionCutoffs).toEqual([
+      new Date(NOW.getTime() - 7 * 24 * 60 * 60 * 1000),
+    ])
   })
 
   describe('assistant status', () => {
@@ -652,8 +711,8 @@ describe('startTaskReconciler', () => {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
-          text: DEADLINE_EXCEEDED_TEXT,
-          blocks: [{ type: 'markdown', text: DEADLINE_EXCEEDED_TEXT }],
+          text: EXPECTED_DEADLINE_EXCEEDED_TEXT,
+          blocks: [{ type: 'markdown', text: EXPECTED_DEADLINE_EXCEEDED_TEXT }],
           loadingMessages: undefined,
         },
         {
@@ -703,8 +762,8 @@ describe('startTaskReconciler', () => {
           kind: 'post',
           channel: 'C1',
           thread: '111.222',
-          text: TASK_NOT_FOUND_TEXT,
-          blocks: [{ type: 'markdown', text: TASK_NOT_FOUND_TEXT }],
+          text: EXPECTED_TASK_NOT_FOUND_TEXT,
+          blocks: [{ type: 'markdown', text: EXPECTED_TASK_NOT_FOUND_TEXT }],
           loadingMessages: undefined,
         },
         {

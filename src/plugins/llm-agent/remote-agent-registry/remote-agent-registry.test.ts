@@ -2,14 +2,14 @@ import type { Client } from '@a2a-js/sdk/client'
 import { ClientFactory } from '@a2a-js/sdk/client'
 import { describe, expect, it, vi } from 'vitest'
 
-import type {
-  RemoteAgentHandle,
-  RemoteAgentResolver,
-} from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
 import {
-  AGENT_CARD_SCHEMA,
   createRemoteAgentRegistry,
+  type RemoteAgentHandle,
 } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
+
+type RemoteAgentResolver = NonNullable<
+  Parameters<typeof createRemoteAgentRegistry>[0]['resolver']
+>
 
 // remote-agent-registry.test.ts never calls a handle's client, so a bare
 // stand-in satisfies the Client type without wiring an A2A transport.
@@ -41,6 +41,24 @@ const resolverFor = (
     return result
   },
 })
+
+const listAgentsForCard = async (rawCard: unknown) => {
+  const client = {
+    getAgentCard: async () => rawCard,
+  } as unknown as Client
+  const createFromUrl = vi
+    .spyOn(ClientFactory.prototype, 'createFromUrl')
+    .mockResolvedValue(client)
+
+  try {
+    const registry = createRemoteAgentRegistry({
+      agentUrls: ['https://remote.example.com'],
+    })
+    return { agents: await registry.listAgents(), client }
+  } finally {
+    createFromUrl.mockRestore()
+  }
+}
 
 describe('createRemoteAgentRegistry', () => {
   it('resolves one handle per configured URL', async () => {
@@ -183,7 +201,7 @@ describe('createRemoteAgentRegistry', () => {
     expect(resolveCount).toBe(2)
   })
 
-  it('excludes an agent whose Agent Card fails AGENT_CARD_SCHEMA validation', async () => {
+  it('excludes an agent whose Agent Card fails validation', async () => {
     const fakeCardClient = {
       getAgentCard: async () => ({ description: 'missing the name field' }),
     } as unknown as Client
@@ -214,27 +232,40 @@ describe('createRemoteAgentRegistry', () => {
   })
 })
 
-describe('AGENT_CARD_SCHEMA', () => {
+describe('Agent Card validation', () => {
   const validCard = {
     name: 'meshi',
     description: 'Tracks meals.',
     skills: [{ name: 'Log a meal', description: 'Records a meal.' }],
   }
 
-  it('accepts a payload with the fields this module reads', () => {
-    expect(AGENT_CARD_SCHEMA.parse(validCard)).toEqual(validCard)
+  it('accepts a payload with the fields this module reads', async () => {
+    const result = await listAgentsForCard(validCard)
+
+    expect(result).toEqual({
+      agents: [
+        {
+          name: validCard.name,
+          card: validCard,
+          client: result.client,
+        },
+      ],
+      client: result.client,
+    })
   })
 
-  it('rejects a payload missing a required field instead of silently defaulting', () => {
+  it('excludes a payload missing a required field instead of silently defaulting', async () => {
     const withoutName = {
       description: validCard.description,
       skills: validCard.skills,
     }
 
-    expect(() => AGENT_CARD_SCHEMA.parse(withoutName)).toThrow()
+    const result = await listAgentsForCard(withoutName)
+
+    expect(result).toEqual({ agents: [], client: result.client })
   })
 
-  it('keeps unread skill fields (e.g. id, tags) instead of stripping them', () => {
+  it('keeps unread skill fields (e.g. id, tags) instead of stripping them', async () => {
     const cardWithExtraSkillFields = {
       ...validCard,
       skills: [
@@ -247,8 +278,17 @@ describe('AGENT_CARD_SCHEMA', () => {
       ],
     }
 
-    expect(AGENT_CARD_SCHEMA.parse(cardWithExtraSkillFields)).toEqual(
-      cardWithExtraSkillFields,
-    )
+    const result = await listAgentsForCard(cardWithExtraSkillFields)
+
+    expect(result).toEqual({
+      agents: [
+        {
+          name: cardWithExtraSkillFields.name,
+          card: cardWithExtraSkillFields,
+          client: result.client,
+        },
+      ],
+      client: result.client,
+    })
   })
 })

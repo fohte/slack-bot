@@ -1,11 +1,7 @@
 import { errAsync, okAsync, type ResultAsync } from 'neverthrow'
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS,
-  EVENT_LOG_DEFAULT_TTL_MS,
-  startEventLogRetention,
-} from '#plugins/llm-agent/event-log-retention'
+import { startEventLogRetention } from '#plugins/llm-agent/event-log-retention'
 import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
 import { EventLogStoreError } from '#types/errors'
 
@@ -23,6 +19,24 @@ const createStore = (
   pruneOlderThan: vi.fn(pruneImpl),
   hasAcceptedSibling: vi.fn(() => okAsync(false)),
 })
+
+const createDefaultRetentionHarness = () => {
+  const prune = vi.fn<
+    (cutoff: Date) => ResultAsync<number, EventLogStoreError>
+  >(() => okAsync(0))
+  const intervals: number[] = []
+  const handle = startEventLogRetention({
+    eventLogStore: createStore(prune),
+    now: () => 10_000,
+    setIntervalImpl: (_callback, intervalMs) => {
+      intervals.push(intervalMs)
+      return {} as NodeJS.Timeout
+    },
+    clearIntervalImpl: () => {},
+  })
+
+  return { prune, intervals, handle }
+}
 
 describe('startEventLogRetention', () => {
   it('runOnce calls pruneOlderThan with now - ttlMs and returns the removed count', async () => {
@@ -80,8 +94,20 @@ describe('startEventLogRetention', () => {
     expect(clearIntervalImpl.mock.calls).toEqual([[fakeTimer]])
   })
 
-  it('exposes default ttl and interval constants used when options are omitted', () => {
-    expect(EVENT_LOG_DEFAULT_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000)
-    expect(EVENT_LOG_DEFAULT_PRUNE_INTERVAL_MS).toBe(60 * 60 * 1000)
+  it('uses a one-hour default prune interval', () => {
+    const { intervals, handle } = createDefaultRetentionHarness()
+    handle.stop()
+
+    expect(intervals).toEqual([60 * 60 * 1000])
+  })
+
+  it('uses a seven-day default ttl when pruning', async () => {
+    const { prune, handle } = createDefaultRetentionHarness()
+    await handle.runOnce()
+    handle.stop()
+
+    expect(prune.mock.calls).toEqual([
+      [new Date(10_000 - 7 * 24 * 60 * 60 * 1000)],
+    ])
   })
 })

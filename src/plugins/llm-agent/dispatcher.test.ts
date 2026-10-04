@@ -25,17 +25,10 @@ import {
 import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import type { TaskDispatcherOptions } from '#plugins/llm-agent/dispatcher'
-import {
-  createTaskDispatcher,
-  envelopeFromAccepted,
-  resolveInlineImageFiles,
-} from '#plugins/llm-agent/dispatcher'
+import { createTaskDispatcher } from '#plugins/llm-agent/dispatcher'
+import { envelopeFromAccepted } from '#plugins/llm-agent/dispatcher-envelope'
+import { resolveInlineImageFiles } from '#plugins/llm-agent/dispatcher-inline-images'
 import type { LlmAgentAcceptedEvent } from '#plugins/llm-agent/plugin'
-import {
-  DISPATCH_FAILURE_TEXT,
-  IMAGE_ANALYSIS_FAILURE_TEXT,
-} from '#plugins/llm-agent/steps/report-dispatch-failure'
-import { RESUME_SEND_FAILURE_TEXT } from '#plugins/llm-agent/steps/resume-active-task'
 import { EMPTY_THREAD_CONTEXT } from '#plugins/llm-agent/steps/sync-thread-context'
 import { createDeferred } from '#server/_test-utils'
 import { createInFlightTasks } from '#server/in-flight-tasks'
@@ -45,11 +38,16 @@ import {
   ConversationAgentGetThreadCursorError,
 } from '#types/errors'
 import type {
-  SlackAppMentionEvent,
+  SlackEvent,
   SlackEventCallback,
   SlackFile,
-  SlackMessageEvent,
 } from '#types/slack-payloads'
+
+type SlackMessageEvent = Extract<SlackEvent, { readonly type: 'message' }>
+type SlackAppMentionEvent = Extract<
+  SlackEvent,
+  { readonly type: 'app_mention' }
+>
 
 const noopLogger = {
   trace() {},
@@ -62,6 +60,15 @@ const noopLogger = {
     return noopLogger
   },
 }
+
+const EXPECTED_DISPATCH_FAILURE_TEXT =
+  'Something went wrong before this request could be completed. Please try again.'
+const EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT =
+  "I couldn't read the image(s) in this request, so I'm stopping here " +
+  'instead of continuing without them. If this keeps happening, please ' +
+  'let a maintainer know.'
+const EXPECTED_RESUME_SEND_FAILURE_TEXT =
+  "I couldn't resume your previous request. Please try again."
 
 const acceptedMention = (
   override: Partial<SlackAppMentionEvent> = {},
@@ -565,8 +572,10 @@ describe('createTaskDispatcher', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: IMAGE_ANALYSIS_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: IMAGE_ANALYSIS_FAILURE_TEXT }],
+        text: EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT,
+        blocks: [
+          { type: 'markdown', text: EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT },
+        ],
         loadingMessages: undefined,
       },
       {
@@ -654,8 +663,10 @@ describe('createTaskDispatcher', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: IMAGE_ANALYSIS_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: IMAGE_ANALYSIS_FAILURE_TEXT }],
+        text: EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT,
+        blocks: [
+          { type: 'markdown', text: EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT },
+        ],
         loadingMessages: undefined,
       },
       {
@@ -782,8 +793,8 @@ describe('createTaskDispatcher', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: RESUME_SEND_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: RESUME_SEND_FAILURE_TEXT }],
+        text: EXPECTED_RESUME_SEND_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_RESUME_SEND_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {
@@ -872,8 +883,8 @@ describe('createTaskDispatcher', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: DISPATCH_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: DISPATCH_FAILURE_TEXT }],
+        text: EXPECTED_DISPATCH_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_DISPATCH_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {
@@ -905,8 +916,8 @@ describe('createTaskDispatcher', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: DISPATCH_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: DISPATCH_FAILURE_TEXT }],
+        text: EXPECTED_DISPATCH_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_DISPATCH_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {

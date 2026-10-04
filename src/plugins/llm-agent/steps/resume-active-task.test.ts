@@ -18,11 +18,11 @@ import {
 import type { A2aTaskRow } from '#plugins/llm-agent/a2a-task-tracker'
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
-import {
-  RESUME_SEND_FAILURE_TEXT,
-  resumeActiveTask,
-} from '#plugins/llm-agent/steps/resume-active-task'
+import { resumeActiveTask } from '#plugins/llm-agent/steps/resume-active-task'
 import { A2aTaskTrackerError } from '#types/errors'
+
+const EXPECTED_RESUME_SEND_FAILURE_TEXT =
+  "I couldn't resume your previous request. Please try again."
 
 const ACTIVE_TASK: A2aTaskRow = {
   ...TEST_THREAD_KEY,
@@ -149,7 +149,10 @@ describe('resumeActiveTask', () => {
       undefined,
     )
 
-    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
+    expect(result).toEqual({
+      kind: 'failed',
+      text: EXPECTED_RESUME_SEND_FAILURE_TEXT,
+    })
     expect(tracker.transitions).toEqual([])
     expect(tracker.recorded).toEqual([])
   })
@@ -243,7 +246,10 @@ describe('resumeActiveTask', () => {
     // No tracked row exists for the new task, so no future push/heartbeat
     // could ever clear the assistant-status indicator or notify the user;
     // this must surface as a failure rather than settle silently.
-    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
+    expect(result).toEqual({
+      kind: 'failed',
+      text: EXPECTED_RESUME_SEND_FAILURE_TEXT,
+    })
   })
 
   it('settles the task and redelegates when the remote task is already terminal', async () => {
@@ -315,7 +321,10 @@ describe('resumeActiveTask', () => {
       },
     ])
     expect(tracker.recorded).toEqual([])
-    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
+    expect(result).toEqual({
+      kind: 'failed',
+      text: EXPECTED_RESUME_SEND_FAILURE_TEXT,
+    })
   })
 
   it('reports a failure when the previously delegated agent is no longer registered', async () => {
@@ -326,6 +335,9 @@ describe('resumeActiveTask', () => {
       undefined,
     )
 
-    expect(result).toEqual({ kind: 'failed', text: RESUME_SEND_FAILURE_TEXT })
+    expect(result).toEqual({
+      kind: 'failed',
+      text: EXPECTED_RESUME_SEND_FAILURE_TEXT,
+    })
   })
 })
