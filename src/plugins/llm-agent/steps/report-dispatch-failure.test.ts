@@ -13,13 +13,16 @@ import {
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import type { ResolvedDispatcherDeps } from '#plugins/llm-agent/dispatcher-deps'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
-import {
-  DISPATCH_FAILURE_TEXT,
-  IMAGE_ANALYSIS_FAILURE_TEXT,
-  reportDispatchFailure,
-} from '#plugins/llm-agent/steps/report-dispatch-failure'
+import { reportDispatchFailure } from '#plugins/llm-agent/steps/report-dispatch-failure'
 import type { SlackWebClient } from '#slack/web-client'
 import { ImageAnalysisError } from '#types/errors'
+
+const EXPECTED_DISPATCH_FAILURE_TEXT =
+  'Something went wrong before this request could be completed. Please try again.'
+const EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT =
+  "I couldn't read the image(s) in this request, so I'm stopping here " +
+  'instead of continuing without them. If this keeps happening, please ' +
+  'let a maintainer know.'
 
 const baseDeps = (
   slackClient: SlackWebClient,
@@ -53,8 +56,8 @@ describe('reportDispatchFailure', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: DISPATCH_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: DISPATCH_FAILURE_TEXT }],
+        text: EXPECTED_DISPATCH_FAILURE_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_DISPATCH_FAILURE_TEXT }],
         loadingMessages: undefined,
       },
       {
@@ -80,8 +83,10 @@ describe('reportDispatchFailure', () => {
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: IMAGE_ANALYSIS_FAILURE_TEXT,
-        blocks: [{ type: 'markdown', text: IMAGE_ANALYSIS_FAILURE_TEXT }],
+        text: EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT,
+        blocks: [
+          { type: 'markdown', text: EXPECTED_IMAGE_ANALYSIS_FAILURE_TEXT },
+        ],
         loadingMessages: undefined,
       },
       {

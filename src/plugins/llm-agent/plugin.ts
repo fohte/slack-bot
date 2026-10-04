@@ -22,7 +22,7 @@ export const LLM_AGENT_PLUGIN_NAME = 'llm-agent'
 
 export const LLM_AGENT_COMMANDS: readonly SlackAppManifestCommand[] = []
 
-export const LLM_AGENT_EVENT_SUBSCRIPTIONS: readonly string[] = [
+const LLM_AGENT_EVENT_SUBSCRIPTIONS: readonly string[] = [
   'message',
   'app_mention',
 ]

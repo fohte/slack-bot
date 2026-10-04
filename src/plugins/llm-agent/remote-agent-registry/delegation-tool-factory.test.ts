@@ -10,8 +10,6 @@ import type { Delegation } from '#plugins/llm-agent/remote-agent-registry/delega
 import {
   createDelegationTool,
   createDelegationTools,
-  delegationToolDescription,
-  delegationToolName,
 } from '#plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
 import type { RemoteAgentHandle } from '#plugins/llm-agent/remote-agent-registry/remote-agent-registry'
 import { DuplicateDelegationToolNameError } from '#types/errors'
@@ -98,29 +96,34 @@ const invokeDelegationTool = async (
   return result
 }
 
-describe('delegationToolName / delegationToolDescription', () => {
-  it('builds a slugified tool name and a description from the Agent Card', () => {
-    const card = cardFor({ name: 'meshi', description: 'Tracks meals.' })
-
-    expect(delegationToolName(card)).toBe('delegate_to_meshi')
-    expect(delegationToolDescription(card)).toBe(
-      'Delegate a task to the "meshi" agent. Tracks meals.\n' +
-        'Skills:\n' +
-        '- Log a meal: Records a meal.',
-    )
-  })
-})
-
 describe('createDelegationTool', () => {
-  it('names and describes the tool from the Agent Card', () => {
-    const card = cardFor({ name: 'meshi' })
+  const createSampleTool = () => {
+    const card = cardFor({
+      name: 'sample agent',
+      description: 'Performs sample work.',
+      skills: [
+        {
+          id: 'example',
+          name: 'Example skill',
+          description: 'Performs example work.',
+          tags: [],
+        },
+      ],
+    })
     const { handle } = recordingHandleFor(async () => submittedTask(), card)
-    const toolInstance = createDelegationTool(handle, {
+    return createDelegationTool(handle, {
       a2aTaskTracker: createFakeTracker(),
     })
+  }
 
-    expect(toolInstance.name).toBe('delegate_to_meshi')
-    expect(toolInstance.description).toBe(delegationToolDescription(card))
+  it('names the tool from the Agent Card', () => {
+    expect(createSampleTool().name).toBe('delegate_to_sample_agent')
+  })
+
+  it('describes the tool from the Agent Card', () => {
+    expect(createSampleTool().description).toBe(
+      'Delegate a task to the "sample agent" agent. Performs sample work.\nSkills:\n- Example skill: Performs example work.',
+    )
   })
 
   it('sends a message/send request with blocking:false and no contextId for a first delegation', async () => {

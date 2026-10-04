@@ -35,7 +35,7 @@ const APPLY_FAILURE_MESSAGES: Record<string, string> = {
     'ノートの復号に失敗しました。Service の Secret 設定を確認してください。',
 }
 
-export const translateIssue = (issue: PlanIssue): string => {
+const translateIssue = (issue: PlanIssue): string => {
   const base = ISSUE_MESSAGES[issue.code]
   const detail = issue.message
   if (base === undefined) {

@@ -8,7 +8,7 @@ import {
 } from '#plugins/blog/errors'
 import type { Plan } from '#plugins/blog/generated/blog-publisher-contract'
 
-export const BUTTON_VALUE_LIMIT = 2000
+const BUTTON_VALUE_LIMIT = 2000
 
 export interface RenderPlanOptions {
   readonly plan: Plan
@@ -22,7 +22,7 @@ export interface RenderPlanResult {
   readonly buttonValue: string | undefined
 }
 
-export const encodeDocIds = (
+const encodeDocIds = (
   docIds: readonly string[],
 ): Result<string, ButtonValueOverflow> => {
   const value = JSON.stringify({ docIds: [...docIds] })

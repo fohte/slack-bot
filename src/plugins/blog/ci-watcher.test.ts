@@ -2,14 +2,13 @@ import { okAsync } from 'neverthrow'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { MessageUpdater } from '#interaction/message-updater'
-import {
-  CI_WATCH_INTERVAL_MS,
-  CI_WATCH_MAX_DURATION_MS,
-  createCiWatcher,
-} from '#plugins/blog/ci-watcher'
+import { createCiWatcher } from '#plugins/blog/ci-watcher'
 import type { CiStatus } from '#plugins/blog/generated/blog-publisher-contract'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import { createScheduler } from '#scheduler/scheduler'
+
+const CI_WATCH_INTERVAL_MS = 30_000
+const CI_WATCH_MAX_DURATION_MS = 15 * 60 * 1000
 
 const flush = async (): Promise<void> => {
   await Promise.resolve()

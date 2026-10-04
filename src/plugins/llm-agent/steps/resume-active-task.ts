@@ -18,7 +18,7 @@ import { SEND_MESSAGE_RESULT_SCHEMA } from '#plugins/llm-agent/remote-agent-regi
 // Posted directly to Slack (no LLM in the loop to paraphrase it), so this
 // stays generic rather than leaking the underlying error — same rationale
 // as steps/report-dispatch-failure.ts's DISPATCH_FAILURE_TEXT.
-export const RESUME_SEND_FAILURE_TEXT =
+const RESUME_SEND_FAILURE_TEXT =
   "I couldn't resume your previous request. Please try again."
 
 // A successful resume/redelegate stays silent: the delegate task's own next

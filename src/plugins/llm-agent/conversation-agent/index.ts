@@ -1,7 +1,5 @@
 export type {
   ConversationAgent,
-  ConversationAgentInput,
-  ConversationOutcome,
   ThreadContextForTurn,
 } from '#plugins/llm-agent/conversation-agent/conversation-agent'
 export {

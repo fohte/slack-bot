@@ -1,15 +1,10 @@
 import { err, ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
-import {
-  ButtonValueOverflow,
-  PlanButtonValueDecodeError,
-} from '#plugins/blog/errors'
+import { PlanButtonValueDecodeError } from '#plugins/blog/errors'
 import type { Plan } from '#plugins/blog/generated/blog-publisher-contract'
 import {
-  BUTTON_VALUE_LIMIT,
   decodeDocIds,
-  encodeDocIds,
   renderAlreadyAppliedBlocks,
   renderAppliedBlocks,
   renderCancelledBlocks,
@@ -95,17 +90,6 @@ describe('PlanPresenter', () => {
     expect(res.applyHidden).toBe(true)
     expect(findButton(res.blocks, 'blog:apply')).toBeUndefined()
     expect(findButton(res.blocks, 'blog:cancel')).toBeDefined()
-  })
-
-  it('encodeDocIds returns ButtonValueOverflow when exceeding 2000 chars', () => {
-    const big = Array.from(
-      { length: 100 },
-      (_, i) => `note:${'x'.repeat(40)}-${String(i)}`,
-    )
-    const value = JSON.stringify({ docIds: big })
-    expect(encodeDocIds(big)).toEqual(
-      err(new ButtonValueOverflow(value.length, BUTTON_VALUE_LIMIT)),
-    )
   })
 
   // toEqual only compares Error#cause when the expected side sets one, so

@@ -1,10 +1,10 @@
 import { vi } from 'vitest'
 
-import type {
-  ResponseUrlPayload,
-  ResponseUrlResult,
-  SlackWebClient,
-} from '#slack/web-client'
+import type { ResponseUrlPayload, SlackWebClient } from '#slack/web-client'
+
+type ResponseUrlResult = Awaited<
+  ReturnType<SlackWebClient['postToResponseUrl']>
+>
 
 export interface TestSlack {
   readonly client: SlackWebClient

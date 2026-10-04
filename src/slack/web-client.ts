@@ -42,13 +42,13 @@ export interface ResponseUrlPayload {
   [key: string]: unknown
 }
 
-export interface ResponseUrlResult {
+interface ResponseUrlResult {
   readonly channelId: string | undefined
   readonly messageTs: string | undefined
   readonly raw: unknown
 }
 
-export interface SlackFileDownload {
+interface SlackFileDownload {
   readonly bytes: Uint8Array
   readonly contentType: string | undefined
 }
@@ -61,7 +61,7 @@ export interface SlackThreadReplyMessage {
   readonly files: readonly SlackFile[]
 }
 
-export interface GetConversationRepliesArgs {
+interface GetConversationRepliesArgs {
   readonly channel: string
   readonly ts: string
   // `latest` is exclusive (Slack's `inclusive` param defaults to false), but
@@ -73,7 +73,7 @@ export interface GetConversationRepliesArgs {
   readonly limit?: number | undefined
 }
 
-export interface ConversationRepliesPage {
+interface ConversationRepliesPage {
   readonly messages: readonly SlackThreadReplyMessage[]
   readonly hasMore: boolean
   readonly nextCursor: string | undefined
@@ -266,7 +266,7 @@ const SLACK_FILE_HOST_SUFFIX = '.slack.com'
 // runaway Content-Length from OOM-ing the process. Modern smartphone photos
 // commonly run 10-20 MB, so this must clear that range even though callers
 // only ever download pre-sized Slack thumb_* variants, never the original.
-export const SLACK_FILE_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024
+const SLACK_FILE_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024
 
 const downloadSlackFile = async (
   fetchImpl: typeof fetch,

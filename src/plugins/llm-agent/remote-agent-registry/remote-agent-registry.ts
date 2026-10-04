@@ -22,7 +22,7 @@ export interface RemoteAgentRegistry {
 
 // Resolves one remote agent's Agent Card and A2A client from its base URL.
 // Swapped out in tests to avoid real HTTP.
-export interface RemoteAgentResolver {
+interface RemoteAgentResolver {
   resolve(url: string): Promise<RemoteAgentHandle>
 }
 
@@ -31,7 +31,7 @@ export interface RemoteAgentResolver {
 // delegationToolName/delegationToolDescription) are validated; a card
 // failing this parse is treated the same as an unreachable one — excluded
 // with a warning rather than propagating a raw TypeError.
-export const AGENT_CARD_SCHEMA = z
+const AGENT_CARD_SCHEMA = z
   .object({
     name: z.string(),
     description: z.string(),

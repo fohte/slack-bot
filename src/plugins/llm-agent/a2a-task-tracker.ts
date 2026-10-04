@@ -3,12 +3,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { err, ok, Result, ResultAsync } from 'neverthrow'
 
 import { a2aTask } from '#db/schema'
+import { FIND_UNSETTLED_LIMIT } from '#plugins/llm-agent/a2a-task-limits'
+import { transitionGuard } from '#plugins/llm-agent/a2a-task-transition-guard'
 import { A2aTaskTrackerError } from '#types/errors'
 
-// Caps a single findUnsettled query so a large backlog (e.g. during an
-// extended reconciler outage) cannot pull an unbounded result set into
-// memory; the reconciler picks up any remainder on its next tick.
-export const FIND_UNSETTLED_LIMIT = 100
+export { A2A_TASK_ACTIVE_EXECUTION_STATES } from '#plugins/llm-agent/a2a-task-transition-guard'
 
 const A2A_TASK_STATES = [
   'submitted',
@@ -36,15 +35,6 @@ const toA2aTaskState = (
     new A2aTaskTrackerError(`unexpected a2a_task.state value: ${value}`),
   )
 }
-
-// States in which a task may still be actively executing. A transition to
-// `failed` only applies to rows still in one of these — this is what stops a
-// deadline sweep from failing a task that is legitimately waiting on the
-// user (input-required).
-export const A2A_TASK_ACTIVE_EXECUTION_STATES: readonly A2aTaskState[] = [
-  'submitted',
-  'working',
-]
 
 // `settled` is derived from `state` rather than accepted as separate input,
 // so a caller can't produce an inconsistent pair (e.g. completed + unsettled)
@@ -76,7 +66,7 @@ export interface ThreadKey {
   readonly threadRootTs: string
 }
 
-export interface NewA2aTask extends ThreadKey {
+interface NewA2aTask extends ThreadKey {
   readonly taskId: string
   readonly contextId: string
   readonly agentName: string
@@ -109,27 +99,6 @@ export interface A2aTaskLifecycle {
   // input-required is not an active-execution state.
   readonly requireCurrentStates?: readonly A2aTaskState[] | undefined
 }
-
-interface TransitionGuard {
-  readonly requireStates?: readonly A2aTaskState[]
-}
-
-// Which extra WHERE condition a transition needs, kept as a pure function
-// separate from the SQL/in-memory execution so it is directly testable and
-// shared between the production store and its test double.
-//
-// Transitioning into 'input-required' gets the same active-execution guard
-// as 'failed': without it, two concurrent observations of the same
-// input-required task (e.g. a push notification racing a reconciler poll)
-// would both succeed, since input-required never sets `settled` and so
-// can't rely on that flag to elect a single winner the way a terminal
-// transition does.
-export const transitionGuard = (to: A2aTaskLifecycle): TransitionGuard =>
-  to.requireCurrentStates !== undefined
-    ? { requireStates: to.requireCurrentStates }
-    : to.state === 'failed' || to.state === 'input-required'
-      ? { requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES }
-      : {}
 
 export interface A2aTaskTracker {
   recordDelegated(rec: NewA2aTask): ResultAsync<void, A2aTaskTrackerError>

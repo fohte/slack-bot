@@ -34,7 +34,7 @@ import type { SlackWebClient } from '#slack/web-client'
 // Posted instead of the task's own message when the remote agent's failure
 // carries metadata.error_kind === 'usage_limit', since the underlying LLM
 // error text is not meant for end users.
-export const USAGE_LIMIT_TEXT =
+const USAGE_LIMIT_TEXT =
   "The delegated agent hit its LLM usage limit and couldn't finish this request. Please try again in a while."
 
 const DEFAULT_TASK_TEXT_FALLBACK =

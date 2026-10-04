@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { LogFields, Logger } from '#logger/logger'
+import type { Logger } from '#logger/logger'
 import {
   createFakeA2aTaskTracker,
   createFakeConversationAgent,
@@ -15,17 +15,20 @@ import {
   EMPTY_THREAD_CONTEXT,
   syncThreadContext,
 } from '#plugins/llm-agent/steps/sync-thread-context'
-import type {
-  ConversationRepliesPage,
-  GetConversationRepliesArgs,
-  SlackFileDownload,
-  SlackThreadReplyMessage,
-  SlackWebClient,
-} from '#slack/web-client'
+import type { SlackThreadReplyMessage, SlackWebClient } from '#slack/web-client'
 import {
   ImageAnalysisError,
   SlackImageThumbnailUnavailableError,
 } from '#types/errors'
+
+type LogFields = Parameters<Logger['warn']>[0]
+type ConversationRepliesPage = Awaited<
+  ReturnType<SlackWebClient['getConversationReplies']>
+>
+type GetConversationRepliesArgs = Parameters<
+  SlackWebClient['getConversationReplies']
+>[0]
+type SlackFileDownload = Awaited<ReturnType<SlackWebClient['downloadFile']>>
 
 interface LogEntry {
   readonly level: 'info' | 'warn'

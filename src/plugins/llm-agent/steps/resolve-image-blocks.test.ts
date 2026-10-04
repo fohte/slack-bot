@@ -12,9 +12,11 @@ import {
 import { createRecordingChatModel } from '#plugins/llm-agent/conversation-agent/_test-utils'
 import { resolveDeps } from '#plugins/llm-agent/dispatcher-deps'
 import { resolveImageBlocks } from '#plugins/llm-agent/steps/resolve-image-blocks'
-import type { SlackFileDownload, SlackWebClient } from '#slack/web-client'
+import type { SlackWebClient } from '#slack/web-client'
 import { SlackImageThumbnailUnavailableError } from '#types/errors'
 import type { SlackFile } from '#types/slack-payloads'
+
+type SlackFileDownload = Awaited<ReturnType<SlackWebClient['downloadFile']>>
 
 const baseDeps = (overrides: Partial<Parameters<typeof resolveDeps>[0]> = {}) =>
   resolveDeps({

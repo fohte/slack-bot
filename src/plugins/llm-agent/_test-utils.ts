@@ -3,23 +3,16 @@ import type { Client } from '@a2a-js/sdk/client'
 import { okAsync, ResultAsync } from 'neverthrow'
 
 import type { Logger } from '#logger/logger'
+import { FIND_UNSETTLED_LIMIT } from '#plugins/llm-agent/a2a-task-limits'
 import type {
   A2aTaskLifecycle,
   A2aTaskRow,
   A2aTaskTracker,
-  NewA2aTask,
   ThreadKey,
 } from '#plugins/llm-agent/a2a-task-tracker'
-import {
-  FIND_UNSETTLED_LIMIT,
-  isA2aTaskTerminalState,
-  transitionGuard,
-} from '#plugins/llm-agent/a2a-task-tracker'
-import type {
-  ConversationAgent,
-  ConversationAgentInput,
-  ConversationOutcome,
-} from '#plugins/llm-agent/conversation-agent/index'
+import { isA2aTaskTerminalState } from '#plugins/llm-agent/a2a-task-tracker'
+import { transitionGuard } from '#plugins/llm-agent/a2a-task-transition-guard'
+import type { ConversationAgent } from '#plugins/llm-agent/conversation-agent/index'
 import type { SlackEnvelope } from '#plugins/llm-agent/dispatcher-deps'
 import type { EventLogStore } from '#plugins/llm-agent/event-log-store'
 import type {
@@ -31,6 +24,16 @@ import type {
   ConversationAgentInvokeError,
   ConversationThreadIdParseError,
 } from '#types/errors'
+
+type NewA2aTask = Parameters<A2aTaskTracker['recordDelegated']>[0]
+type ConversationAgentInput = Parameters<ConversationAgent['respond']>[0]
+type ResultAsyncTypes<T> =
+  T extends ResultAsync<infer Value, infer Error>
+    ? { value: Value; error: Error }
+    : never
+type ConversationOutcome = ResultAsyncTypes<
+  ReturnType<ConversationAgent['respond']>
+>['value']
 
 interface SlackCall {
   readonly kind: 'status' | 'post'

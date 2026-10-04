@@ -13,10 +13,10 @@ import { ImageAnalysisError } from '#types/errors'
 // detached background mention-processing chain crashing unexpectedly)
 // rather than a foreseen A2A outcome, so it must stay generic: internal
 // error details must never reach Slack.
-export const DISPATCH_FAILURE_TEXT =
+const DISPATCH_FAILURE_TEXT =
   'Something went wrong before this request could be completed. Please try again.'
 
-export const IMAGE_ANALYSIS_FAILURE_TEXT =
+const IMAGE_ANALYSIS_FAILURE_TEXT =
   "I couldn't read the image(s) in this request, so I'm stopping here instead of continuing without them. If this keeps happening, please let a maintainer know."
 
 const textFor = (error: unknown): string =>

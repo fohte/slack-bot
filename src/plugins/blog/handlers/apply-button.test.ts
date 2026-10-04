@@ -5,14 +5,18 @@ import { createInteractionContext } from '#interaction/context'
 import { lastBody, makeSlack, nthBody } from '#plugins/blog/_test-utils'
 import type { ApplyResult } from '#plugins/blog/generated/blog-publisher-contract'
 import {
-  type ApplySuccessInput,
   handleApplyButton,
+  type HandleApplyButtonInput,
 } from '#plugins/blog/handlers/apply-button'
 import type { BlogServiceClient } from '#plugins/blog/service-client'
 import type {
   BlockActionPayloadAction,
   BlockActionsPayload,
 } from '#types/slack-payloads'
+
+type ApplySuccessInput = Parameters<
+  NonNullable<HandleApplyButtonInput['onSuccess']>
+>[0]
 
 const runHandler = async (
   applyResult: ApplyResult,

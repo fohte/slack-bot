@@ -12,7 +12,7 @@ const MCP_SERVER_CONFIG_KEY = 'server'
 
 // Resolves one MCP server's tools from its base URL. Swapped out in tests
 // to avoid a real MCP connection.
-export interface McpServerResolver {
+interface McpServerResolver {
   resolve(url: string): Promise<readonly DynamicStructuredTool[]>
 }
 

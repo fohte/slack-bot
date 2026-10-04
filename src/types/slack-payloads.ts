@@ -132,7 +132,7 @@ export interface SlackFile {
   readonly [key: string]: unknown
 }
 
-export interface SlackMessageEvent extends SlackEventBase {
+interface SlackMessageEvent extends SlackEventBase {
   readonly type: 'message'
   readonly channel?: string
   readonly user?: string
@@ -145,7 +145,7 @@ export interface SlackMessageEvent extends SlackEventBase {
   readonly files?: readonly SlackFile[]
 }
 
-export interface SlackAppMentionEvent extends SlackEventBase {
+interface SlackAppMentionEvent extends SlackEventBase {
   readonly type: 'app_mention'
   readonly channel?: string
   readonly user?: string

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   translateApplyFailure,
   translateException,
-  translateIssue,
+  translateIssues,
 } from '#plugins/blog/error-translator'
 import {
   ButtonValueOverflow,
@@ -13,22 +13,25 @@ import {
 
 describe('ErrorTranslator', () => {
   it('translates known issue codes to Japanese', () => {
-    const text = translateIssue({
-      docId: 'note:a',
-      code: 'FrontmatterInvalid',
-      message: 'title missing',
-    })
-    expect(text).toContain('note:a')
-    expect(text).toContain('frontmatter')
+    expect(
+      translateIssues([
+        {
+          docId: 'note:a',
+          code: 'FrontmatterInvalid',
+          message: 'title missing',
+        },
+      ]),
+    ).toEqual([
+      'note:a: title または date が不正です (YAML frontmatter を確認) (title missing)',
+    ])
   })
 
   it('falls back when issue code is unknown', () => {
-    const text = translateIssue({
-      docId: 'note:b',
-      code: 'NoSuchCode',
-      message: 'whatever',
-    })
-    expect(text).toContain('whatever')
+    expect(
+      translateIssues([
+        { docId: 'note:b', code: 'NoSuchCode', message: 'whatever' },
+      ]),
+    ).toEqual(['note:b: whatever'])
   })
 
   it('translates ApplyResult failed', () => {

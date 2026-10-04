@@ -2,18 +2,21 @@ import { ok } from 'neverthrow'
 import { describe, expect, it } from 'vitest'
 
 import { createInMemoryA2aTaskTracker as createInMemoryTracker } from '#plugins/llm-agent/_test-utils'
-import type { NewA2aTask, ThreadKey } from '#plugins/llm-agent/a2a-task-tracker'
-import {
-  A2A_TASK_ACTIVE_EXECUTION_STATES,
-  FIND_UNSETTLED_LIMIT,
-  transitionGuard,
+import type {
+  A2aTaskTracker,
+  ThreadKey,
 } from '#plugins/llm-agent/a2a-task-tracker'
+import { transitionGuard } from '#plugins/llm-agent/a2a-task-transition-guard'
+
+type NewA2aTask = Parameters<A2aTaskTracker['recordDelegated']>[0]
 
 const THREAD: ThreadKey = {
   slackTeamId: 'T1',
   slackChannelId: 'C1',
   threadRootTs: '100.000',
 }
+
+const EXPECTED_UNSETTLED_LIMIT = 100
 
 const newTask = (override: Partial<NewA2aTask> = {}): NewA2aTask => ({
   taskId: 'task-1',
@@ -29,7 +32,7 @@ const newTask = (override: Partial<NewA2aTask> = {}): NewA2aTask => ({
 describe('transitionGuard', () => {
   it('requires the task still be actively executing when failing it', () => {
     expect(transitionGuard({ state: 'failed' })).toEqual({
-      requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES,
+      requireStates: ['submitted', 'working'],
     })
   })
 
@@ -48,7 +51,7 @@ describe('transitionGuard', () => {
 
   it('requires the task still be actively executing when moving it to input-required', () => {
     expect(transitionGuard({ state: 'input-required' })).toEqual({
-      requireStates: A2A_TASK_ACTIVE_EXECUTION_STATES,
+      requireStates: ['submitted', 'working'],
     })
   })
 })
@@ -105,12 +108,12 @@ describe('findUnsettled', () => {
     expect(await tracker.findUnsettled(created)).toEqual(ok([]))
   })
 
-  it('caps the result at FIND_UNSETTLED_LIMIT, keeping the oldest rows', async () => {
+  it('caps the result at 100 rows, keeping the oldest rows', async () => {
     const base = new Date('2026-01-01T00:00:00Z')
     const rowAt = (i: number) => new Date(base.getTime() + i * 1000)
     let tick = base
     const tracker = createInMemoryTracker({ now: () => tick })
-    const rowCount = FIND_UNSETTLED_LIMIT + 1
+    const rowCount = EXPECTED_UNSETTLED_LIMIT + 1
     for (let i = 0; i < rowCount; i++) {
       tick = rowAt(i)
       await tracker.recordDelegated(newTask({ taskId: `task-${i}` }))
@@ -120,7 +123,7 @@ describe('findUnsettled', () => {
 
     expect(rows).toEqual(
       ok(
-        Array.from({ length: FIND_UNSETTLED_LIMIT }, (_, i) => ({
+        Array.from({ length: EXPECTED_UNSETTLED_LIMIT }, (_, i) => ({
           ...newTask({ taskId: `task-${i}` }),
           settled: false,
           createdAt: rowAt(i),

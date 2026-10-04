@@ -12,7 +12,7 @@ const FIND_DISPATCHED_UNRESPONDED_LIMIT = 100
 
 export type EventLogOutcome = 'accepted' | 'rejected_duplicate' | 'responded'
 
-export interface EventLogRecord {
+interface EventLogRecord {
   readonly slackEventId: string
   readonly slackTeamId?: string | undefined
   readonly slackChannelId?: string | undefined

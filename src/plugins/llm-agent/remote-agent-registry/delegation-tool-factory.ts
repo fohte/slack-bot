@@ -73,12 +73,12 @@ const slugify = (value: string): string => {
   return slug === '' ? 'agent' : slug
 }
 
-export const delegationToolName = (card: AgentCard): string =>
+const delegationToolName = (card: AgentCard): string =>
   `delegate_to_${slugify(card.name)}`
 
 // Built entirely from the Agent Card so no domain knowledge is hardcoded
 // here (requirement: slack-bot stays domain-agnostic).
-export const delegationToolDescription = (card: AgentCard): string => {
+const delegationToolDescription = (card: AgentCard): string => {
   const skillLines = card.skills
     .map((skill) => `- ${skill.name}: ${skill.description}`)
     .join('\n')

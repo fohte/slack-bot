@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { LogFields, Logger } from '#logger/logger'
+import type { Logger } from '#logger/logger'
 import { createRestoreSystemRoleFetch } from '#plugins/llm-agent/conversation-agent/restore-system-role-fetch'
+
+type LogFields = Parameters<Logger['warn']>[0]
 
 const okResponse = () => new Response('{}', { status: 200 })
 

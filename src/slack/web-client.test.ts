@@ -2,10 +2,7 @@ import { captureWithFingerprint } from '@fohte/service-kit/observability'
 import type { WebClient } from '@slack/web-api'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  createSlackWebClient,
-  SLACK_FILE_DOWNLOAD_MAX_BYTES,
-} from '#slack/web-client'
+import { createSlackWebClient } from '#slack/web-client'
 import { SlackApiError } from '#types/errors'
 
 vi.mock('@fohte/service-kit/observability', () => ({
@@ -366,10 +363,9 @@ describe('SlackWebClient', () => {
     const promise = client.downloadFile('https://files.slack.com/big.png')
     await expectReportedFailure(
       promise,
-      new SlackApiError(
-        `slack file too large: ${40 * 1024 * 1024} bytes (cap ${SLACK_FILE_DOWNLOAD_MAX_BYTES})`,
-        { status: 200 },
-      ),
+      new SlackApiError('slack file too large: 41943040 bytes (cap 26214400)', {
+        status: 200,
+      }),
       { method: 'downloadFile', url: 'https://files.slack.com/big.png' },
     )
   })

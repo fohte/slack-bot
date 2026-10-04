@@ -63,7 +63,7 @@ export const createOpenCodeGoChatModel = (
     },
   })
 
-export interface ConversationOutcome {
+interface ConversationOutcome {
   // User-facing reply text; when the turn included a delegation, this is the
   // agent's intermediate response rather than the delegated task's result.
   readonly text: string
@@ -90,7 +90,7 @@ export interface ThreadContextForTurn {
   readonly contextMaxTs: string | undefined
 }
 
-export interface ConversationAgentInput {
+interface ConversationAgentInput {
   // team:channel:thread_root_ts, see thread-id.ts
   readonly threadId: string
   readonly userText: string

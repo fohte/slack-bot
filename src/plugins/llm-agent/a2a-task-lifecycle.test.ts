@@ -16,10 +16,7 @@ import {
 import { createA2aNotificationHandler } from '#plugins/llm-agent/push-notification-endpoint'
 import { createDelegationTool } from '#plugins/llm-agent/remote-agent-registry/delegation-tool-factory'
 import { createResponseFinalizer } from '#plugins/llm-agent/response-finalizer'
-import {
-  DEADLINE_EXCEEDED_TEXT,
-  startTaskReconciler,
-} from '#plugins/llm-agent/task-reconciler'
+import { startTaskReconciler } from '#plugins/llm-agent/task-reconciler'
 
 // These tests wire the real delegation tool, ResponseFinalizer, and
 // TaskReconciler together against a single in-memory tracker (rather than
@@ -30,6 +27,8 @@ import {
 // mock/stub conventions (see _test-utils.ts).
 
 const TOKEN = 'shared-secret'
+const EXPECTED_DEADLINE_EXCEEDED_TEXT =
+  "This task didn't finish in time, so it's being treated as failed. Please try again."
 
 const submittedTask = (taskId: string, contextId: string): Task => ({
   kind: 'task',
@@ -341,8 +340,8 @@ describe('A2A task lifecycle: delegation -> push notification -> settlement', ()
         kind: 'post',
         channel: 'C1',
         thread: '111.222',
-        text: DEADLINE_EXCEEDED_TEXT,
-        blocks: [{ type: 'markdown', text: DEADLINE_EXCEEDED_TEXT }],
+        text: EXPECTED_DEADLINE_EXCEEDED_TEXT,
+        blocks: [{ type: 'markdown', text: EXPECTED_DEADLINE_EXCEEDED_TEXT }],
         loadingMessages: undefined,
       },
     ])

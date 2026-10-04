@@ -5,9 +5,12 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import { createRecordingLogger } from '#plugins/llm-agent/_test-utils'
-import type { McpServerResolver } from '#plugins/llm-agent/mcp-tools/mcp-tools'
 import { createMcpTools } from '#plugins/llm-agent/mcp-tools/mcp-tools'
 import { DuplicateMcpToolNameError } from '#types/errors'
+
+type McpServerResolver = NonNullable<
+  Parameters<typeof createMcpTools>[0]['resolver']
+>
 
 const fakeTool = (name: string): DynamicStructuredTool =>
   tool(async () => `${name} result`, {
