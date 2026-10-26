@@ -16,7 +16,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: fohte/spec-sync-action@5b3f79f7812986c91231fa3167b372208061fea3 # v0.1.0
+      - uses: fohte/spec-sync-action@ec5f1eebb0b16054a38fa04aba4c02b6c09ee9e9 # v0.1.1
         with:
           producer-repo: fohte/blog-publisher
           generate-command: |
