@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
   workflow_dispatch:
 
 permissions:
@@ -17,6 +18,11 @@ concurrency:
 
 jobs:
   build:
+    # The commit that adds bootstrap.yml has no lockfiles yet; the Bootstrap
+    # workflow commits them, and that push publishes instead.
+    # `on.push.branches` cannot read the default branch, so it lists both names;
+    # the branch check stops the other name from overwriting `latest`.
+    if: "!contains(github.event.head_commit.added, '.github/workflows/bootstrap.yml') && (github.event_name != 'push' || github.ref_name == github.event.repository.default_branch)"
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
